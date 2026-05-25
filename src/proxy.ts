@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set<string>(["/", "/login", "/signup"]);
+const PUBLIC_PATHS = new Set<string>(["/", "/login", "/signup", "/check-email"]);
 const AUTH_BOUNCE_PATHS = new Set<string>(["/login", "/signup"]);
 const TEAM_SETUP_PATH = "/team-setup";
 

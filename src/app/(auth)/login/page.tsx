@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
+import AuthField from "@/components/auth/AuthField";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -56,65 +57,89 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-full flex items-center justify-center py-3xl">
+    <div style={{ width: "100%", maxWidth: 440 }}>
       <div
-        className="rounded-lg p-2xl"
+        className="mono"
         style={{
-          backgroundColor: "var(--color-surface-raised)",
-          width: "100%",
-          maxWidth: "384px",
+          fontSize: 11,
+          color: "var(--accent)",
+          letterSpacing: 2,
+          textTransform: "uppercase",
+          textAlign: "center",
+          marginBottom: 12,
         }}
       >
-        <h1 className="text-title mb-xs">Welcome back</h1>
-        <p className="text-caption mb-2xl" style={{ color: "var(--color-text-secondary)" }}>
-          Log in to keep tracking your development.
-        </p>
+        Welcome back
+      </div>
+      <h1
+        style={{
+          fontSize: 36,
+          fontWeight: 600,
+          letterSpacing: -1,
+          textAlign: "center",
+          lineHeight: 1.1,
+          marginBottom: 12,
+        }}
+        className="uff-auth-headline"
+      >
+        Log in to keep
+        <br />
+        tracking your team.
+      </h1>
+      <p
+        style={{
+          fontSize: 14,
+          color: "var(--text-secondary)",
+          textAlign: "center",
+          marginBottom: 36,
+        }}
+      >
+        Same login as the mobile app.
+      </p>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-lg">
-          <div className="flex flex-col gap-xs">
-            <label htmlFor="email" className="label-micro" style={{ color: "var(--color-text-secondary)" }}>
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md px-md text-body outline-none transition-colors"
-              style={{
-                height: "44px",
-                backgroundColor: "var(--color-surface-base)",
-                border: "1px solid var(--color-border-default)",
-                color: "var(--color-text-primary)",
-              }}
-            />
-          </div>
-
-          <div className="flex flex-col gap-xs">
-            <label htmlFor="password" className="label-micro" style={{ color: "var(--color-text-secondary)" }}>
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md px-md text-body outline-none transition-colors"
-              style={{
-                height: "44px",
-                backgroundColor: "var(--color-surface-base)",
-                border: "1px solid var(--color-border-default)",
-                color: "var(--color-text-primary)",
-              }}
-            />
-          </div>
+      <div className="card-canonical" style={{ padding: 28 }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 18 }}
+        >
+          <AuthField
+            label="Email"
+            type="email"
+            placeholder="you@captains.fm"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            required
+          />
+          <AuthField
+            label="Password"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            required
+            rightLabel={
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                  letterSpacing: 0,
+                }}
+              >
+                Forgot?
+              </span>
+            }
+          />
 
           {error && (
-            <p className="text-caption" style={{ color: "var(--color-error-light)" }}>
+            <p
+              style={{
+                fontSize: 13,
+                color: "var(--uff-red)",
+                marginTop: -4,
+              }}
+            >
               {error}
             </p>
           )}
@@ -122,24 +147,53 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-lg rounded-xl text-body font-medium tracking-wide transition-opacity"
+            className="btn btn-primary"
             style={{
-              backgroundColor: "var(--color-orange-500)",
-              color: "#FFFFFF",
-              letterSpacing: "0.3px",
+              width: "100%",
+              marginTop: 4,
               opacity: submitting ? 0.6 : 1,
+              cursor: submitting ? "wait" : "pointer",
             }}
           >
-            {submitting ? "Logging in…" : "Log in"}
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
-        <p className="text-caption mt-xl text-center" style={{ color: "var(--color-text-secondary)" }}>
-          New here?{" "}
-          <Link href="/signup" style={{ color: "var(--color-orange-400)" }}>
-            Create an account
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: 24,
+            paddingTop: 20,
+            borderTop: "1px solid var(--border-subtle-uff)",
+            fontSize: 13,
+            color: "var(--text-secondary)",
+          }}
+        >
+          Don&rsquo;t have an account?{" "}
+          <Link
+            href="/signup"
+            style={{
+              color: "var(--accent)",
+              fontWeight: 500,
+              textDecoration: "none",
+            }}
+          >
+            Create one
           </Link>
-        </p>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 24, textAlign: "center" }}>
+        <a
+          href="#"
+          style={{
+            fontSize: 12,
+            color: "var(--text-muted)",
+            textDecoration: "none",
+          }}
+        >
+          Forgot your password?
+        </a>
       </div>
     </div>
   );

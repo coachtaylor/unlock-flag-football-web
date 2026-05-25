@@ -72,7 +72,8 @@
   --color-border-strong: rgba(255, 255, 255, 0.18);
 
   /* ---------- Typography ---------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: var(--font-inter, -apple-system), BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains-mono, ui-monospace), SFMono-Regular, Menlo, monospace;
 
   --text-display: 24px;
   --text-display--line-height: 1.2;
@@ -118,6 +119,215 @@
   --radius-xl: 14px;
   --radius-pill: 20px;
   --radius-full: 9999px;
+}
+
+/* ============================================
+   UFF Web — Marketing + Auth design tokens
+
+   Additive set lifted from the Build 2 design canvas
+   (claude.ai/design handoff). These coexist with the
+   --color-* tokens above so (app) pages stay on the
+   old palette until Build 8's polish pass.
+   ============================================ */
+
+:root {
+  /* Surfaces */
+  --surface-base: #08090B;
+  --surface-raised: #141417;
+  --surface-overlay: #1B1B20;
+  --surface-elevated: #2D3850;
+  --surface-input: #1B1B20;
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --surface-pressed: rgba(255, 255, 255, 0.08);
+
+  /* Text */
+  --text-primary: #F4F4F2;
+  --text-label: rgba(244, 244, 242, 0.82);
+  --text-secondary: #8A8A92;
+  --text-muted: #5A5A62;
+  --text-subtle: rgba(244, 244, 242, 0.55);
+  --text-faint: rgba(244, 244, 242, 0.14);
+  --text-on-brand: #0A0A0D;
+
+  /* Borders */
+  --border-subtle-uff: rgba(255, 255, 255, 0.04);
+  --border-default-uff: rgba(255, 255, 255, 0.08);
+  --border-card: #1F1F25;
+  --border-strong-uff: #26262C;
+  --border-dashed: rgba(255, 255, 255, 0.22);
+
+  /* Brand — End zone orange */
+  --uff-orange-400: #FF8A4A;
+  --uff-orange-500: #FF6A1A;
+  --uff-orange-600: #B84200;
+  --orange-tint: rgba(255, 106, 26, 0.14);
+  --orange-tint-border: rgba(255, 106, 26, 0.30);
+  --orange-glow: rgba(255, 106, 26, 0.35);
+
+  /* Supporting */
+  --uff-lime-400: #C2FF3D;
+  --lime-tint: rgba(194, 255, 61, 0.12);
+  --uff-green-400: #4ADE80;
+  --uff-blue-400: #6EA8FF;
+  --blue-tint: rgba(110, 168, 255, 0.14);
+  --uff-red: #FF4D4D;
+
+  /* Accent (currently orange; lime/blue toggle TBD via [data-accent]) */
+  --accent: var(--uff-orange-500);
+  --accent-soft: var(--uff-orange-400);
+  --accent-tint: var(--orange-tint);
+  --accent-tint-border: var(--orange-tint-border);
+  --accent-glow: var(--orange-glow);
+}
+
+/* UFF utility helpers — scoped to .uff so they don't bleed into (app) pages */
+.uff {
+  background: var(--surface-base);
+  color: var(--text-primary);
+}
+.uff .mono { font-family: var(--font-mono); }
+.uff .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.uff .eyebrow .tick {
+  width: 3px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.uff .brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #2C1810;
+  font-size: 15px;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+}
+.uff .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  font-family: var(--font-mono);
+}
+.uff .pill-orange { background: var(--accent-tint); color: var(--accent); border: 1px solid var(--accent-tint-border); }
+.uff .pill-lime { background: var(--lime-tint); color: var(--uff-lime-400); }
+.uff .pill-blue { background: var(--blue-tint); color: var(--uff-blue-400); }
+.uff .pill-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-strong-uff); }
+
+.uff .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 22px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 80ms ease, background 150ms ease, border-color 150ms ease;
+}
+.uff .btn:hover { transform: translateY(-1px); }
+.uff .btn:active { transform: translateY(0); }
+.uff .btn-primary { background: var(--accent); color: #FFFFFF; }
+.uff .btn-primary:hover { background: var(--accent-soft); }
+.uff .btn-secondary {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border-color: var(--border-default-uff);
+}
+.uff .btn-secondary:hover { background: var(--surface-overlay); }
+.uff .btn-ghost {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-default-uff);
+}
+.uff .btn-ghost:hover { background: var(--surface-muted); }
+.uff .btn-lg { padding: 18px 28px; font-size: 16px; border-radius: 14px; }
+
+.uff .card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-card);
+  border-radius: 18px;
+  padding: 24px;
+}
+.uff .card-canonical {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong-uff);
+  border-top: 2px solid var(--accent);
+  border-radius: 18px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Responsive collapses for the UFF marketing direction A.
+   Design is 1440px-first; these breakpoints stack columns and
+   shrink display type below 1100px / 720px. */
+@media (max-width: 1100px) {
+  .uff-hero-grid,
+  .uff-features-grid .uff-feature-big,
+  .uff-spotlight-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .uff-hero-device { display: none !important; }
+  .uff-hero { padding: 56px 32px 72px !important; }
+  .uff-hero-headline { font-size: 64px !important; letter-spacing: -1.8px !important; }
+}
+@media (max-width: 900px) {
+  .uff-grid-3,
+  .uff-features-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .uff-features-grid .uff-feature-big {
+    grid-column: 1 !important;
+  }
+  .uff-step-arrow { display: none !important; }
+}
+@media (max-width: 720px) {
+  .uff section,
+  .uff header,
+  .uff footer { padding-left: 20px !important; padding-right: 20px !important; }
+  .uff-hero-headline { font-size: 48px !important; letter-spacing: -1.2px !important; }
+  .uff-final-headline { font-size: 44px !important; letter-spacing: -1px !important; }
+  .uff h2 { font-size: 32px !important; letter-spacing: -0.6px !important; }
+}
+@media (max-width: 640px) {
+  /* nav: hide internal anchors, keep brand + primary CTAs */
+  .uff header nav > a[href^="#"],
+  .uff header nav > span { display: none !important; }
+}
+
+.uff .field-stripes {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 80px,
+    rgba(255, 255, 255, 0.025) 80px,
+    rgba(255, 255, 255, 0.025) 81px
+  );
 }
 
 /* ============================================
