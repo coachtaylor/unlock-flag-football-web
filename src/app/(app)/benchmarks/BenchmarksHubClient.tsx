@@ -63,7 +63,7 @@ export default function BenchmarksHubClient({
   return (
     <div className="pt-3xl pb-2xl">
       <Link
-        href="/"
+        href="/dashboard"
         className="text-caption no-underline"
         style={{ color: "var(--color-text-secondary)" }}
       >

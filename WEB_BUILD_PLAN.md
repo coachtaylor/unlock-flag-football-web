@@ -28,7 +28,27 @@ All builds below are ⏳ as of this writing.
 
 ---
 
-## Build 1 — Project relocation + responsive shell foundation ⏳
+## Build 1 — Project relocation + responsive shell foundation ✅
+
+### Shipped (2026-05-24)
+- Project was already at `unlock-web/` at the repo root (no move needed; the in-scope move-from-`unlock-mobile/unlock-app/` step was a no-op).
+- `src/middleware.ts` → `src/proxy.ts`; exported function renamed `middleware` → `proxy`.
+- PWA bits stripped from `src/app/layout.tsx` (manifest link, `appleWebApp`, scale-locked viewport). `public/manifest.json` left in place per spec.
+- Route groups carved: `(marketing)`, `(auth)`, `(app)`. Existing flat routes moved into `(app)`. Login/signup/auth-callback moved into `(auth)`.
+- Dashboard moved from `/` → `/dashboard` (`src/app/(app)/dashboard/page.tsx`). All `href="/"` / `redirect("/")` / `router.replace("/")` references that pointed at the dashboard were updated to `/dashboard`. BottomNav Dashboard tab now `/dashboard`.
+- Paused individual-tracking routes moved into `src/app/_paused/` (underscore prefix makes Next App Router skip them): `log/`, `library/`, `progress/`, `onboarding/`.
+- New `(app)/layout.tsx` renders `Sidebar` (240px, `hidden md:flex`) at md+ and `BottomNav` (`md:hidden`) below md. Content container `max-w-[1280px]`, 20px / 32px horizontal padding.
+- New `(marketing)/layout.tsx` (sticky header + footer) and placeholder `(marketing)/page.tsx` with sign-in/sign-up CTAs (Build 2 will replace with real content).
+- New `(auth)/layout.tsx` (minimal centered shell).
+- New `src/components/app/Sidebar.tsx` — team name, primary nav, Settings + Sign out at bottom.
+- New `src/proxy.ts` logic: public paths `/`, `/login`, `/signup`, `/auth/*`; signed-in users on `/login` or `/signup` → `/dashboard`; signed-in users with no `team_members` row → `/team-setup` (excluding `/team-setup` itself to avoid a loop).
+- Root `CLAUDE.md` build-status section and `unlock-web/CLAUDE.md` rewritten to reflect the new structure.
+
+### Notes / known divergences from the plan
+- This build did **not** initialize a Vercel project move (no Vercel project exists yet locally to point at the new path). Production deploy wiring is in Build 9.
+- `(app)/team-setup` sits inside the (app) route group, so it inherits the Sidebar shell. That's a minor cosmetic quirk for users without a team (Sidebar shows "Your team" placeholder). Will be revisited as part of Build 2.5 onboarding work.
+
+
 
 ### Goal
 Move the web project to `unlock-web/`, strip out the PWA-as-app strategy, set up the responsive shell with sidebar on desktop and bottom nav on mobile browser, and introduce route groups for marketing vs. app vs. auth. After this build, the structural foundation is in place but individual pages are still mobile-first.

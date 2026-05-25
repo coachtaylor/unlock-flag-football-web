@@ -107,7 +107,7 @@ export default async function BenchmarkCompletePage({
         </Link>
 
         <Link
-          href="/"
+          href="/dashboard"
           className="w-full block py-md text-caption font-medium text-center no-underline"
           style={{
             color: "var(--color-text-secondary)",

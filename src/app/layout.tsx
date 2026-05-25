@@ -1,29 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import BottomNav from "@/components/BottomNav";
 import { TeamProvider } from "@/lib/team-context";
 import { createClient } from "@/lib/supabase/server";
 
-// PWA metadata — this sets the app name, description, and theme color
-// that show up when someone installs the app to their home screen.
 export const metadata: Metadata = {
   title: "Unlock Flag Football",
   description:
-    "Track your development. Know what to focus on. Become a better QB.",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Unlock FF",
-  },
+    "Train smarter. Track workouts, throwing health, game performance, and football IQ — with a dashboard that tells you what to focus on next.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  viewportFit: "cover",
   themeColor: "#0D1117",
 };
 
@@ -63,7 +51,6 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body
-        className="flex flex-col"
         style={{
           minHeight: "100dvh",
           backgroundColor: "var(--color-surface-base)",
@@ -75,17 +62,7 @@ export default async function RootLayout({
           initialTeamName={initialTeamName}
           initialUserRole={initialUserRole}
         >
-          <main
-            className="flex-1 overflow-y-auto px-xl"
-            style={{
-              paddingTop: "env(safe-area-inset-top)",
-              paddingBottom:
-                "calc(72px + env(safe-area-inset-bottom) + var(--spacing-2xl))",
-            }}
-          >
-            {children}
-          </main>
-          <BottomNav />
+          {children}
         </TeamProvider>
       </body>
     </html>

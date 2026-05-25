@@ -31,7 +31,7 @@ export default function TeamSetupPage() {
       return;
     }
 
-    window.location.assign("/");
+    window.location.assign("/dashboard");
   }
 
   return (

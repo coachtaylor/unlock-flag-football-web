@@ -45,7 +45,7 @@ export default function LoginPage() {
         if (membershipError) {
           console.error("[login] membership lookup failed", membershipError);
         } else if (membership) {
-          destination = "/";
+          destination = "/dashboard";
         }
       } catch (err) {
         console.error("[login] membership lookup threw", err);

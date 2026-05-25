@@ -1,10 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup"];
-const AUTH_ONLY_PATHS = ["/team-setup"];
+const PUBLIC_PATHS = new Set<string>(["/", "/login", "/signup"]);
+const AUTH_BOUNCE_PATHS = new Set<string>(["/login", "/signup"]);
+const TEAM_SETUP_PATH = "/team-setup";
 
-export async function middleware(request: NextRequest) {
+function isPublic(path: string) {
+  if (PUBLIC_PATHS.has(path)) return true;
+  if (path.startsWith("/auth/")) return true;
+  return false;
+}
+
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -33,29 +40,39 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.includes(path);
 
-  if (!user && !isPublic) {
+  if (!user) {
+    if (isPublic(path)) return supabaseResponse;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublic) {
+  if (AUTH_BOUNCE_PATHS.has(path)) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // Authenticated route that doesn't require team membership.
-  // Used for /team-setup so users without a team can land there.
-  if (AUTH_ONLY_PATHS.includes(path)) {
-    return supabaseResponse;
+  if (path === TEAM_SETUP_PATH) return supabaseResponse;
+  if (isPublic(path)) return supabaseResponse;
+
+  const { data: membership } = await supabase
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership) {
+    const url = request.nextUrl.clone();
+    url.pathname = TEAM_SETUP_PATH;
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.json|icon-.*).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

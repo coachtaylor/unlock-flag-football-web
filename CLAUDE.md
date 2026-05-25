@@ -1,16 +1,14 @@
-# Unlock Flag Football — Engineering Implementation Guide
+# Unlock Flag Football — Web (Next.js)
 
-You are building a mobile-first PWA for flag football QBs to track their development. The app is called Unlock Flag Football and lives at unlockflagfootball.com.
+The responsive web app for Unlock Flag Football coach MVP. Lives at unlockflagfootball.com. Mobile-first responsive — every page must work on a phone-sized browser AND on desktop with a sidebar.
 
 ## Project Context
 
-This is a Next.js 16 project using the App Router, Tailwind CSS v4, and Supabase (PostgreSQL + Auth + RLS). The app is dark-mode-first, mobile-first, and designed for fast data entry on the sideline after games.
-
-The project structure is already scaffolded with all routes, a bottom navigation bar, Supabase client utilities, and placeholder pages. Your job is to build out each screen with real functionality.
+This is a Next.js 16 project using the App Router, Tailwind CSS v4, and Supabase (PostgreSQL + Auth + RLS). Originally built as a mobile-first PWA; that strategy was dropped in favor of a true responsive web app with a desktop shell + mobile bottom-nav fallback (Build 1, May 2026).
 
 ## Tech Stack
 
-- Next.js 16 (App Router, `src/` directory)
+- Next.js 16 (App Router, `src/` directory) — note: `middleware.ts` was renamed to `proxy.ts` per the Next 16 deprecation (the exported function is `proxy`, not `middleware`)
 - Tailwind CSS v4 (tokens defined in `src/app/globals.css` via `@theme inline`)
 - Supabase (`@supabase/supabase-js` + `@supabase/ssr`)
 - TypeScript (strict mode)
@@ -18,37 +16,70 @@ The project structure is already scaffolded with all routes, a bottom navigation
 
 ## Project Structure
 
+Routes are organized into three Next App Router route groups. Group folders `(name)` do not affect URLs.
+
 ```
-unlock-app/
+unlock-web/
   src/
+    proxy.ts                       # auth gating + team-setup redirect (was middleware.ts)
     app/
-      layout.tsx          # App shell: dark bg, bottom nav, PWA metadata
-      globals.css         # ALL design tokens (colors, type, spacing, radius)
-      page.tsx            # / — Dashboard (home for returning users)
-      log/
-        page.tsx          # /log — Hub: pick what to log
-        workout/page.tsx  # /log/workout — Multi-screen workout logging
-        throwing/page.tsx # /log/throwing — Throwing session + elbow pain
-        game-recap/page.tsx # /log/game-recap — 5-screen post-game flow
-        recovery/page.tsx # /log/recovery — Weekly recovery check-in
-      progress/page.tsx   # /progress — Charts and trends
-      library/
-        page.tsx          # /library — Hub: routes, coverages, concepts
-        routes/page.tsx   # /library/routes — 10 pre-seeded routes
-        coverages/page.tsx # /library/coverages — 6 defensive looks
-        concepts/page.tsx # /library/concepts — 6 play concepts
-      onboarding/page.tsx # /onboarding — 3-screen first-time flow
-      settings/page.tsx   # /settings — Profile, theme, account
+      layout.tsx                   # minimal root shell: TeamProvider only, no nav
+      globals.css                  # ALL design tokens (colors, type, spacing, radius)
+
+      (marketing)/                 # public, signed-out friendly
+        layout.tsx                 # sticky header (logo + Log in/Sign up) + footer
+        page.tsx                   # / — placeholder landing page (real content in Build 2)
+
+      (auth)/                      # auth flows
+        layout.tsx                 # centered card shell
+        login/page.tsx             # /login
+        signup/page.tsx            # /signup
+        auth/callback/route.ts     # /auth/callback — Supabase code exchange
+
+      (app)/                       # signed-in coach app
+        layout.tsx                 # responsive shell: Sidebar (md+) + BottomNav (<md)
+        dashboard/page.tsx         # /dashboard — team dashboard (was /)
+        team-setup/page.tsx        # /team-setup — for users with no team_members row
+        drills/                    # /drills, /drills/new, /drills/[id], /drills/[id]/edit
+        roster/                    # /roster, /roster/new, /roster/[id], /roster/[id]/edit
+        practice/                  # /practice, /practice/new, /practice/[id]/*
+        benchmarks/                # /benchmarks, /benchmarks/log, /benchmarks/complete
+        settings/page.tsx          # /settings
+
+      _paused/                     # individual QB tracking, parked until coach MVP validated
+        log/                       # workout/throwing/game-recap/recovery
+        library/                   # routes/coverages/concepts
+        progress/
+        onboarding/                # the QB onboarding (not team-setup)
+
     components/
-      BottomNav.tsx       # 4-tab nav: Dashboard, Log, Progress, Library
+      BottomNav.tsx                # mobile bottom nav (rendered only inside (app) layout, md:hidden)
+      app/
+        Sidebar.tsx                # 240px desktop sidebar, hidden below md
     lib/
+      team-context.tsx             # TeamProvider — cross-context team state
       supabase/
-        client.ts         # Browser-side Supabase client (use in "use client" components)
-        server.ts         # Server-side Supabase client (use in Server Components)
+        client.ts                  # Browser-side Supabase client
+        server.ts                  # Server-side Supabase client
   public/
-    manifest.json         # PWA manifest
-  .env.local              # NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
+    manifest.json                  # legacy PWA manifest, kept but no longer referenced in layout
+  .env.local                       # NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
+
+### Routing rules (enforced by `src/proxy.ts`)
+
+- Public paths: `/`, `/login`, `/signup`, and anything under `/auth/`
+- Signed-out user hitting any non-public path → redirected to `/login`
+- Signed-in user hitting `/login` or `/signup` → redirected to `/dashboard`
+- Signed-in user with no `team_members` row hitting any app path (except `/team-setup` itself) → redirected to `/team-setup`
+- Files under `src/app/_paused/` are private (underscore prefix) and not routable
+
+### Responsive shell (Build 1)
+
+- `(app)` layout renders `Sidebar` (fixed 240px, `hidden md:flex`) AND `BottomNav` (`md:hidden`). Content offsets with `md:ml-[240px]`.
+- Content container: `max-w-[1280px] mx-auto`, 20px horizontal on mobile, 32px at md+.
+- Marketing and auth pages each have their own layout — they do not show the app sidebar.
+- Local-dev still requires Supabase email confirmation **off** (Authentication → Providers → Email → "Confirm email") — re-enable for production.
 
 ## Design System Quick Reference
 

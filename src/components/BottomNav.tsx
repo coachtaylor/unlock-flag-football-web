@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 const navItems = [
   {
     label: "Dashboard",
-    href: "/",
+    href: "/dashboard",
     // Grid/dashboard icon
     icon: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -114,7 +114,7 @@ const navItems = [
   },
 ];
 
-const HIDDEN_PATHS = ["/login", "/signup", "/team-setup"];
+const HIDDEN_PATHS = ["/team-setup"];
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -128,7 +128,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed left-0 right-0 bottom-0 z-50"
+      className="fixed left-0 right-0 bottom-0 z-50 md:hidden"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
         backgroundColor: "rgba(13, 17, 23, 0.85)",
