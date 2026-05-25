@@ -52,16 +52,6 @@ export default function UserDashboardClient({ data }: { data: UserHomeData }) {
           title={`Hi ${firstName}`}
           kicker="ACCOUNT HOME"
           userInitials={initials}
-          actions={
-            <>
-              <Link href="/teams/new" className="wbtn">
-                <Icon.plus size={13} /> New team
-              </Link>
-              <Link href="/onboarding/create-league?scope=league" className="wbtn primary">
-                <Icon.plus size={13} /> New league
-              </Link>
-            </>
-          }
         />
 
         <div className="page" style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}>
