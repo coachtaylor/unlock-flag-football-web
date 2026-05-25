@@ -141,21 +141,6 @@ export default function AddTeamClient({
               : `${userLeagues.length} LEAGUES`
           }
           userInitials={initials}
-          actions={
-            <>
-              <Link href="/dashboard" className="wbtn ghost">
-                Cancel
-              </Link>
-              <button
-                type="button"
-                onClick={onSubmit}
-                disabled={!ready || pending}
-                className="wbtn primary"
-              >
-                {pending ? "Creating…" : "Create team"} <Icon.arrowRight size={13} />
-              </button>
-            </>
-          }
         />
 
         <div
@@ -283,6 +268,33 @@ export default function AddTeamClient({
               )}
 
               {error && <OnbError>{error}</OnbError>}
+
+              {/* Form footer — primary action at the bottom of the form
+                  so the eye lands on it after filling out the fields. */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  paddingTop: 18,
+                  marginTop: 4,
+                  borderTop: "1px solid var(--uff-line-soft)",
+                }}
+              >
+                <Link href="/dashboard" className="wbtn ghost">
+                  Cancel
+                </Link>
+                <button
+                  type="submit"
+                  disabled={!ready || pending}
+                  className="wbtn primary"
+                  style={{ height: 44, padding: "0 22px", fontSize: 14 }}
+                >
+                  {pending ? "Creating…" : "Create team"}{" "}
+                  <Icon.arrowRight size={14} />
+                </button>
+              </div>
             </div>
 
             {/* RIGHT — preview + what-happens rails */}
