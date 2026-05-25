@@ -1,0 +1,202 @@
+// League-context sidebar — rendered on /dashboard/league/[id] and on
+// /teams/new when a league is preset / picked. Header chip shows the
+// league identity; nav items scope to that league.
+
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { DashIcon, Icon } from "@/components/uff/icons";
+
+export type LeagueContext = {
+  id: string;
+  name: string;
+  color: string;
+  teams: number;
+  members: number;
+};
+
+type Props = {
+  league: LeagueContext;
+  user: { firstName: string; lastName: string };
+  accent?: string;
+};
+
+export default function LeagueSidebar({
+  league,
+  user,
+  accent = "var(--uff-orange)",
+}: Props) {
+  const pathname = usePathname();
+  const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
+
+  const overviewHref = `/dashboard/league/${league.id}`;
+  const items: { id: string; label: string; icon: typeof DashIcon.home; href: string; count?: string }[] = [
+    { id: "overview", label: "Overview", icon: DashIcon.home, href: overviewHref },
+    { id: "teams", label: "Teams", icon: DashIcon.team, href: overviewHref, count: String(league.teams) },
+    { id: "members", label: "Members", icon: DashIcon.users, href: overviewHref, count: String(league.members) },
+    { id: "settings", label: "Settings", icon: DashIcon.gear, href: "/settings" },
+  ];
+
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="mark">U</div>
+        <div className="name">
+          <span className="t">Unlock FF</span>
+          <span className="s">League console</span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          margin: "0 -2px 6px",
+          padding: "12px 12px",
+          borderRadius: 12,
+          background: "rgba(255,255,255,0.025)",
+          border: "1px solid var(--uff-line-soft)",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 3,
+            background: league.color,
+            borderRadius: "0 2px 2px 0",
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9,
+              background: league.color,
+              color: "#1a0f08",
+              display: "grid",
+              placeItems: "center",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 800,
+              fontSize: 13,
+              letterSpacing: "-0.04em",
+              flexShrink: 0,
+            }}
+          >
+            {league.name[0]}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 9.5,
+                color: "var(--uff-text-mute)",
+                fontWeight: 700,
+                letterSpacing: ".16em",
+                marginBottom: 2,
+              }}
+            >
+              LEAGUE · ADMIN
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                color: "var(--uff-text)",
+              }}
+            >
+              {league.name}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="navlbl">League</div>
+      {items.map((it) => {
+        const active =
+          it.id === "settings"
+            ? pathname.startsWith("/settings")
+            : pathname === it.href;
+        return (
+          <Link
+            key={it.id}
+            href={it.href}
+            className={`navitem ${active ? "active" : ""}`}
+          >
+            <it.icon size={18} />
+            <span>{it.label}</span>
+            {it.count && <span className="count">{it.count}</span>}
+          </Link>
+        );
+      })}
+
+      <div className="spacer" />
+
+      <Link
+        href="/dashboard"
+        className="navitem"
+        style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
+      >
+        <Icon.arrowLeft size={13} />
+        <span>All workspaces</span>
+      </Link>
+
+      <div
+        style={{
+          marginTop: 8,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid var(--uff-line-soft)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: accent,
+            color: "#1a0f08",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 11,
+            fontWeight: 800,
+          }}
+        >
+          {initials || "U"}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              lineHeight: 1.2,
+              color: "var(--uff-text)",
+            }}
+          >
+            {user.firstName} {user.lastName}
+          </div>
+          <div
+            style={{
+              fontSize: 10.5,
+              color: "var(--uff-text-mute)",
+              letterSpacing: ".04em",
+            }}
+          >
+            League admin
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}

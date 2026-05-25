@@ -27,7 +27,7 @@ export default function SignupPage() {
       email: email.trim(),
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/team-setup`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding/name`,
       },
     });
 
@@ -37,12 +37,12 @@ export default function SignupPage() {
       return;
     }
 
-    // If Supabase email confirmation is OFF (local dev convention), signUp
-    // returns a session immediately — send straight to team setup.
-    // If confirmation is ON (production), no session is returned — show the
-    // check-email confirmation state.
+    // If Supabase email confirmation is OFF (local dev convention),
+    // signUp returns a session immediately — send straight to the
+    // onboarding flow. If confirmation is ON (production), no session
+    // is returned — show the check-email confirmation state.
     if (data.session) {
-      window.location.assign("/team-setup");
+      window.location.assign("/onboarding/name");
     } else {
       window.location.assign(`/check-email?email=${encodeURIComponent(email.trim())}`);
     }

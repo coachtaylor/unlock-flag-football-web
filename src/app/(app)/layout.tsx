@@ -1,5 +1,6 @@
 import BottomNav from "@/components/BottomNav";
 import Sidebar from "@/components/app/Sidebar";
+import BackfillMount from "@/components/BackfillMount";
 
 export default function AppLayout({
   children,
@@ -27,6 +28,7 @@ export default function AppLayout({
       </main>
 
       <BottomNav />
+      <BackfillMount />
     </div>
   );
 }

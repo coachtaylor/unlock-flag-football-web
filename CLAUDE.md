@@ -16,30 +16,52 @@ This is a Next.js 16 project using the App Router, Tailwind CSS v4, and Supabase
 
 ## Project Structure
 
-Routes are organized into three Next App Router route groups. Group folders `(name)` do not affect URLs.
+Routes are organized into four Next App Router route groups. Group folders `(name)` do not affect URLs.
 
 ```
 unlock-web/
   src/
-    proxy.ts                       # auth gating + team-setup redirect (was middleware.ts)
+    proxy.ts                       # auth gating + onboarding state machine
     app/
       layout.tsx                   # minimal root shell: TeamProvider only, no nav
-      globals.css                  # ALL design tokens (colors, type, spacing, radius)
+      globals.css                  # design tokens (legacy --color-*, UFF --surface-*/--accent/etc, --uff-* aliases for prototype components, .fr-* / .uff-web shell classes)
 
       (marketing)/                 # public, signed-out friendly
         layout.tsx                 # sticky header (logo + Log in/Sign up) + footer
-        page.tsx                   # / — placeholder landing page (real content in Build 2)
+        page.tsx                   # / — Direction A landing (Build 2)
 
       (auth)/                      # auth flows
-        layout.tsx                 # centered card shell
+        layout.tsx                 # slim brand header + mono footer + accent glow
         login/page.tsx             # /login
-        signup/page.tsx            # /signup
+        signup/page.tsx            # /signup — destination now /onboarding/name
+        check-email/page.tsx       # /check-email — post-signup confirmation
         auth/callback/route.ts     # /auth/callback — Supabase code exchange
 
-      (app)/                       # signed-in coach app
-        layout.tsx                 # responsive shell: Sidebar (md+) + BottomNav (<md)
-        dashboard/page.tsx         # /dashboard — team dashboard (was /)
-        team-setup/page.tsx        # /team-setup — for users with no team_members row
+      (onboarding)/                # NEW (Build 2.5) — bare shell, no sidebar
+        layout.tsx                 # background only; each page renders its OnbStage
+        onboarding/
+          name/                    # /onboarding/name — Step 1 (server page + NameForm client + actions)
+          scope/                   # /onboarding/scope — Step 2 (Single team vs League)
+          role/                    # /onboarding/role — Step 3 (Coach vs Captain, single branch only)
+          new-team/                # /onboarding/new-team — Step 4-Single → create_team_with_member
+          create-league/           # /onboarding/create-league — Step 4-League → create_league_with_admin
+
+      (workspace)/                 # NEW (Build 2.5) — post-onboarding dashboards
+        layout.tsx                 # bare; pages render their own .uff-web shell
+        dashboard/
+          page.tsx                 # /dashboard — user home (4 states: mixed/leagues/teams/empty)
+          UserDashboardClient.tsx
+          league/[leagueId]/
+            page.tsx               # /dashboard/league/[id] — league dashboard (empty + populated)
+          team/[teamId]/
+            page.tsx               # /dashboard/team/[id] — team dashboard (replaces old /dashboard)
+        teams/new/
+          page.tsx                 # /teams/new — smart league picker
+          AddTeamClient.tsx
+          actions.ts
+
+      (app)/                       # team-scoped pages — legacy --color-* palette
+        layout.tsx                 # responsive shell: Sidebar (md+) + BottomNav (<md) + BackfillMount
         drills/                    # /drills, /drills/new, /drills/[id], /drills/[id]/edit
         roster/                    # /roster, /roster/new, /roster/[id], /roster/[id]/edit
         practice/                  # /practice, /practice/new, /practice/[id]/*
@@ -47,32 +69,40 @@ unlock-web/
         settings/page.tsx          # /settings
 
       _paused/                     # individual QB tracking, parked until coach MVP validated
-        log/                       # workout/throwing/game-recap/recovery
-        library/                   # routes/coverages/concepts
-        progress/
-        onboarding/                # the QB onboarding (not team-setup)
+        log/ library/ progress/ onboarding/  # the legacy QB onboarding, NOT the new flow
 
     components/
       BottomNav.tsx                # mobile bottom nav (rendered only inside (app) layout, md:hidden)
-      app/
-        Sidebar.tsx                # 240px desktop sidebar, hidden below md
+      BackfillModal.tsx            # First-name backfill (non-dismissible)
+      BackfillMount.tsx            # Server check + conditional <BackfillModal/>
+      app/Sidebar.tsx              # 240px legacy (app) sidebar; team-context, hidden below md
+      auth/AuthField.tsx
+      marketing/                   # Direction A landing components (Build 2)
+      uff/                         # Shared atoms: icons, team-colors, ColorSwatchRow, Segmented, FieldIcon
+      onboarding/shell.tsx         # OnbStage/OnbCard/OnbHeader/OnbFooter/WebProgressDots/WebChoiceCard/OnbField/OnbHint/OnbError/SummaryRow/TeamIdentityPreview/LeagueIdentityPreview
+      dashboard/                   # DashTopBar, DashSection, UserSidebar, LeagueSidebar, SignOutButton
+
     lib/
-      team-context.tsx             # TeamProvider — cross-context team state
+      team-context.tsx             # TeamProvider — used by team-scoped (app) pages
+      onboarding/state.ts          # decideOnboarding() — single source of truth for proxy routing
+      dashboard/user-home-data.ts  # user dashboard fetch (leagues + standalone teams w/ de-dup)
+      dashboard/league-data.ts     # league dashboard fetch
       supabase/
         client.ts                  # Browser-side Supabase client
         server.ts                  # Server-side Supabase client
-  public/
-    manifest.json                  # legacy PWA manifest, kept but no longer referenced in layout
   .env.local                       # NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
 ### Routing rules (enforced by `src/proxy.ts`)
 
-- Public paths: `/`, `/login`, `/signup`, and anything under `/auth/`
-- Signed-out user hitting any non-public path → redirected to `/login`
-- Signed-in user hitting `/login` or `/signup` → redirected to `/dashboard`
-- Signed-in user with no `team_members` row hitting any app path (except `/team-setup` itself) → redirected to `/team-setup`
-- Files under `src/app/_paused/` are private (underscore prefix) and not routable
+- **Public paths**: `/`, `/login`, `/signup`, `/check-email`, anything under `/auth/`
+- **Signed-out** user hitting any non-public path → redirected to `/login`
+- **Signed-in** user hitting `/login` or `/signup` → redirected to `/dashboard`
+- **Onboarding state machine**: on every authenticated non-public request, proxy reads `profiles.first_name, onboarding_step, onboarding_completed_at`. `decideOnboarding()` returns one of `needs-onboarding` (with next path) / `needs-backfill` / `done`. A `uff_onb=done` cookie short-circuits the profile fetch on subsequent requests; cleared on signout.
+- **Onboarding-in-progress** user → bounced to the next onboarding step unless they're already on an `/onboarding/*` path (so they can navigate back/forward within the flow).
+- **Backfill** (first_name null, onboarding_completed_at not null) → allowed through; the modal renders on top via `BackfillMount` in `(app)/layout.tsx` and `(workspace)/layout.tsx`.
+- **Legacy redirects**: `/team-setup` → `/onboarding/scope`, `/onboarding` (legacy QB onboarding) → `/dashboard`.
+- Files under `src/app/_paused/` are private (underscore prefix) and not routable.
 
 ### Responsive shell (Build 1)
 

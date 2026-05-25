@@ -117,7 +117,22 @@ Move the web project to `unlock-web/`, strip out the PWA-as-app strategy, set up
 
 ---
 
-## Build 2 — Marketing landing page ⏳
+## Build 2 — Marketing landing page ✅
+
+### Shipped (2026-05-24)
+- Direction A landing page from the Claude Design handoff bundle (see `reference_uff_web_design_handoff.md`). Glow-backed hero with device-frame `MiniDashboard` + floating drill-diagram and roster fragments. Sections 01–06 (Who it's for · Features · How it works · Diagram spotlight · FAQ · Final CTA · Footer). Responsive collapses at 1100 / 900 / 720 / 640px.
+- `(auth)/layout.tsx` reworked: slim brand header + mono footer + accent glow.
+- `login` and `signup` rewritten to the centered card design from the handoff. New `(auth)/check-email/page.tsx` for the post-signup confirmation state (required for prod email confirmation).
+- Signup destination branches on whether Supabase returned a session: session present (email confirmation OFF in local dev) → `/team-setup`; session absent (production) → `/check-email?email=…`. `proxy.ts` added `/check-email` to `PUBLIC_PATHS`.
+- Fonts: Inter (400/500/600/700) + JetBrains Mono (500/700) via `next/font/google`. Exposed as `--font-inter` / `--font-jetbrains-mono`; `--font-sans` / `--font-mono` in globals point at them.
+- New shared components: `src/components/marketing/` (BrandLockup, MarketingNav, SectionEyebrow, MiniDashboard, DiagramPreview, MarketingFooter, FAQ), `src/components/auth/AuthField`.
+- Branch: `build-2-direction-a` @ `3dba74b`, off `build-1-web-shell`. Not merged to main.
+
+### Notes / known divergences from the plan
+- Two palettes coexist in `globals.css` on purpose: original `--color-*` tokens still drive every `(app)/` page; new UFF tokens + `.uff-` utility classes drive marketing + auth only. Migrating `(app)/` pages onto the new UFF palette is deferred to Build 8 polish pass.
+- The hero screenshot is a JSX `MiniDashboard` mock, not a real dashboard PNG. Real screenshot deferred to Build 8.
+- Direction B landing, LoginSplit, and 390px mobile artboards from the handoff are NOT implemented.
+- Forgot-password link on login is a `#` placeholder.
 
 ### Goal
 Replace the placeholder marketing route with a real landing page at `/` that explains the product and converts visitors to signup. Mobile-responsive from the start.
@@ -164,7 +179,28 @@ Replace the placeholder marketing route with a real landing page at `/` that exp
 
 ---
 
-## Build 2.5 — Onboarding + Leagues ⏳
+## Build 2.5 — Onboarding + Leagues ✅
+
+### Shipped (2026-05-25)
+- New `(onboarding)/onboarding/` route group with its own bare layout (no sidebar, no bottom nav). Five screens — Name, Scope, Role, New Team (single branch), Create League (league branch) — each backed by a server action.
+- Onboarding wired to the real schema: `submitName` writes `profiles.first_name/last_name/display_name/onboarding_step=1`. `submitScope` bumps to step 2 and routes via URL params (`?scope=single|league`). `submitRole` bumps to step 3 and routes to `/onboarding/new-team?scope=single&role=…`. `createOnboardingTeam` calls the long-form `create_team_with_member(p_role, p_league_id=null)`, marks `onboarding_completed_at`, redirects to `/dashboard/team/[newTeamId]`. `createOnboardingLeague` calls `create_league_with_admin`, marks complete, redirects to `/dashboard/league/[newLeagueId]`.
+- Backfill modal (`src/components/BackfillModal.tsx` + `BackfillMount` server check) renders over any authenticated layout when `profiles.onboarding_completed_at IS NOT NULL` and `first_name IS NULL`. Non-dismissible two-field form, server action updates first/last/display_name. Mounted from both `(app)/layout.tsx` and `(workspace)/layout.tsx`.
+- New `(workspace)/` route group with its own bare layout. Hosts the three post-onboarding dashboards and the add-team flow — these pages render the full `.uff-web` shell (sidebar + topbar + page) themselves, so the `(workspace)` layout adds no chrome. New routes:
+  - `/dashboard` — user home with 4 states (mixed / leagues-only / teams-only / empty), backed by `lib/dashboard/user-home-data.ts`. De-dup rule applied: teams that belong to one of the user's leagues are hidden under "My teams".
+  - `/dashboard/league/[leagueId]` — league dashboard, two states (empty / populated). Ported design hero, stats strip, team grid with inline AddTeamSlot, ghost team slots in empty.
+  - `/dashboard/team/[teamId]` — team dashboard (port of the old `/dashboard` page), now scoped by `teamId` from the URL. Includes a team-context local sidebar with Drills / Roster / Practice / Benchmarks / Settings nav.
+  - `/teams/new` — smart league picker with all four behaviors (zero leagues = locked standalone; one = chip pair; multi = row picker with no default; preset via `?leagueId=` = locked league row). Sidebar swaps user-context ↔ league-context based on the active pick. Right-rail live preview + "what happens" trace.
+- Proxy (`src/proxy.ts`) rewired around the onboarding state machine. Logic: signed-out → `/login`; signed-in on `/login` or `/signup` → `/dashboard`; cookie `uff_onb=done` short-circuits the profile fetch on subsequent requests; uncached + onboarding incomplete → redirect to `lib/onboarding/state.ts`'s `decideOnboarding()` result; onboarding complete → set the cookie, allow. Legacy `/team-setup` → `/onboarding/scope`, legacy `/onboarding` → `/dashboard`.
+- Signup destination updated: local-dev (instant session) → `/onboarding/name`; production (email confirm) → `/check-email`, then `auth/callback?next=/onboarding/name`.
+- Legacy routes removed: `(app)/dashboard/`, `(app)/team-setup/`.
+- New shared component packages: `src/components/uff/` (icons, team-colors, ColorSwatchRow, Segmented, FieldIcon), `src/components/onboarding/shell.tsx` (OnbStage/OnbCard/OnbHeader/OnbFooter/WebProgressDots/WebChoiceCard/OnbField/OnbHint/OnbError/SummaryRow/TeamIdentityPreview/LeagueIdentityPreview), `src/components/dashboard/` (DashTopBar, DashSection, UserSidebar, LeagueSidebar, SignOutButton).
+- `globals.css` extended with: legacy `--uff-*` token aliases mapped onto the canonical UFF tokens (so prototype JSX `var(--uff-*)` references resolve); `.fr-input`/`.fr-seg`/`.fr-swatch` form atoms; full `.uff-web` shell (sidebar, topbar, page, w-card, wbtn) with responsive collapse below md.
+- Branch: `build-2.5-onboarding-leagues` off `build-2-direction-a`. Not merged to main.
+
+### Notes / known divergences from the spec
+- New `(workspace)/` route group instead of putting the dashboards inside `(app)/`. Reason: the dashboards render their own UFF shell (sidebar swap by route), which is fundamentally different from the existing `(app)/` Sidebar primary nav (`Dashboard / Drills / Roster / Practice`). Keeping them in separate groups avoids stacking two sidebars and keeps the existing team-scoped pages (`/drills`, `/roster`, `/practice`, `/benchmarks`, `/settings`) on their original `(app)` shell.
+- `/drills`, `/roster`, `/practice`, `/benchmarks`, `/settings` still use the legacy `--color-*` palette (and `TeamProvider`'s "first team" lookup). Migrating them onto the UFF palette + per-team scoping is deferred to Build 8 polish.
+- League-admin members count on the user dashboard cards is a simple row count, not a per-role breakdown.
 
 ### Goal
 Bring the new onboarding flow and the League entity (already shipped on mobile, schema migrations 47-52 already applied to Supabase) to the web app. After this build, new users complete the proper onboarding flow on web, existing users get backfilled, and the dashboard structure reflects the user → league → team hierarchy.
