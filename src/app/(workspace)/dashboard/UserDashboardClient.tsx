@@ -533,7 +533,7 @@ function LeaguesOnlyHint() {
         show up here.
       </span>
       <Link
-        href="/teams/new"
+        href="/teams/new?standalone=1"
         className="wbtn"
         style={{ height: 30, fontSize: 12, padding: "0 10px" }}
       >

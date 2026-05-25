@@ -6,7 +6,7 @@ import AddTeamClient from "./AddTeamClient";
 export default async function AddTeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ leagueId?: string }>;
+  searchParams: Promise<{ leagueId?: string; standalone?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -42,10 +42,14 @@ export default async function AddTeamPage({
     .filter((l): l is EmbeddedLeague => !!l)
     .map((l) => ({ ...l, league_color: teamColorHex(l.league_color) }));
 
-  const { leagueId } = await searchParams;
+  const { leagueId, standalone } = await searchParams;
   const presetLeague = leagueId
     ? userLeagues.find((l) => l.id === leagueId)
     : null;
+  // `?standalone=1` from any "Add standalone team" link on the
+  // dashboard. Ignored if a leagueId preset is also present (preset
+  // wins).
+  const forceStandalone = standalone === "1" && !presetLeague;
 
   // If a preset is given but the user isn't an admin of it, ignore it.
   return (
@@ -57,6 +61,7 @@ export default async function AddTeamPage({
       }}
       userLeagues={userLeagues}
       presetLeagueId={presetLeague?.id ?? null}
+      forceStandalone={forceStandalone}
     />
   );
 }

@@ -28,19 +28,24 @@ export default function AddTeamClient({
   user,
   userLeagues,
   presetLeagueId,
+  forceStandalone = false,
 }: {
   user: { firstName: string; lastName: string; email: string };
   userLeagues: UserLeague[];
   presetLeagueId: string | null;
+  forceStandalone?: boolean;
 }) {
   // Default pick rules from the design canvas:
   // 0 leagues → null (standalone, no picker)
   // 1 league  → that league pre-selected
   // 2+ leagues → undefined (force a choice)
   // preset    → the preset league, locked
+  // forceStandalone (?standalone=1) → null, regardless of league count
   const initialPick: Pick =
     presetLeagueId !== null
       ? presetLeagueId
+      : forceStandalone
+      ? null
       : userLeagues.length === 0
       ? null
       : userLeagues.length === 1
