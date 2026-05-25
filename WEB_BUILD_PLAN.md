@@ -242,7 +242,21 @@ See §12 of `WEB_ONBOARDING_LEAGUE_REDESIGN_WORKFLOW.md` for the full criteria l
 
 ---
 
-## Build 3 — Dashboard responsive upgrade ⏳
+## Build 3 — Dashboard responsive upgrade ✅
+
+### Shipped (2026-05-25)
+- Stat strip on `/dashboard/team/[teamId]` now stacks 1-col on mobile, 2×2 at `md` (≥768px), and 4-across at `lg` (≥1100px). Border treatment switches between bottom-borders (stacked) and right-borders (in a row) so the dividers always belong to whichever axis the cells share.
+- Below the hero + stats, body splits into a 2-column main/side grid at `lg+`: main = strength/weakness (full-width on smaller screens, 2-col internal grid at lg+), side = recent assessments + recent practices stacked. Stacks vertically below `lg`.
+- Strength/weakness rows become a horizontal multi-column comparison at `lg+` via the new `.td-overview-grid` class (1px gap fills with `--uff-line-soft` so each cell reads as its own card while sharing borders).
+- Hover affordance added on stat cells, strength/weakness rows, assessment rows, and practice cards via the shared `.td-stat-cell` / `.td-row-hover` utility classes — subtle white tint, 120ms transition.
+- Empty-team state rebuilt as a centered hero card with a single primary CTA ("Run your first benchmark") and two secondary step cards (Add players, Create drills) in a 2-col grid that collapses to 1-col on phones.
+- New `loading.tsx` at `src/app/(workspace)/dashboard/team/[teamId]/loading.tsx` — shimmering skeleton that mirrors the real layout (sidebar, topbar, hero, stat strip, body grid). Doesn't import page components so it stays cheap and decoupled.
+- Branch: `build-3-team-dashboard` off `build-2.5-onboarding-leagues`. Not merged to main.
+
+### Notes / known divergences from the plan
+- "3-column layout" in the spec was interpreted as a 2-col grid (main + side) at `lg+`, with the main column containing the strength/weakness section which itself becomes a 2-col internal grid. Net visual = up to 3 columns of content at desktop.
+- Charts are not part of this build (Build 7) — the strength/weakness cells still show numerical ratings + assessment counts.
+- The user dashboard (`/dashboard`) and league dashboard (`/dashboard/league/[id]`) were already responsive from the start in Build 2.5 — they aren't touched here.
 
 > Note: After Build 2.5, "the dashboard" refers to three pages — user dashboard (`/dashboard`), league dashboard (`/dashboard/league/[id]`), and team dashboard (`/dashboard/team/[id]`). This build's responsive upgrades target the TEAM dashboard specifically (the old single dashboard, now scoped to a team). The user dashboard and league dashboard are designed responsive from the start in Build 2.5.
 

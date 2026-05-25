@@ -263,16 +263,8 @@ export default async function TeamDashboardPage({
             </div>
           </div>
 
-          {/* Stat strip */}
-          <div
-            className="w-card"
-            style={{
-              padding: 0,
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              overflow: "hidden",
-            }}
-          >
+          {/* Stat strip — 1col mobile → 2col md → 4col lg */}
+          <div className="w-card td-stat-strip">
             <StatCell label="PLAYERS" v={playersCount} />
             <StatCell label="DRILLS" v={drillsCount} sub="published" />
             <StatCell label="BENCHMARKS" v={benchmarksCount} />
@@ -282,19 +274,107 @@ export default async function TeamDashboardPage({
           {isEmptyTeam ? (
             <EmptyTeamCard />
           ) : (
-            <>
-              <SectionHead label="Team overview" />
-              <TeamOverview rows={strengths} />
-
-              <SectionHead label="Recent assessments" />
-              <RecentAssessments rows={recentBenchmarks} />
-
-              <SectionHead label="Recent practices" />
-              <RecentPractices rows={practiceHistory} />
-            </>
+            <div className="td-body-grid">
+              <div className="td-body-main">
+                <SectionHead label="Team overview" />
+                <TeamOverview rows={strengths} />
+              </div>
+              <div className="td-body-side">
+                <div>
+                  <SectionHead label="Recent assessments" />
+                  <RecentAssessments rows={recentBenchmarks} />
+                </div>
+                <div>
+                  <SectionHead label="Recent practices" />
+                  <RecentPractices rows={practiceHistory} />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      <style>{`
+        /* Stat strip: 1 → 2 → 4 columns at md/lg breakpoints.
+           Border-right between cells only when on the same row. */
+        .td-stat-strip {
+          padding: 0;
+          display: grid;
+          grid-template-columns: 1fr;
+          overflow: hidden;
+        }
+        .td-stat-strip > * {
+          border-right: none !important;
+          border-bottom: 1px solid var(--uff-line-soft);
+        }
+        .td-stat-strip > *:last-child { border-bottom: none; }
+        @media (min-width: 768px) {
+          .td-stat-strip { grid-template-columns: repeat(2, 1fr); }
+          .td-stat-strip > *:nth-child(odd) { border-right: 1px solid var(--uff-line-soft) !important; }
+          .td-stat-strip > *:nth-child(3),
+          .td-stat-strip > *:nth-child(4) { border-bottom: none; }
+        }
+        @media (min-width: 1100px) {
+          .td-stat-strip { grid-template-columns: repeat(4, 1fr); }
+          .td-stat-strip > * { border-bottom: none; border-right: 1px solid var(--uff-line-soft) !important; }
+          .td-stat-strip > *:last-child { border-right: none !important; }
+        }
+
+        /* Body grid: stacked everywhere except lg+, where it splits into
+           a main column (strength/weakness) and a side column (recent
+           assessments + practices). */
+        .td-body-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        .td-body-main,
+        .td-body-side {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          min-width: 0;
+        }
+        .td-body-side { gap: 20px; }
+        @media (min-width: 1100px) {
+          .td-body-grid {
+            grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+            gap: 24px;
+          }
+        }
+
+        /* Strength/weakness rows: vertical list on mobile/md, 2-col
+           horizontal grid at lg+ inside the main column. */
+        .td-overview-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 1px;
+          background: var(--uff-line-soft);
+          border: 1px solid var(--uff-line-soft);
+          border-radius: 16px;
+          overflow: hidden;
+        }
+        .td-overview-grid > * {
+          background: var(--uff-surface);
+        }
+        @media (min-width: 1100px) {
+          .td-overview-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Hover affordance: stat cells lift slightly, rows tint. */
+        .td-stat-cell {
+          transition: background 120ms ease;
+        }
+        .td-stat-cell:hover {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .td-row-hover {
+          transition: background 120ms ease;
+        }
+        .td-row-hover:hover {
+          background: rgba(255, 255, 255, 0.02);
+        }
+      `}</style>
     </div>
   );
 }
@@ -467,18 +547,17 @@ function StatCell({
   label,
   v,
   sub,
-  last,
 }: {
   label: string;
   v: number;
   sub?: string;
-  last?: boolean;
+  last?: boolean; // accepted for API compatibility; borders driven by the parent grid
 }) {
   return (
     <div
+      className="td-stat-cell"
       style={{
         padding: "18px 20px",
-        borderRight: last ? "none" : "1px solid var(--uff-line-soft)",
         display: "flex",
         flexDirection: "column",
         gap: 6,
@@ -548,14 +627,28 @@ function SectionHead({ label }: { label: string }) {
 }
 
 function EmptyTeamCard() {
+  // Brand-new team: no players, drills, or benchmarks. Centered hero
+  // card with a single primary CTA (Run your first benchmark) and the
+  // two secondary steps that get you there. Wider, more breathing room
+  // than the old stacked list.
+  const steps = [
+    { n: 1, t: "Add your players", sub: "Build the roster.", href: "/roster/new" },
+    { n: 2, t: "Create your drills", sub: "Seed the library.", href: "/drills/new" },
+  ];
   return (
     <div
       className="w-card"
       style={{
-        padding: 28,
+        padding: "40px 28px",
         display: "flex",
         flexDirection: "column",
-        gap: 14,
+        alignItems: "center",
+        textAlign: "center",
+        gap: 16,
+        position: "relative",
+        overflow: "hidden",
+        background:
+          "linear-gradient(180deg, rgba(255,106,26,0.05) 0%, transparent 50%), var(--uff-surface)",
       }}
     >
       <div
@@ -568,59 +661,118 @@ function EmptyTeamCard() {
       >
         GET STARTED
       </div>
-      <div
+      <h2
         style={{
-          fontSize: 22,
-          fontWeight: 700,
+          margin: 0,
+          fontSize: 28,
+          fontWeight: 800,
           letterSpacing: "-0.02em",
-          lineHeight: 1.2,
+          lineHeight: 1.15,
           color: "var(--uff-text)",
+          maxWidth: 520,
         }}
       >
-        Let's get your dashboard set up.
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {[
-          { n: 1, t: "Add your players", href: "/roster/new" },
-          { n: 2, t: "Create your drills", href: "/drills/new" },
-          { n: 3, t: "Run your first assessment", href: "/benchmarks" },
-        ].map((s) => (
+        Run your first benchmark to bring this dashboard to life.
+      </h2>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 14,
+          color: "var(--uff-text-dim)",
+          lineHeight: 1.55,
+          maxWidth: 460,
+        }}
+      >
+        Once you log a benchmark, you&apos;ll see team strengths and
+        weaknesses, per-player progression, and a feed of what&apos;s been
+        worked on.
+      </p>
+      <Link
+        href="/benchmarks"
+        className="wbtn primary"
+        style={{
+          marginTop: 4,
+          height: 44,
+          fontSize: 14,
+          padding: "0 22px",
+        }}
+      >
+        Run your first benchmark <Icon.arrowRight size={14} />
+      </Link>
+
+      <div
+        className="td-empty-steps"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          width: "100%",
+          maxWidth: 520,
+          marginTop: 12,
+        }}
+      >
+        {steps.map((s) => (
           <Link
             key={s.n}
             href={s.href}
-            className="w-card subdued"
+            className="w-card subdued td-row-hover"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 14,
-              padding: 16,
+              gap: 12,
+              padding: 14,
               textDecoration: "none",
               color: "inherit",
+              textAlign: "left",
             }}
           >
             <span
               style={{
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
                 borderRadius: 9999,
                 background: "rgba(255, 106, 26, 0.15)",
                 color: "var(--uff-orange)",
                 display: "grid",
                 placeItems: "center",
+                fontSize: 12,
                 fontWeight: 700,
                 fontFamily: "var(--font-mono)",
+                flexShrink: 0,
               }}
             >
               {s.n}
             </span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--uff-text)" }}>
-              {s.t}
-            </span>
-            <span style={{ flex: 1 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--uff-text)",
+                }}
+              >
+                {s.t}
+              </div>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--uff-text-dim)",
+                  marginTop: 2,
+                }}
+              >
+                {s.sub}
+              </div>
+            </div>
             <Icon.chevR size={13} />
           </Link>
         ))}
       </div>
+
+      <style>{`
+        @media (max-width: 600px) {
+          .td-empty-steps { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -661,22 +813,25 @@ function TeamOverview({ rows }: { rows: StrengthRow[] }) {
     );
   }
 
+  // Stacked vertically on mobile / md (1-col grid), horizontal multi-
+  // column comparison at lg+ (the .td-overview-grid class collapses
+  // to 1 col below 1100px). Each cell renders a category card.
   return (
-    <div className="w-card" style={{ padding: 0, overflow: "hidden" }}>
-      {withData.map((row, idx) => {
+    <div className="td-overview-grid">
+      {withData.map((row) => {
         const ratingNum =
           row.avg_rating !== null ? Number(row.avg_rating) : null;
         const timeNum = row.avg_time !== null ? Number(row.avg_time) : null;
         return (
           <div
             key={row.category_name}
+            className="td-row-hover"
             style={{
               padding: 16,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
-              borderTop: idx === 0 ? undefined : "1px solid var(--uff-line-soft)",
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -787,6 +942,7 @@ function RecentAssessments({ rows }: { rows: RecentBenchmarkRow[] }) {
             : "—";
         const inner = (
           <div
+            className="td-row-hover"
             style={{
               padding: 16,
               display: "flex",
@@ -891,7 +1047,7 @@ function RecentPractices({ rows }: { rows: PracticeHistoryRow[] }) {
           <Link
             key={row.practice_plan_id}
             href={`/practice/${row.practice_plan_id}`}
-            className="w-card"
+            className="w-card td-row-hover"
             style={{
               padding: 16,
               textDecoration: "none",
