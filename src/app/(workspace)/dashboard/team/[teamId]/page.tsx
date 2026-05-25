@@ -9,6 +9,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import { DashIcon, Icon } from "@/components/uff/icons";
+import { teamColorHex } from "@/components/uff/team-colors";
 
 type StrengthRow = {
   category_name: string;
@@ -174,7 +175,7 @@ export default async function TeamDashboardPage({
   const isEmptyTeam =
     playersCount === 0 && drillsCount === 0 && benchmarksCount === 0;
 
-  const teamColor = team.team_color ?? "#FF6A1A";
+  const teamColor = teamColorHex(team.team_color);
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
     user.email?.[0]?.toUpperCase() ||

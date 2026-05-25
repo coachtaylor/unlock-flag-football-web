@@ -40,7 +40,7 @@ export default function CreateLeagueForm() {
       const result = await createOnboardingLeague({
         leagueName: name,
         format,
-        leagueColorHex: colorHex,
+        leagueColorId: color,
       });
       if (result && "error" in result) setError(result.error);
     });

@@ -73,7 +73,7 @@ export default function AddTeamClient({
       const result = await createTeam({
         teamName: name,
         format,
-        teamColorHex: colorHex,
+        teamColorId: color,
         leagueId: pick === null ? null : (pick as string),
         coachIt,
       });

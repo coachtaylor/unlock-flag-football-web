@@ -40,7 +40,7 @@ export default function NewTeamForm({ role }: { role: "coach" | "captain" }) {
       const result = await createOnboardingTeam({
         teamName: name,
         format,
-        teamColorHex: colorHex,
+        teamColorId: color,
         role,
       });
       if (result && "error" in result) setError(result.error);

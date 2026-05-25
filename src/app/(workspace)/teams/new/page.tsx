@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { teamColorHex } from "@/components/uff/team-colors";
 import AddTeamClient from "./AddTeamClient";
 
 export default async function AddTeamPage({
@@ -32,12 +33,14 @@ export default async function AddTeamPage({
     league_color: string;
     format: string;
   };
+  // Resolve color id → hex once here so the client only sees hex.
   const userLeagues = (leagueRows ?? [])
     .map((r) => {
       const raw = r.leagues as EmbeddedLeague | EmbeddedLeague[] | null;
       return Array.isArray(raw) ? raw[0] ?? null : raw;
     })
-    .filter((l): l is EmbeddedLeague => !!l);
+    .filter((l): l is EmbeddedLeague => !!l)
+    .map((l) => ({ ...l, league_color: teamColorHex(l.league_color) }));
 
   const { leagueId } = await searchParams;
   const presetLeague = leagueId

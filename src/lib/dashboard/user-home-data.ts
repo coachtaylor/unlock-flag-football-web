@@ -6,11 +6,16 @@
 // mobile onboarding doc).
 
 import { createClient } from "@/lib/supabase/server";
+import { teamColorHex } from "@/components/uff/team-colors";
 
+// All returned `*_color` fields are HEX strings, ready to drop into
+// CSS. The DB stores the 8-swatch id (`"blue"`, `"orange"`…) per the
+// teams_team_color_chk / leagues_league_color_check constraints; the
+// id→hex lookup happens here so page code never sees the raw id.
 export type UserLeague = {
   id: string;
   league_name: string;
-  league_color: string;
+  league_color: string; // hex
   format: string;
   teams_count: number;
   members_count: number;
@@ -19,7 +24,7 @@ export type UserLeague = {
 export type UserTeam = {
   id: string;
   team_name: string;
-  team_color: string | null;
+  team_color: string; // hex
   format: string;
   league_id: string | null;
   role: string;
@@ -84,7 +89,7 @@ export async function getUserHomeData(): Promise<UserHomeData | null> {
     leagues.push({
       id: l.id,
       league_name: l.league_name,
-      league_color: l.league_color,
+      league_color: teamColorHex(l.league_color),
       format: l.format,
       teams_count: 0, // filled below
       members_count: 0,
@@ -130,7 +135,7 @@ export async function getUserHomeData(): Promise<UserHomeData | null> {
     teams.push({
       id: t.id,
       team_name: t.team_name,
-      team_color: t.team_color,
+      team_color: teamColorHex(t.team_color),
       format: t.format,
       league_id: t.league_id,
       role: row.role,

@@ -1,11 +1,14 @@
 // League dashboard data fetch.
 
 import { createClient } from "@/lib/supabase/server";
+import { teamColorHex } from "@/components/uff/team-colors";
 
+// All `*_color` fields are HEX, resolved from the DB id via
+// teamColorHex(). See user-home-data.ts for the convention.
 export type LeagueTeam = {
   id: string;
   team_name: string;
-  team_color: string | null;
+  team_color: string; // hex
   format: string;
   players_count: number;
   coaches_count: number;
@@ -21,7 +24,7 @@ export type LeagueDashboardData = {
   league: {
     id: string;
     league_name: string;
-    league_color: string;
+    league_color: string; // hex
     format: string;
     created_at: string;
     members_count: number;
@@ -77,7 +80,7 @@ export async function getLeagueDashboardData(
     teams.push({
       id: row.id,
       team_name: row.team_name,
-      team_color: row.team_color,
+      team_color: teamColorHex(row.team_color),
       format: row.format,
       players_count: 0,
       coaches_count: 0,
@@ -113,7 +116,7 @@ export async function getLeagueDashboardData(
     league: {
       id: league.id,
       league_name: league.league_name,
-      league_color: league.league_color,
+      league_color: teamColorHex(league.league_color),
       format: league.format,
       created_at: league.created_at,
       members_count: membersRes.count ?? 0,
