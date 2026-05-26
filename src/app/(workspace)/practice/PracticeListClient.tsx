@@ -336,7 +336,7 @@ function FeaturedPlanCard({
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
         {/* Mix bar + tiny legend below it. Bar extends to fill the row up to
             the action buttons; legend wraps under it with name + share %. */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
           <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
         </div>
