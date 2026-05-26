@@ -266,15 +266,9 @@ function FeaturedPlanCard({
         borderRadius: 12,
         padding: 12,
         position: "relative",
-        overflow: "hidden",
       }}
     >
-      {/* Mix bar sits flush along the top edge as a 3px Notion-style stripe */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={3} />
-      </div>
-
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 4 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <DateTile iso={plan.practice_date} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -334,33 +328,17 @@ function FeaturedPlanCard({
                 </span>
               </>
             )}
-            {/* Block dots collapse into the meta row to retain the mix at a glance */}
-            {plan.blocks.length > 0 && (
-              <>
-                <span style={{ color: "var(--uff-line)" }}>·</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                  {plan.blocks.map((b) => (
-                    <span
-                      key={b.id}
-                      title={`${b.name} · ${b.minutes}m`}
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        background: blockColor(b.name).accent,
-                      }}
-                    />
-                  ))}
-                </span>
-              </>
-            )}
           </div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
-        <span style={{ flex: 1 }} />
+        {/* Mix bar takes the available space between avatars and action buttons.
+            Capped at maxWidth so it doesn't sprawl across the whole row. */}
+        <div style={{ flex: 1, minWidth: 0, maxWidth: 280, marginRight: 4 }}>
+          <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
+        </div>
         <Link
           href={`/practice/${plan.id}/edit`}
           style={{
@@ -431,45 +409,50 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 6,
-            flexWrap: "wrap",
+            gap: 10,
             fontSize: 11.5,
             color: "var(--uff-text-dim)",
           }}
         >
-          {plan.start_time && (
-            <>
-              <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
-                {formatTimeLabel(plan.start_time)}
-              </span>
-              <span style={{ color: "var(--uff-line)" }}>·</span>
-            </>
-          )}
-          <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
-            {durLabel(plan.total_minutes)}
-          </span>
-          <span style={{ color: "var(--uff-line)" }}>·</span>
-          <span>
-            {plan.drill_count}d · {plan.block_count}b
-          </span>
-          {completed && plan.rsvp_in > 0 && (
-            <>
-              <span style={{ color: "var(--uff-line)" }}>·</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                <PIcon.people size={11} /> {plan.rsvp_in}
-              </span>
-            </>
-          )}
-          {plan.blocks.length > 0 && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: "auto" }}>
-              {plan.blocks.map((b) => (
-                <span
-                  key={b.id}
-                  title={`${b.name} · ${b.minutes}m`}
-                  style={{ width: 5, height: 5, borderRadius: "50%", background: blockColor(b.name).accent }}
-                />
-              ))}
+          {/* Drill info — left-aligned, doesn't grow */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+              minWidth: 0,
+            }}
+          >
+            {plan.start_time && (
+              <>
+                <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
+                  {formatTimeLabel(plan.start_time)}
+                </span>
+                <span style={{ color: "var(--uff-line)" }}>·</span>
+              </>
+            )}
+            <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
+              {durLabel(plan.total_minutes)}
             </span>
+            <span style={{ color: "var(--uff-line)" }}>·</span>
+            <span>
+              {plan.drill_count}d · {plan.block_count}b
+            </span>
+            {completed && plan.rsvp_in > 0 && (
+              <>
+                <span style={{ color: "var(--uff-line)" }}>·</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                  <PIcon.people size={11} /> {plan.rsvp_in}
+                </span>
+              </>
+            )}
+          </div>
+          {/* Mix bar — right-aligned, fills remaining space, capped so it stays readable */}
+          {plan.blocks.length > 0 && (
+            <div style={{ flex: 1, minWidth: 60, maxWidth: 220, marginLeft: "auto" }}>
+              <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={5} />
+            </div>
           )}
         </div>
       </div>
