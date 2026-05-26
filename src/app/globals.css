@@ -566,6 +566,76 @@
 
 .uff-web .sidebar .spacer { flex: 1; }
 
+/* ──────────────────────────────────────────────────────────────────────
+   Collapsed sidebar — toggled via the SidebarCollapseToggle client
+   component (writes/reads `uff_sidebar_collapsed` in localStorage and
+   toggles `.sidebar-collapsed` on the .uff-web root). Sidebar shrinks
+   to a 64px icon rail; labels, kickers, counts, and section headings
+   are hidden but kept in the DOM for tooltips + screen readers.
+
+   Conventions for partial sidebar UI:
+     .when-expanded  — visible only when the sidebar is NOT collapsed
+     .when-collapsed — visible only when the sidebar IS collapsed
+   ────────────────────────────────────────────────────────────────────── */
+.uff-web.sidebar-collapsed {
+  --sidebar-w: 64px;
+}
+.uff-web.sidebar-collapsed .sidebar {
+  padding: 14px 8px;
+  align-items: center;
+}
+.uff-web.sidebar-collapsed .sidebar .brand {
+  padding: 6px 0 14px;
+  justify-content: center;
+}
+.uff-web.sidebar-collapsed .sidebar .brand .name { display: none; }
+.uff-web.sidebar-collapsed .navlbl { display: none; }
+.uff-web.sidebar-collapsed .navitem {
+  padding: 9px 0;
+  width: 40px;
+  justify-content: center;
+  gap: 0;
+}
+/* Hide label/count spans inside navitems when collapsed. Icons are SVGs,
+   not spans, so they stay. */
+.uff-web.sidebar-collapsed .navitem > span { display: none; }
+.uff-web.sidebar-collapsed .navitem.active::before {
+  top: 12px;
+  bottom: 12px;
+}
+.uff-web:not(.sidebar-collapsed) .when-collapsed { display: none !important; }
+.uff-web.sidebar-collapsed .when-expanded { display: none !important; }
+
+/* User card at the bottom of every sidebar — collapse to just the avatar. */
+.uff-web.sidebar-collapsed .user-card {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.uff-web .sidebar-toggle {
+  margin: 4px auto 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--uff-line-soft);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--uff-text-mute);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.uff-web .sidebar-toggle:hover {
+  color: var(--uff-text);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--uff-line);
+}
+
+
 .uff-web .topbar {
   height: var(--topbar-h);
   border-bottom: 1px solid var(--uff-line-soft);

@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { DashIcon, Icon } from "@/components/uff/icons";
+import SidebarCollapseToggle from "./SidebarCollapseToggle";
 
 type NavId =
   | "dashboard"
@@ -53,6 +54,7 @@ export default function TeamSidebar({
   return (
     <aside className="sidebar">
       <div
+        className="context-card when-expanded"
         style={{
           margin: "0 -2px 6px",
           padding: 12,
@@ -92,7 +94,7 @@ export default function TeamSidebar({
           >
             {teamName[0]}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 9.5,
@@ -127,6 +129,7 @@ export default function TeamSidebar({
           key={it.id}
           href={it.href}
           className={`navitem ${it.id === active ? "active" : ""}`}
+          title={it.label}
         >
           <it.icon size={18} />
           <span>{it.label}</span>
@@ -138,6 +141,7 @@ export default function TeamSidebar({
       <Link
         href={leagueId ? `/dashboard/league/${leagueId}` : "/dashboard"}
         className="navitem"
+        title={leagueId ? "Back to league" : "All workspaces"}
         style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
       >
         <Icon.arrowLeft size={13} />
@@ -145,6 +149,7 @@ export default function TeamSidebar({
       </Link>
 
       <div
+        className="user-card"
         style={{
           marginTop: 8,
           padding: "10px 12px",
@@ -155,6 +160,7 @@ export default function TeamSidebar({
           alignItems: "center",
           gap: 10,
         }}
+        title={`${user.firstName} ${user.lastName}`}
       >
         <div
           style={{
@@ -167,16 +173,19 @@ export default function TeamSidebar({
             placeItems: "center",
             fontSize: 11,
             fontWeight: 800,
+            flexShrink: 0,
           }}
         >
           {initials || "U"}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.2, color: "var(--uff-text)" }}>
             {user.firstName} {user.lastName}
           </div>
         </div>
       </div>
+
+      <SidebarCollapseToggle />
     </aside>
   );
 }

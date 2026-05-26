@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DashIcon } from "@/components/uff/icons";
+import SidebarCollapseToggle from "./SidebarCollapseToggle";
 
 export type WorkspaceItem = {
   id: string;
@@ -57,6 +58,7 @@ export default function UserSidebar({
           key={it.id}
           href={it.href}
           className={`navitem ${isActive(it.id) ? "active" : ""}`}
+          title={it.label}
         >
           <it.icon size={18} />
           <span>{it.label}</span>
@@ -80,6 +82,7 @@ export default function UserSidebar({
                 key={`${w.kind}-${w.id}`}
                 href={href}
                 className={`navitem ${active ? "active" : ""}`}
+                title={`${w.name} (${w.kind})`}
                 style={{ paddingLeft: 10 }}
               >
                 <div
@@ -130,6 +133,8 @@ export default function UserSidebar({
       <div className="spacer" />
 
       <div
+        className="user-card"
+        title={`${user.firstName} ${user.lastName} · ${user.email}`}
         style={{
           marginTop: 14,
           padding: "10px 12px",
@@ -152,11 +157,12 @@ export default function UserSidebar({
             placeItems: "center",
             fontSize: 11,
             fontWeight: 800,
+            flexShrink: 0,
           }}
         >
           {initials || "U"}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
               fontSize: 12,
@@ -181,6 +187,8 @@ export default function UserSidebar({
           </div>
         </div>
       </div>
+
+      <SidebarCollapseToggle />
     </aside>
   );
 }

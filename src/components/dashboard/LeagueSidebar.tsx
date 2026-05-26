@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DashIcon, Icon } from "@/components/uff/icons";
+import SidebarCollapseToggle from "./SidebarCollapseToggle";
 
 export type LeagueContext = {
   id: string;
@@ -49,6 +50,7 @@ export default function LeagueSidebar({
       </div>
 
       <div
+        className="context-card when-expanded"
         style={{
           margin: "0 -2px 6px",
           padding: "12px 12px",
@@ -89,7 +91,7 @@ export default function LeagueSidebar({
           >
             {league.name[0]}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 9.5,
@@ -129,6 +131,7 @@ export default function LeagueSidebar({
             key={it.id}
             href={it.href}
             className={`navitem ${active ? "active" : ""}`}
+            title={it.label}
           >
             <it.icon size={18} />
             <span>{it.label}</span>
@@ -142,6 +145,7 @@ export default function LeagueSidebar({
       <Link
         href="/dashboard"
         className="navitem"
+        title="All workspaces"
         style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
       >
         <Icon.arrowLeft size={13} />
@@ -149,6 +153,8 @@ export default function LeagueSidebar({
       </Link>
 
       <div
+        className="user-card"
+        title={`${user.firstName} ${user.lastName} · League admin`}
         style={{
           marginTop: 8,
           padding: "10px 12px",
@@ -171,11 +177,12 @@ export default function LeagueSidebar({
             placeItems: "center",
             fontSize: 11,
             fontWeight: 800,
+            flexShrink: 0,
           }}
         >
           {initials || "U"}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
               fontSize: 12,
@@ -197,6 +204,8 @@ export default function LeagueSidebar({
           </div>
         </div>
       </div>
+
+      <SidebarCollapseToggle />
     </aside>
   );
 }
