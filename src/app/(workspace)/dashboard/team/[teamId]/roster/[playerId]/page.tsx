@@ -395,7 +395,20 @@ export default async function PlayerDetailPage({
                     }}
                   >
                     {jerseyNumber ? `#${jerseyNumber} · ` : ""}
-                    {positions.length ? positions.join(" / ") : "No position"}
+                    {positions.length === 0 ? (
+                      "No position"
+                    ) : (
+                      <>
+                        {/* Primary position in orange so the convention reads
+                            at a glance — positions[0] = primary per src/lib/positions.ts. */}
+                        <span style={{ color: "var(--uff-orange)" }}>
+                          {positions[0]}
+                        </span>
+                        {positions.length > 1 && (
+                          <span> · {positions.slice(1).join(" / ")}</span>
+                        )}
+                      </>
+                    )}
                   </div>
                   <div
                     style={{

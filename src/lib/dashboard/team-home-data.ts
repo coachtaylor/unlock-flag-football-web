@@ -168,6 +168,7 @@ function categoryKey(name: string | null | undefined) {
 
 import { playerColorForIndex } from "@/components/uff/team-colors";
 import { blockColor } from "@/lib/practice/block-colors";
+import { isPrimaryOffense, isPrimaryDefense } from "@/lib/positions";
 
 function initialsOf(name: string) {
   return name
@@ -611,20 +612,17 @@ export async function loadTeamDashboard(
     : null;
   const deltaPct = recentRate != null && priorRate != null ? recentRate - priorRate : null;
 
-  function isOffense(p: Player) {
-    const ps = (p.positions ?? []).map((x) => x.toLowerCase());
-    return ps.some((x) =>
-      ["qb", "wr", "rb", "center", "rusher_offense", "offense", "receiver"].some((k) => x.includes(k))
-    );
-  }
-  function isDefense(p: Player) {
-    const ps = (p.positions ?? []).map((x) => x.toLowerCase());
-    return ps.some((x) =>
-      ["cb", "safety", "rusher", "defense", "lb", "db"].some((k) => x.includes(k))
-    );
-  }
-  const offensePlayerIds = new Set(activePlayers.filter(isOffense).map((p) => p.id));
-  const defensePlayerIds = new Set(activePlayers.filter(isDefense).map((p) => p.id));
+  // Offense / defense split uses PRIMARY position (positions[0]) — see the
+  // convention in src/lib/positions.ts. A two-way player counts toward the
+  // side their primary is on, not both. Substring matching was previously
+  // used here and mis-classified single-letter codes like 'S' and 'C'; the
+  // exact-token check via positions.ts fixes that.
+  const offensePlayerIds = new Set(
+    activePlayers.filter((p) => isPrimaryOffense(p.positions)).map((p) => p.id)
+  );
+  const defensePlayerIds = new Set(
+    activePlayers.filter((p) => isPrimaryDefense(p.positions)).map((p) => p.id)
+  );
   function sideRate(idSet: Set<string>) {
     if (!completed8w.length || !idSet.size) return null;
     const opps = completed8w.length * idSet.size;

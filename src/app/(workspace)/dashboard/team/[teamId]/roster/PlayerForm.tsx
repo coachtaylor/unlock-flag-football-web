@@ -11,7 +11,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Icon } from "@/components/uff/icons";
 
-const POSITION_OPTIONS = ["QB", "WR", "RB", "C", "CB", "S", "LB", "DE", "Rusher"];
+import { POSITION_IDS } from "@/lib/positions";
+
+const POSITION_OPTIONS = POSITION_IDS;
 
 export type PlayerFormInitial = {
   id: string;
@@ -49,6 +51,15 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     setPositions((prev) =>
       prev.includes(pos) ? prev.filter((p) => p !== pos) : [...prev, pos]
     );
+  }
+
+  // Move `pos` to the front of the positions[] array — by convention,
+  // index 0 is the player's primary position. See src/lib/positions.ts.
+  function promoteToPrimary(pos: string) {
+    setPositions((prev) => {
+      if (!prev.includes(pos)) return prev;
+      return [pos, ...prev.filter((p) => p !== pos)];
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -149,21 +160,87 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
           </Field>
         </Section>
 
-        <Section title="Positions" subtitle="Pick all that apply.">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Section
+          title="Positions"
+          subtitle="Tap a position to add or remove. The first selected position is the player's primary."
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "flex-start",
+            }}
+          >
             {POSITION_OPTIONS.map((pos) => {
-              const selected = positions.includes(pos);
+              const selectedIdx = positions.indexOf(pos);
+              const selected = selectedIdx >= 0;
+              const isPrimary = selectedIdx === 0;
+              const isSecondary = selected && !isPrimary;
               return (
-                <button
+                <div
                   key={pos}
-                  type="button"
-                  onClick={() => togglePosition(pos)}
-                  aria-pressed={selected}
-                  className={`chip ${selected ? "on" : ""}`}
-                  style={{ height: 34, fontSize: 12.5, padding: "0 14px" }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                    // Reserve the eyebrow line height for every chip so the
+                    // row stays aligned whether or not the PRIMARY badge is shown.
+                    minHeight: 56,
+                  }}
                 >
-                  {pos}
-                </button>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.14em",
+                      color: isPrimary ? "var(--uff-orange)" : "transparent",
+                      fontFamily: "var(--font-mono)",
+                      lineHeight: 1,
+                      userSelect: "none",
+                    }}
+                    aria-hidden={!isPrimary}
+                  >
+                    PRIMARY
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => togglePosition(pos)}
+                      aria-pressed={selected}
+                      className={`chip ${selected ? "on" : ""}`}
+                      style={{ height: 34, fontSize: 12.5, padding: "0 14px" }}
+                    >
+                      {pos}
+                    </button>
+                    {isSecondary && (
+                      <button
+                        type="button"
+                        onClick={() => promoteToPrimary(pos)}
+                        aria-label={`Make ${pos} primary position`}
+                        title="Make primary"
+                        style={{
+                          height: 28,
+                          width: 28,
+                          padding: 0,
+                          borderRadius: 6,
+                          border: "1px solid var(--uff-line)",
+                          background: "rgba(255,255,255,0.03)",
+                          color: "var(--uff-text-mute)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 14,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        ↑
+                      </button>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
