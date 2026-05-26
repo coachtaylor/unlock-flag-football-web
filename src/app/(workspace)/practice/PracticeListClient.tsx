@@ -290,7 +290,14 @@ function FeaturedPlanCard({
               href={`/practice/${plan.id}/edit`}
               className="icon-btn"
               title="Edit plan"
-              style={{ width: 26, height: 26, textDecoration: "none" }}
+              style={{
+                width: 26,
+                height: 26,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               <EditIcon size={12} />
             </Link>
@@ -352,7 +359,7 @@ function FeaturedPlanCard({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 24, marginTop: 10, alignItems: "center" }}>
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
         {/* Mix bar + tiny legend below it. Bar extends to fill the row up to
             the action buttons; legend wraps under it with name + share %. */}
