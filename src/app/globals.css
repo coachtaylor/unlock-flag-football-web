@@ -564,6 +564,15 @@
   color: var(--uff-orange);
 }
 
+/* Line icons (Dashboard, Roster, Drills, …, "All workspaces") render
+   as <svg> children using currentColor — force them orange independent
+   of the navitem's text color. The workspace items use a <div>
+   monogram instead of an <svg>, so those colored squares are
+   unaffected and continue to show the team/league color. */
+.uff-web .navitem > svg {
+  color: var(--uff-orange);
+}
+
 .uff-web .sidebar .spacer { flex: 1; }
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -615,10 +624,39 @@
   margin-top: 8px;
 }
 
+/* Sidebar header row — holds the collapse toggle at the top of every
+   sidebar. Aligned right so the toggle sits in the corner like a
+   window-chrome control, clearly separate from nav items below. */
+.uff-web .sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2px 8px;
+  margin-bottom: 6px;
+}
+.uff-web.sidebar-collapsed .sidebar-head {
+  justify-content: center;
+  padding: 0 0 8px;
+}
+
+/* Split variant: identity mark on the left, collapse toggle on the right.
+   When the sidebar is collapsed the identity mark drops out so only the
+   toggle remains, centered. */
+.uff-web .sidebar-head--split {
+  justify-content: space-between;
+  padding: 0 4px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--uff-line-soft);
+}
+.uff-web.sidebar-collapsed .sidebar-head--split {
+  justify-content: center;
+  padding: 0 0 10px;
+}
+.uff-web.sidebar-collapsed .sidebar-head--split .team-mark { display: none; }
+
 .uff-web .sidebar-toggle {
-  margin: 4px auto 0;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   border: 1px solid var(--uff-line-soft);
   background: rgba(255, 255, 255, 0.02);

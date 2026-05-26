@@ -8,6 +8,7 @@ import { teamColorHex, playerColorForIndex } from "@/components/uff/team-colors"
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanFull, interleavePlan, planTotals } from "@/lib/practice/plan-data";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import {
   PracticeStatusPill,
   BudgetBar,
@@ -81,6 +82,10 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
   );
 
   const teamColor = teamColorHex(team.team_color as string);
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    plan.team_id,
+    (team.league_id as string | null) ?? null,
+  );
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
     user.email?.[0]?.toUpperCase() ||
@@ -98,6 +103,7 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <DashTopBar

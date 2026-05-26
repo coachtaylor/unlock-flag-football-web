@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import RosterListClient, { type RosterPlayer } from "./RosterListClient";
 
 type BenchmarkJoin = {
@@ -156,6 +157,7 @@ export default async function TeamRosterPage({
   });
 
   const teamColor = teamColorHex(team.team_color);
+  const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
     user.email?.[0]?.toUpperCase() ||
@@ -173,6 +175,7 @@ export default async function TeamRosterPage({
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

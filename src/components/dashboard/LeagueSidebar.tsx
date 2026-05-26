@@ -41,6 +41,9 @@ export default function LeagueSidebar({
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-head">
+        <SidebarCollapseToggle />
+      </div>
       <div className="brand">
         <div className="mark">U</div>
         <div className="name">
@@ -204,8 +207,6 @@ export default function LeagueSidebar({
           </div>
         </div>
       </div>
-
-      <SidebarCollapseToggle />
     </aside>
   );
 }

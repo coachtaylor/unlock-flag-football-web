@@ -1,6 +1,10 @@
 "use client";
 
-// Small client toggle that collapses the .uff-web sidebar to an icon rail.
+// Sidebar collapse / expand control. Rendered at the TOP of each sidebar
+// (TeamSidebar / LeagueSidebar / UserSidebar) inside `.sidebar-head`, so
+// it reads as window-chrome — not as nav. The icon is a panel-side
+// glyph (rectangle + divider) rather than a chevron, so it doesn't
+// compete with the "Back to league / All workspaces" back-arrow links.
 //
 // State persistence: writes/reads `uff_sidebar_collapsed` in localStorage
 // so the choice survives navigation and page reloads. Applies the
@@ -12,6 +16,7 @@
 // during the very first render, before paint.
 
 import { useEffect, useLayoutEffect, useState } from "react";
+import { Icon } from "@/components/uff/icons";
 
 const STORAGE_KEY = "uff_sidebar_collapsed";
 
@@ -48,33 +53,18 @@ export default function SidebarCollapseToggle() {
     }
   }
 
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+
   return (
     <button
       type="button"
       onClick={toggle}
       className="sidebar-toggle"
-      title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      title={label}
+      aria-label={label}
       aria-pressed={collapsed}
     >
-      {/* Chevron rotates 180° when collapsed so the affordance matches the
-          direction the sidebar will expand toward. */}
-      <svg
-        width={14}
-        height={14}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{
-          transform: collapsed ? "rotate(180deg)" : "none",
-          transition: "transform 0.18s",
-        }}
-      >
-        <path d="M15 6l-6 6 6 6" />
-      </svg>
+      <Icon.panelLeft size={16} />
     </button>
   );
 }

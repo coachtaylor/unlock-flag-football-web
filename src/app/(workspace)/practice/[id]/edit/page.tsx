@@ -7,6 +7,7 @@ import { teamColorHex, playerColorForIndex } from "@/components/uff/team-colors"
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanFull, fetchBlockTemplates } from "@/lib/practice/plan-data";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import EditorClient, {
   type DrillCatalogEntry,
   type RosterEntry,
@@ -92,6 +93,10 @@ export default async function PracticeEditPage({ params }: { params: Promise<{ i
   }));
 
   const teamColor = teamColorHex(team.team_color as string);
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    plan.team_id,
+    (team.league_id as string | null) ?? null,
+  );
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
     user.email?.[0]?.toUpperCase() ||
@@ -111,6 +116,7 @@ export default async function PracticeEditPage({ params }: { params: Promise<{ i
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <DashTopBar

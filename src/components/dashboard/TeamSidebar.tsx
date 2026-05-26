@@ -8,8 +8,9 @@
 // surfaces (Build 6) reuse the same nav instead of duplicating it.
 
 import Link from "next/link";
-import { DashIcon, Icon } from "@/components/uff/icons";
+import { DashIcon } from "@/components/uff/icons";
 import SidebarCollapseToggle from "./SidebarCollapseToggle";
+import type { SidebarWorkspace } from "@/lib/dashboard/sidebar-workspaces";
 
 type NavId =
   | "dashboard"
@@ -26,15 +27,26 @@ type Props = {
   teamName: string;
   leagueId: string | null;
   user: { firstName: string; lastName: string };
+  // Other workspaces the user has access to (siblings to the current
+  // team). Fetched server-side via `loadSidebarWorkspaces` and passed in
+  // so this component stays synchronous — needed because some callers
+  // (e.g. DrillForm) are client components that can't render an async
+  // server component.
+  workspaces?: SidebarWorkspace[];
 };
 
+// `leagueId` is in Props (existing callers still pass it) but unused
+// inside the component now — its job is handled server-side by
+// loadSidebarWorkspaces, which turns the parent league into a
+// `workspaces` entry. We don't destructure it here to keep the lint
+// surface clean.
 export default function TeamSidebar({
   active,
   teamId,
   teamColor,
   teamName,
-  leagueId,
   user,
+  workspaces = [],
 }: Props) {
   const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
   const items: {
@@ -53,74 +65,29 @@ export default function TeamSidebar({
 
   return (
     <aside className="sidebar">
-      <div
-        className="context-card when-expanded"
-        style={{
-          margin: "0 -2px 6px",
-          padding: 12,
-          borderRadius: 12,
-          background: "rgba(255,255,255,0.025)",
-          border: "1px solid var(--uff-line-soft)",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
+      <div className="sidebar-head sidebar-head--split">
         <div
+          className="team-mark"
+          title={teamName}
+          aria-label={teamName}
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 3,
+            width: 32,
+            height: 32,
+            borderRadius: 9,
             background: teamColor,
-            borderRadius: "0 2px 2px 0",
+            color: "#1a0f08",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "var(--font-mono)",
+            fontWeight: 800,
+            fontSize: 13,
+            letterSpacing: "-0.04em",
+            flexShrink: 0,
           }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              background: teamColor,
-              color: "#1a0f08",
-              display: "grid",
-              placeItems: "center",
-              fontFamily: "var(--font-mono)",
-              fontWeight: 800,
-              fontSize: 13,
-              letterSpacing: "-0.04em",
-            }}
-          >
-            {teamName[0]}
-          </div>
-          <div className="when-expanded" style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 9.5,
-                color: "var(--uff-text-mute)",
-                fontWeight: 700,
-                letterSpacing: ".16em",
-                marginBottom: 2,
-              }}
-            >
-              TEAM
-            </div>
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 700,
-                letterSpacing: "-0.01em",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "var(--uff-text)",
-              }}
-            >
-              {teamName}
-            </div>
-          </div>
+        >
+          {teamName[0]}
         </div>
+        <SidebarCollapseToggle />
       </div>
 
       <div className="navlbl">Team</div>
@@ -136,17 +103,73 @@ export default function TeamSidebar({
         </Link>
       ))}
 
-      <div className="spacer" />
-
+      <div className="navlbl">Workspaces</div>
+      {workspaces.map((w) => {
+        const href =
+          w.kind === "league"
+            ? `/dashboard/league/${w.id}`
+            : `/dashboard/team/${w.id}`;
+        return (
+          <Link
+            key={`${w.kind}-${w.id}`}
+            href={href}
+            className="navitem"
+            title={`${w.name} (${w.kind})`}
+            style={{ paddingLeft: 10 }}
+          >
+            <div
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                background: w.color,
+                color: "#1a0f08",
+                display: "grid",
+                placeItems: "center",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "-0.04em",
+                flexShrink: 0,
+              }}
+            >
+              {w.name[0]}
+            </div>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {w.name}
+            </span>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: ".12em",
+                color: "var(--uff-text-mute)",
+              }}
+            >
+              {w.kind === "league" ? "LEAGUE" : "TEAM"}
+            </span>
+          </Link>
+        );
+      })}
       <Link
-        href={leagueId ? `/dashboard/league/${leagueId}` : "/dashboard"}
+        href="/dashboard"
         className="navitem"
-        title={leagueId ? "Back to league" : "All workspaces"}
-        style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
+        title="All workspaces"
+        style={{ paddingLeft: 10, fontSize: 12, color: "var(--uff-text-mute)" }}
       >
-        <Icon.arrowLeft size={13} />
-        <span>{leagueId ? "Back to league" : "All workspaces"}</span>
+        <DashIcon.grid size={18} />
+        <span>All workspaces</span>
       </Link>
+
+      <div className="spacer" />
 
       <div
         className="user-card"
@@ -184,8 +207,6 @@ export default function TeamSidebar({
           </div>
         </div>
       </div>
-
-      <SidebarCollapseToggle />
     </aside>
   );
 }

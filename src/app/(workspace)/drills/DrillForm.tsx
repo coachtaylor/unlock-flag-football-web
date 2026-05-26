@@ -35,6 +35,7 @@ import {
 } from "@/components/uff-web/drills/atoms";
 import { generateSetupInstructions } from "@/lib/generate-setup-instructions";
 import type { DiagramData } from "@/types/diagram";
+import type { SidebarWorkspace } from "@/lib/dashboard/sidebar-workspaces";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ type Props = {
   user: User;
   categories: Category[];
   initial?: DrillFormInitial;
+  sidebarWorkspaces?: SidebarWorkspace[];
 };
 
 // ── Per-type default targets (used when a type is freshly toggled on) ──
@@ -117,7 +119,7 @@ const BENCH_SAMPLE: Record<BenchKind, string> = {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export default function DrillForm({ team, user, categories, initial }: Props) {
+export default function DrillForm({ team, user, categories, initial, sidebarWorkspaces }: Props) {
   const router = useRouter();
   const isEditing = !!initial;
 
@@ -452,6 +454,7 @@ export default function DrillForm({ team, user, categories, initial }: Props) {
         teamName={team.name}
         leagueId={team.leagueId}
         user={{ firstName: user.firstName, lastName: user.lastName }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

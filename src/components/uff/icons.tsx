@@ -68,6 +68,12 @@ export const Icon = {
       <circle cx="19" cy="12" r="1.6" />
     </svg>
   ),
+  panelLeft: ({ size = 16 }: IconProps = {}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...stroke} strokeWidth={1.8}>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M9 4v16" />
+    </svg>
+  ),
 };
 
 // Onboarding-specific icons (OnbIcon.* in the prototype)
@@ -157,6 +163,14 @@ export const DashIcon = {
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 9h18M8 3v4M16 3v4" />
       <path d="M8 13h3M8 17h7" />
+    </svg>
+  ),
+  grid: ({ size = 18 }: IconProps = {}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...stroke} strokeWidth={1.8}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
   ),
 };

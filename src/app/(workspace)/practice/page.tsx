@@ -11,6 +11,7 @@ import { Icon } from "@/components/uff/icons";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanSummaries } from "@/lib/practice/plan-data";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PracticeListClient from "./PracticeListClient";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,10 @@ export default async function PracticeListPage() {
       : 0;
 
   const teamColor = teamColorHex(team.team_color as string);
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    teamId,
+    (team.league_id as string | null) ?? null,
+  );
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
     user.email?.[0]?.toUpperCase() ||
@@ -138,6 +143,7 @@ export default async function PracticeListPage() {
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <DashTopBar

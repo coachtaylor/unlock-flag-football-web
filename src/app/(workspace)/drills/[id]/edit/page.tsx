@@ -10,6 +10,7 @@ import {
 } from "@/components/uff-web/drills/atoms";
 import DrillForm, { type DrillFormInitial } from "../../DrillForm";
 import type { DiagramData } from "@/types/diagram";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,11 @@ export default async function EditDrillPage({ params }: Props) {
     user.email?.[0]?.toUpperCase() ||
     "U";
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    team.id as string,
+    (team.league_id as string | null) ?? null,
+  );
+
   return (
     <DrillForm
       team={{
@@ -174,6 +180,7 @@ export default async function EditDrillPage({ params }: Props) {
       user={{ firstName, lastName, initials }}
       categories={cats}
       initial={initial}
+      sidebarWorkspaces={sidebarWorkspaces}
     />
   );
 }

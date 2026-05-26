@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerForm from "../../PlayerForm";
 
 export default async function EditPlayerPage({
@@ -48,6 +49,7 @@ export default async function EditPlayerPage({
   if (!membership) notFound();
   if (player.team_id !== teamId) notFound();
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const teamColor = teamColorHex(team.team_color);
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
@@ -68,6 +70,7 @@ export default async function EditPlayerPage({
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

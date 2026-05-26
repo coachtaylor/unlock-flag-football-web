@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { categoryToSlug } from "@/components/uff-web/drills/atoms";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import DrillForm from "../DrillForm";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,11 @@ export default async function NewDrillPage() {
 
   if (!team) redirect("/dashboard");
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    teamId,
+    (team.league_id as string | null) ?? null,
+  );
+
   const cats = (categories ?? []).map((c) => {
     const name = c.category_name as string;
     return {
@@ -75,6 +81,7 @@ export default async function NewDrillPage() {
       }}
       user={{ firstName, lastName, initials }}
       categories={cats}
+      sidebarWorkspaces={sidebarWorkspaces}
     />
   );
 }

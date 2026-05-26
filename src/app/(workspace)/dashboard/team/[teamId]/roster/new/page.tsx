@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerForm from "../PlayerForm";
 
 export default async function NewPlayerPage({
@@ -40,6 +41,7 @@ export default async function NewPlayerPage({
   if (!team) notFound();
   if (!membership) notFound();
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const teamColor = teamColorHex(team.team_color);
   const initials =
     `${profile?.first_name?.[0] ?? ""}${profile?.last_name?.[0] ?? ""}`.toUpperCase() ||
@@ -60,6 +62,7 @@ export default async function NewPlayerPage({
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

@@ -12,6 +12,7 @@ import {
   playerColorForIndex,
   teamColorHex,
 } from "@/components/uff/team-colors";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerHistory, {
   type PlayerHistoryDrill,
 } from "./PlayerHistory";
@@ -254,6 +255,7 @@ export default async function PlayerDetailPage({
     user.email?.[0]?.toUpperCase() ||
     "U";
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const rosterBase = `/dashboard/team/${teamId}/roster`;
   const playerName = player.player_name as string;
   const joinedLabel = player.created_at
@@ -272,6 +274,7 @@ export default async function PlayerDetailPage({
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

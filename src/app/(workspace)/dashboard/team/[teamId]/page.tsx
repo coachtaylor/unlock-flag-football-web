@@ -18,6 +18,7 @@ import { Icon } from "@/components/uff/icons";
 import Link from "next/link";
 
 import { loadTeamDashboard } from "@/lib/dashboard/team-home-data";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
 import NextPracticeCard from "@/components/dashboard/widgets/NextPracticeCard";
 import PinnedPulsesStrip from "@/components/dashboard/widgets/PinnedPulsesStrip";
@@ -104,7 +105,10 @@ export default async function TeamDashboardPage({
   if (!canView) notFound();
 
   // Load all widget data in one pass.
-  const data = await loadTeamDashboard(supabase, teamId, user.id);
+  const [data, sidebarWorkspaces] = await Promise.all([
+    loadTeamDashboard(supabase, teamId, user.id),
+    loadSidebarWorkspaces(teamId, team.league_id),
+  ]);
 
   const playerView = sp.view === "player" && data.isCurrentUserCaptain;
   // Captain view re-loads the player-scoped slice so pulses + attendance
@@ -152,6 +156,7 @@ export default async function TeamDashboardPage({
           firstName: profile?.first_name ?? user.email ?? "",
           lastName: profile?.last_name ?? "",
         }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>

@@ -11,6 +11,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import DiagramRenderer from "@/components/DiagramRenderer";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
+import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import {
   BENCH_BY_ID,
   BenchChip,
@@ -253,6 +254,11 @@ export default async function DrillDetailPage({ params }: Props) {
 
   const canBenchmark = types.length > 0 && status === "published";
 
+  const sidebarWorkspaces = await loadSidebarWorkspaces(
+    team.id as string,
+    (team.league_id as string | null) ?? null,
+  );
+
   return (
     <div className="uff-web">
       <TeamSidebar
@@ -262,6 +268,7 @@ export default async function DrillDetailPage({ params }: Props) {
         teamName={team.team_name as string}
         leagueId={(team.league_id as string | null) ?? null}
         user={{ firstName, lastName }}
+        workspaces={sidebarWorkspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
