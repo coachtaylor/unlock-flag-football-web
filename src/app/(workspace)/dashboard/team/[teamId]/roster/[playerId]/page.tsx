@@ -15,7 +15,15 @@ import {
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerHistory, {
   type PlayerHistoryDrill,
+  type PlayerHistoryLocked,
 } from "./PlayerHistory";
+
+type DrillJoin = {
+  id?: string;
+  drill_name: string;
+  benchmark_type: string | null;
+  benchmark_types: string[] | null;
+};
 
 type BenchmarkRow = {
   id: string;
@@ -26,10 +34,8 @@ type BenchmarkRow = {
   made_count: number | null;
   attempts_count: number | null;
   benchmark_type: string | null;
-  team_drills:
-    | { drill_name: string; benchmark_type: string | null }
-    | { drill_name: string; benchmark_type: string | null }[]
-    | null;
+  drill_id: string;
+  team_drills: DrillJoin | DrillJoin[] | null;
 };
 
 function initialsFor(name: string) {
@@ -181,7 +187,7 @@ export default async function PlayerDetailPage({
     supabase
       .from("benchmark_results")
       .select(
-        "id, assessment_date, created_at, time_seconds, rating, made_count, attempts_count, benchmark_type, team_drills(drill_name, benchmark_type)"
+        "id, assessment_date, created_at, time_seconds, rating, made_count, attempts_count, benchmark_type, drill_id, team_drills(id, drill_name, benchmark_type, benchmark_types)"
       )
       .eq("player_id", playerId)
       .order("assessment_date", { ascending: true }),
@@ -198,20 +204,41 @@ export default async function PlayerDetailPage({
   const colorIndex = (player.color_index as number) ?? 0;
   const playerColor = playerColorForIndex(colorIndex);
 
-  // Group benchmark rows by (drill_name, benchmark_type).
+  // Group benchmark rows by (drill_name, benchmark_type), and track which
+  // (drill, type) combos the drill *supports* (via team_drills.benchmark_types)
+  // but the player hasn't been measured on yet — those render as locked
+  // insight cards. Build 8.
   const benches = (benchesRaw ?? []) as BenchmarkRow[];
   const groups = new Map<string, PlayerHistoryDrill>();
+  // drill_id → { drillName, supportedTypes (set) }
+  const drillSupport = new Map<string, { drillName: string; supportedTypes: Set<string> }>();
+
   for (const b of benches) {
     const drillJoin = b.team_drills;
     const drillRow = Array.isArray(drillJoin) ? drillJoin[0] : drillJoin;
     const drillName = drillRow?.drill_name ?? "Drill";
     const type = b.benchmark_type ?? drillRow?.benchmark_type ?? null;
+
+    // Record this drill's full supported-type list once (deduped) so we
+    // can compute the "locked" gap later.
+    if (b.drill_id && !drillSupport.has(b.drill_id)) {
+      const supported = new Set<string>();
+      const arr = drillRow?.benchmark_types ?? null;
+      if (arr) for (const t of arr) if (t) supported.add(t);
+      // Fall back to legacy single-string column if the array is empty.
+      if (supported.size === 0 && drillRow?.benchmark_type) {
+        supported.add(drillRow.benchmark_type);
+      }
+      drillSupport.set(b.drill_id, { drillName, supportedTypes: supported });
+    }
+
     const value = sampleValue(b, type);
     if (value == null) continue;
-    const key = `${drillName}::${type ?? ""}`;
+    const key = `${b.drill_id}::${type ?? ""}`;
     if (!groups.has(key)) {
       groups.set(key, {
         key,
+        drillId: b.drill_id,
         drillName,
         benchmarkType: type,
         unit: unitFor(type),
@@ -234,6 +261,24 @@ export default async function PlayerDetailPage({
       return bLast.localeCompare(aLast);
     }
   );
+
+  // Locked (drill, type) combos: drill supports the type but the player
+  // has zero samples for it. Sorted by drill name for stable ordering.
+  const measuredKeys = new Set(drills.map((d) => `${d.drillId}::${d.benchmarkType ?? ""}`));
+  const locked: PlayerHistoryLocked[] = [];
+  for (const [drillId, info] of drillSupport.entries()) {
+    for (const t of info.supportedTypes) {
+      if (measuredKeys.has(`${drillId}::${t}`)) continue;
+      locked.push({
+        key: `locked::${drillId}::${t}`,
+        drillId,
+        drillName: info.drillName,
+        benchmarkType: t,
+        accent: accentFor(t),
+      });
+    }
+  }
+  locked.sort((a, b) => a.drillName.localeCompare(b.drillName));
 
   const benchmarkCount = benches.length;
   // Personal bests across all drills (samples that beat all prior in that drill).
@@ -505,7 +550,7 @@ export default async function PlayerDetailPage({
           </div>
 
           {/* History column */}
-          <PlayerHistory drills={drills} />
+          <PlayerHistory drills={drills} locked={locked} />
         </div>
 
         <style>{`

@@ -4,6 +4,9 @@
 // Plan calls Recharts out for Build 8, but the user opted-in to add it
 // here for the dashboard's trend widget. Lazy-loaded via "use client"
 // so the bundle hit lands on this widget only.
+//
+// Build 8: pulled styling onto the shared chartTheme so the dashboard
+// trend chart and the player-detail progress chart stay in lockstep.
 
 import {
   LineChart,
@@ -15,6 +18,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { chartTheme } from "@/components/app/charts/chartTheme";
 
 type Series = {
   drillId: string;
@@ -60,28 +64,34 @@ export default function BenchmarkTrendsCard({ series }: { series: Series[] }) {
     <div style={{ width: "100%", height: 230 }}>
       <ResponsiveContainer>
         <LineChart data={merged} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
-          <CartesianGrid stroke="#26262C" strokeDasharray="2 4" vertical={false} />
+          <CartesianGrid
+            stroke={chartTheme.gridStroke}
+            strokeDasharray={chartTheme.gridDash}
+            vertical={false}
+          />
           <XAxis
             dataKey="week"
-            tick={{ fill: "#7A7A82", fontSize: 11, fontFamily: "var(--font-mono)" }}
+            tick={{
+              fill: chartTheme.tickFill,
+              fontSize: chartTheme.tickFontSize,
+              fontFamily: chartTheme.tickFontFamily,
+            }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: "#7A7A82", fontSize: 11, fontFamily: "var(--font-mono)" }}
+            tick={{
+              fill: chartTheme.tickFill,
+              fontSize: chartTheme.tickFontSize,
+              fontFamily: chartTheme.tickFontFamily,
+            }}
             axisLine={false}
             tickLine={false}
             width={32}
           />
           <Tooltip
-            contentStyle={{
-              background: "#141417",
-              border: "1px solid #26262C",
-              borderRadius: 8,
-              fontSize: 12,
-              color: "#F4F4F2",
-            }}
-            cursor={{ stroke: "#26262C", strokeWidth: 1 }}
+            contentStyle={chartTheme.tooltip}
+            cursor={{ stroke: chartTheme.cursorStroke, strokeWidth: 1 }}
           />
           <Legend
             wrapperStyle={{

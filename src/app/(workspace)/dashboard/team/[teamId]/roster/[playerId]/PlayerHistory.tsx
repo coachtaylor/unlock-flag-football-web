@@ -1,21 +1,35 @@
 "use client";
 
 // Per-drill benchmark history for one player. Owns the time-range chip
-// state (30d / 90d / season) and renders a HistoryCard with a sparkline
-// for each drill.
+// state (30d / 90d / season) and renders a HistoryCard per (drill, type)
+// with a Recharts progress chart. Build 8 swaps the previous hand-rolled
+// sparkline for BenchmarkProgressChart and adds a locked-insight tail
+// for benchmark types a drill supports but the player hasn't been
+// measured on yet.
 
 import { useMemo, useState } from "react";
+import BenchmarkProgressChart from "@/components/app/charts/BenchmarkProgressChart";
+import LockedBenchmarkChart from "@/components/app/charts/LockedBenchmarkChart";
 
 type Sample = { date: string; value: number; label: string };
 
 export type PlayerHistoryDrill = {
   key: string;
+  drillId: string;
   drillName: string;
   benchmarkType: string | null;
   unit: string;
   better: "higher" | "lower";
   accent: string;
   samples: Sample[]; // chronological (oldest → newest)
+};
+
+export type PlayerHistoryLocked = {
+  key: string;
+  drillId: string;
+  drillName: string;
+  benchmarkType: string;
+  accent: string;
 };
 
 type Range = "30d" | "90d" | "season";
@@ -34,8 +48,10 @@ function inRange(iso: string, days: number | null): boolean {
 
 export default function PlayerHistory({
   drills,
+  locked = [],
 }: {
   drills: PlayerHistoryDrill[];
+  locked?: PlayerHistoryLocked[];
 }) {
   const [range, setRange] = useState<Range>("season");
 
@@ -119,6 +135,40 @@ export default function PlayerHistory({
         </div>
       ) : (
         filteredDrills.map((d) => <HistoryCard key={d.key} d={d} />)
+      )}
+
+      {locked.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "var(--uff-text-mute)",
+              marginTop: 4,
+            }}
+          >
+            Locked insights · {locked.length}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+              gap: 10,
+            }}
+          >
+            {locked.map((l) => (
+              <LockedBenchmarkChart
+                key={l.key}
+                drillName={l.drillName}
+                type={l.benchmarkType}
+                accent={l.accent}
+                height={92}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -240,7 +290,13 @@ function HistoryCard({ d }: { d: PlayerHistoryDrill }) {
       </div>
 
       <div className="history-chart">
-        <HistoryLine samples={d.samples} color={d.accent} better={d.better} />
+        <BenchmarkProgressChart
+          samples={d.samples}
+          color={d.accent}
+          better={d.better}
+          type={d.benchmarkType}
+          height={120}
+        />
       </div>
 
       <style>{`
@@ -254,71 +310,5 @@ function HistoryCard({ d }: { d: PlayerHistoryDrill }) {
         }
       `}</style>
     </div>
-  );
-}
-
-function HistoryLine({
-  samples,
-  color,
-  better,
-}: {
-  samples: Sample[];
-  color: string;
-  better: "higher" | "lower";
-}) {
-  const w = 380;
-  const h = 92;
-  if (samples.length === 1) {
-    // Single point: render a centered dot so the section doesn't look broken.
-    return (
-      <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
-        <circle cx={w / 2} cy={h / 2} r={4} fill={color} />
-      </svg>
-    );
-  }
-
-  const values = samples.map((s) => s.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(0.001, max - min);
-  const padX = 6;
-  const padY = 12;
-  const innerW = w - padX * 2;
-  const innerH = h - padY * 2;
-  const xAt = (i: number) =>
-    padX + (innerW * i) / Math.max(1, samples.length - 1);
-  const yAt = (v: number) =>
-    better === "higher"
-      ? padY + innerH - ((v - min) / span) * innerH
-      : padY + ((v - min) / span) * innerH;
-
-  const pts = samples
-    .map((s, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)},${yAt(s.value).toFixed(1)}`)
-    .join(" ");
-  const area = `${pts} L${xAt(samples.length - 1)},${h - padY} L${xAt(0)},${h - padY} Z`;
-
-  return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
-      <path d={area} fill={color} opacity="0.08" />
-      <path
-        d={pts}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {samples.map((s, i) => (
-        <circle
-          key={i}
-          cx={xAt(i)}
-          cy={yAt(s.value)}
-          r={i === samples.length - 1 ? 3.5 : 2.2}
-          fill={i === samples.length - 1 ? color : "var(--uff-surface)"}
-          stroke={color}
-          strokeWidth={i === samples.length - 1 ? 0 : 1.5}
-        />
-      ))}
-    </svg>
   );
 }
