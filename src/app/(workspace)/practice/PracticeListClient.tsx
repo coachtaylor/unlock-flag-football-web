@@ -46,10 +46,12 @@ export default function PracticeListClient({
 
   if (plans.length === 0) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-        <PageHeader teamName={teamName} teamId={teamId} />
-        <StatsStrip lastN={0} attendPct={0} fieldMin={0} avgDrills={0} />
-        <EmptyListState teamId={teamId} />
+      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <PageHeader teamName={teamName} teamId={teamId} />
+          <StatsStrip lastN={0} attendPct={0} fieldMin={0} avgDrills={0} />
+          <EmptyListState teamId={teamId} />
+        </div>
       </div>
     );
   }
@@ -66,15 +68,8 @@ export default function PracticeListClient({
   const thisWeek = upcoming.slice(1);
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 720px) 320px",
-        gap: 24,
-        alignItems: "start",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <PageHeader teamName={teamName} teamId={teamId} />
         <StatsStrip
           lastN={stats.practices}
@@ -122,68 +117,29 @@ export default function PracticeListClient({
           </div>
         )}
       </div>
-
-      {/* Side rail — Build 5.5 footnote (block library lives in the editor sheet, not here) */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 80, paddingTop: 4 }}>
-        <div
-          style={{
-            padding: "12px 14px",
-            background: "rgba(255,106,26,0.06)",
-            border: "1px solid rgba(255,106,26,0.20)",
-            borderRadius: 12,
-            fontSize: 12,
-            lineHeight: 1.55,
-            color: "var(--uff-text-dim)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              fontWeight: 800,
-              letterSpacing: ".16em",
-              color: "var(--uff-orange)",
-              textTransform: "uppercase",
-              marginBottom: 6,
-            }}
-          >
-            New in 5.5
-          </div>
-          Plans now compose from <b>reusable blocks</b>. Save any block from a plan to your library and drop it into the next one.
-        </div>
-      </div>
     </div>
   );
 }
 
 // ── Page header ────────────────────────────────────────────────────────
-function PageHeader({ teamName, teamId }: { teamName: string; teamId: string }) {
+// Title + new-plan action. The "PURPLE F." breadcrumb already lives in the
+// DashTopBar above this — no need to repeat it as a colored eyebrow here.
+function PageHeader({ teamName: _teamName, teamId }: { teamName: string; teamId: string }) {
   const [isPending, startTransition] = useTransition();
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 14, paddingTop: 4 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: ".18em",
-            color: "var(--uff-orange)",
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}
-        >
-          {teamName}
-        </div>
-        <div
-          style={{
-            fontSize: 36,
-            fontWeight: 800,
-            letterSpacing: "-0.025em",
-            color: "var(--uff-text)",
-            lineHeight: 1,
-          }}
-        >
-          Practice
-        </div>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 24,
+          fontWeight: 800,
+          letterSpacing: "-0.02em",
+          color: "var(--uff-text)",
+          lineHeight: 1.1,
+        }}
+      >
+        Practice
       </div>
       <form
         action={(fd) => {
@@ -195,22 +151,10 @@ function PageHeader({ teamName, teamId }: { teamName: string; teamId: string }) 
           type="submit"
           title="New practice plan"
           disabled={isPending}
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 14,
-            background: "var(--uff-orange)",
-            border: 0,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#1a0f08",
-            boxShadow: "0 8px 22px rgba(255,106,26,0.30)",
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
+          className="wbtn primary"
+          style={{ height: 34, padding: "0 12px", fontSize: 13, gap: 6 }}
         >
-          <PIcon.plus size={22} />
+          <PIcon.plus size={13} /> New plan
         </button>
       </form>
     </div>
@@ -234,41 +178,32 @@ function StatsStrip({
       style={{
         background: "var(--uff-surface)",
         border: "1px solid var(--uff-line-soft)",
-        borderRadius: 16,
-        padding: "18px 20px",
+        borderRadius: 12,
+        padding: "12px 16px",
         display: "flex",
         alignItems: "center",
-        gap: 20,
+        gap: 16,
       }}
     >
       <div style={{ flex: 1 }}>
         <div
           style={{
-            fontSize: 10,
+            fontSize: 9.5,
             fontWeight: 800,
-            letterSpacing: ".16em",
+            letterSpacing: ".14em",
             color: "var(--uff-text-mute)",
             textTransform: "uppercase",
-            marginBottom: 10,
+            marginBottom: 6,
           }}
         >
           LAST {lastN} PRACTICE{lastN === 1 ? "" : "S"}
         </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 28, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 20, flexWrap: "wrap" }}>
           <BigStat n={attendPct} unit="%" label="ATTEND" valueColor="var(--uff-lime)" />
           <BigStat n={fieldMin} unit="m" label="ON FIELD" valueColor="var(--uff-text)" />
           <BigStat n={avgDrills} unit="" label="AVG DRILLS" valueColor="var(--uff-text)" precise />
         </div>
       </div>
-      <div
-        style={{
-          width: 6,
-          height: 64,
-          borderRadius: 3,
-          background: "linear-gradient(180deg, var(--uff-orange) 30%, rgba(255,106,26,0.30) 100%)",
-          boxShadow: "0 4px 14px rgba(255,106,26,0.30)",
-        }}
-      />
     </div>
   );
 }
@@ -287,12 +222,12 @@ function BigStat({
   precise?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
       <span
         className="mono"
         style={{
           fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-          fontSize: 30,
+          fontSize: 22,
           fontWeight: 800,
           color: valueColor,
           letterSpacing: "-0.03em",
@@ -304,7 +239,7 @@ function BigStat({
         className="mono"
         style={{
           fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 700,
           color: "var(--uff-text-mute)",
           letterSpacing: "-0.02em",
@@ -314,11 +249,11 @@ function BigStat({
       </span>
       <span
         style={{
-          fontSize: 10,
+          fontSize: 9.5,
           fontWeight: 700,
           letterSpacing: ".14em",
           color: "var(--uff-text-mute)",
-          marginLeft: 6,
+          marginLeft: 5,
         }}
       >
         {label}
@@ -423,37 +358,36 @@ function FeaturedPlanCard({
     <div
       style={{
         background: "#15110d",
-        border: "2px solid var(--uff-orange)",
-        borderRadius: 20,
-        padding: 20,
+        border: "1px solid var(--uff-orange)",
+        borderRadius: 14,
+        padding: 16,
         position: "relative",
-        boxShadow: "0 14px 44px rgba(255,106,26,0.16), 0 0 0 1px rgba(255,106,26,0.10)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
-        <DateTile iso={plan.practice_date} />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+        <DateTile iso={plan.practice_date} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <PracticeStatusPill status={plan.status} mini />
             <span style={{ flex: 1 }} />
             <button
               type="button"
               className="icon-btn"
               title="Duplicate plan"
-              style={{ width: 36, height: 36 }}
+              style={{ width: 30, height: 30 }}
               onClick={onDuplicate}
               disabled={isPending}
             >
-              <PIcon.copy size={15} />
+              <PIcon.copy size={13} />
             </button>
           </div>
           <div
             style={{
-              fontSize: 24,
-              fontWeight: 800,
-              letterSpacing: "-0.018em",
+              fontSize: 18,
+              fontWeight: 700,
+              letterSpacing: "-0.015em",
               color: "var(--uff-text)",
-              lineHeight: 1.1,
+              lineHeight: 1.15,
             }}
           >
             {plan.title}
@@ -462,16 +396,16 @@ function FeaturedPlanCard({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 8,
               flexWrap: "wrap",
-              marginTop: 10,
-              fontSize: 13,
+              marginTop: 6,
+              fontSize: 12,
               color: "var(--uff-text-dim)",
             }}
           >
             {plan.start_time && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <PIcon.clock size={13} /> {formatTimeLabel(plan.start_time)}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <PIcon.clock size={12} /> {formatTimeLabel(plan.start_time)}
               </span>
             )}
             <span style={{ color: "var(--uff-line)" }}>·</span>
@@ -482,42 +416,24 @@ function FeaturedPlanCard({
             <span>{plan.drill_count} drills</span>
             <span style={{ color: "var(--uff-line)" }}>·</span>
             <span>{plan.block_count} blocks</span>
+            {plan.rsvp_in > 0 && (
+              <>
+                <span style={{ color: "var(--uff-line)" }}>·</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <PIcon.people size={12} /> {plan.rsvp_in}/{rosterSize}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 18 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            marginBottom: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: ".18em",
-              color: "var(--uff-text-mute)",
-              textTransform: "uppercase",
-            }}
-          >
-            MIX
-          </span>
-          <span style={{ fontSize: 12, color: "var(--uff-text-dim)" }}>
-            <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
-              {durLabel(plan.total_minutes)}
-            </span>{" "}
-            planned
-          </span>
-        </div>
-        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={8} />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 12 }}>
+      <div style={{ marginTop: 12 }}>
+        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
           {legend.map((L) => (
-            <div key={L.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: L.c.accent }} />
+            <div key={L.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: L.c.accent }} />
               <span style={{ color: "var(--uff-text-dim)" }}>{L.name}</span>
               <span
                 className="mono"
@@ -534,82 +450,24 @@ function FeaturedPlanCard({
         </div>
       </div>
 
-      {plan.rsvp_in > 0 && avatars.length > 0 && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: "10px 12px",
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid var(--uff-line-soft)",
-            borderRadius: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <AvatarStack items={avatars} size={24} max={6} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--uff-text)" }}>{plan.rsvp_in} confirmed</div>
-            <div
-              className="mono"
-              style={{
-                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-                fontSize: 10.5,
-                color: "var(--uff-text-mute)",
-                marginTop: 1,
-                letterSpacing: ".04em",
-              }}
-            >
-              of {rosterSize} on roster
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-        <Link
-          href={`/practice/${plan.id}`}
-          style={{
-            flex: 1,
-            height: 52,
-            borderRadius: 14,
-            border: 0,
-            background: "var(--uff-orange)",
-            color: "#1a0f08",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            fontFamily: "inherit",
-            fontSize: 15,
-            fontWeight: 700,
-            letterSpacing: "-0.005em",
-            cursor: "pointer",
-            boxShadow: "0 8px 22px rgba(255,106,26,0.28)",
-            textDecoration: "none",
-          }}
-        >
-          <PIcon.whistle size={16} /> Open plan
-        </Link>
+      <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+        {avatars.length > 0 && (
+          <AvatarStack items={avatars} size={22} max={5} />
+        )}
+        <span style={{ flex: 1 }} />
         <Link
           href={`/practice/${plan.id}/edit`}
-          style={{
-            height: 52,
-            padding: "0 22px",
-            borderRadius: 14,
-            background: "transparent",
-            border: "1px solid var(--uff-line)",
-            color: "var(--uff-text)",
-            fontFamily: "inherit",
-            fontSize: 14.5,
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            textDecoration: "none",
-          }}
+          className="wbtn"
+          style={{ height: 34, padding: "0 14px", fontSize: 13, textDecoration: "none" }}
         >
           Edit
+        </Link>
+        <Link
+          href={`/practice/${plan.id}`}
+          className="wbtn primary"
+          style={{ height: 34, padding: "0 16px", fontSize: 13, gap: 6, textDecoration: "none" }}
+        >
+          <PIcon.whistle size={13} /> Open plan
         </Link>
       </div>
     </div>
