@@ -140,28 +140,28 @@ function LeagueHero({
       <div style={{ height: 4, background: league.league_color }} />
       <div
         style={{
-          padding: "24px 28px",
+          padding: "16px 18px",
           display: "flex",
           alignItems: "center",
-          gap: 20,
+          gap: 14,
           flexWrap: "wrap",
         }}
       >
         <div
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: 16,
+            width: 52,
+            height: 52,
+            borderRadius: 14,
             background: league.league_color,
             color: "#1a0f08",
             display: "grid",
             placeItems: "center",
             fontFamily: "var(--font-mono)",
             fontWeight: 800,
-            fontSize: 24,
+            fontSize: 21,
             letterSpacing: "-0.04em",
             flexShrink: 0,
-            boxShadow: `0 8px 24px ${league.league_color}40`,
+            boxShadow: `0 6px 18px ${league.league_color}40`,
           }}
         >
           {league.league_name[0]}
@@ -177,16 +177,6 @@ function LeagueHero({
           >
             <span
               style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                letterSpacing: ".18em",
-                color: "var(--uff-text-mute)",
-              }}
-            >
-              LEAGUE
-            </span>
-            <span
-              style={{
                 fontSize: 9.5,
                 fontWeight: 700,
                 letterSpacing: ".16em",
@@ -196,7 +186,7 @@ function LeagueHero({
                 color: "var(--uff-orange)",
               }}
             >
-              YOU&apos;RE ADMIN
+              ADMIN
             </span>
             <span
               style={{
@@ -206,15 +196,15 @@ function LeagueHero({
                 letterSpacing: ".06em",
               }}
             >
-              · DEFAULT {league.format.toUpperCase()}
+              · {league.format.toUpperCase()}
             </span>
           </div>
           <div
             style={{
-              fontSize: 28,
+              fontSize: 22,
               fontWeight: 700,
               letterSpacing: "-0.02em",
-              lineHeight: 1.15,
+              lineHeight: 1.2,
               color: "var(--uff-text)",
             }}
           >
@@ -222,9 +212,9 @@ function LeagueHero({
           </div>
           <div
             style={{
-              fontSize: 13,
+              fontSize: 12.5,
               color: "var(--uff-text-dim)",
-              marginTop: 4,
+              marginTop: 3,
             }}
           >
             Created {created} · {league.members_count}{" "}
@@ -259,12 +249,12 @@ function LeagueStatsStrip({ teams }: { teams: LeagueTeam[] }) {
         <div
           key={s.label}
           style={{
-            padding: "18px 20px",
+            padding: "var(--stat-pad-y) var(--stat-pad-x)",
             borderRight:
               i < stats.length - 1 ? "1px solid var(--uff-line-soft)" : "none",
             display: "flex",
             flexDirection: "column",
-            gap: 6,
+            gap: 4,
           }}
         >
           <span
@@ -311,7 +301,7 @@ function LeagueTeamCardWeb({ team }: { team: LeagueTeam }) {
         flexDirection: "column",
       }}
     >
-      <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -466,7 +456,7 @@ function LeagueEmptyState({
     <div
       className="w-card"
       style={{
-        padding: 32,
+        padding: 22,
         borderTop: `2px solid ${league.league_color}`,
         position: "relative",
         overflow: "hidden",
@@ -479,7 +469,7 @@ function LeagueEmptyState({
           position: "relative",
           display: "grid",
           gridTemplateColumns: "1.1fr 1fr",
-          gap: 32,
+          gap: 18,
           alignItems: "center",
         }}
       >
@@ -490,46 +480,42 @@ function LeagueEmptyState({
               fontWeight: 700,
               letterSpacing: ".18em",
               color: league.league_color,
-              marginBottom: 12,
+              marginBottom: 8,
             }}
           >
             FIRST TEAM
           </div>
           <div
             style={{
-              fontSize: 30,
+              fontSize: 22,
               fontWeight: 700,
-              letterSpacing: "-0.025em",
-              lineHeight: 1.1,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.2,
               color: "var(--uff-text)",
             }}
           >
-            No teams yet. Add your first to get started.
+            Add your first team.
           </div>
           <div
             style={{
-              fontSize: 14,
+              fontSize: 13,
               color: "var(--uff-text-dim)",
-              marginTop: 12,
+              marginTop: 8,
               maxWidth: 460,
-              lineHeight: 1.55,
+              lineHeight: 1.5,
             }}
           >
-            You&apos;re the league admin for{" "}
-            <strong style={{ color: "var(--uff-text)" }}>
-              {league.league_name}
-            </strong>
-            . Every team you add inherits your admin access — you can coach
-            them yourself or invite other coaches.
+            As league admin, you own every team you add. Coach them yourself
+            or invite other coaches.
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
             <Link
               href={`/teams/new?leagueId=${league.id}`}
               className="wbtn primary"
               style={{ height: 40, fontSize: 13 }}
             >
-              <Icon.plus size={13} /> Add first team
+              <Icon.plus size={13} /> Add team
             </Link>
           </div>
         </div>

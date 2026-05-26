@@ -436,9 +436,15 @@
    ============================================ */
 
 .uff-web {
-  --sidebar-w: 240px;
-  --topbar-h: 64px;
-  --gutter: 24px;
+  --sidebar-w: 200px;
+  --topbar-h: 56px;
+  --gutter: 20px;
+  --page-gap: 14px;
+  --card-pad: 14px;
+  --card-pad-lg: 18px;
+  --row-pad: 12px;
+  --stat-pad-y: 12px;
+  --stat-pad-x: 16px;
   font-family: var(--font-sans);
   background:
     radial-gradient(ellipse 90% 30% at 60% -8%, rgba(255, 106, 26, 0.06), transparent 60%),
@@ -637,14 +643,14 @@
   padding: var(--gutter);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--page-gap);
 }
 
 .uff-web .w-card {
   background: var(--uff-surface);
   border: 1px solid var(--uff-line-soft);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: var(--card-pad);
   position: relative;
 }
 .uff-web .w-card.hero {
@@ -652,7 +658,7 @@
     radial-gradient(120% 80% at 100% 0%, rgba(255, 106, 26, 0.20) 0%, transparent 55%),
     linear-gradient(180deg, #1A1612 0%, #131316 100%);
   border: 1px solid rgba(255, 106, 26, 0.22);
-  border-radius: 22px;
+  border-radius: 16px;
 }
 .uff-web .w-card.subdued {
   background: var(--uff-surface-2);
@@ -698,8 +704,8 @@
     grid-template-columns: 1fr;
   }
   .uff-web .sidebar { display: none; }
-  .uff-web .topbar { padding: 0 16px; }
-  .uff-web .page { padding: 16px; }
+  .uff-web .topbar { padding: 0 14px; }
+  .uff-web .page { padding: 14px; }
 }
 
 /* ============================================

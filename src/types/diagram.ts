@@ -3,7 +3,8 @@ export interface Cone {
   x: number;
   y: number;
   label: string;
-  kind?: "cone" | "qb" | "football";
+  kind?: "cone" | "qb" | "football" | "player";
+  color?: string;
 }
 
 export interface Path {
@@ -27,6 +28,8 @@ export interface Route {
   id: string;
   waypoints: RouteWaypoint[];
   segments: RouteSegment[];
+  color?: string;
+  playerId?: string;
 }
 
 export interface BallPath {
@@ -43,4 +46,5 @@ export interface DiagramData {
   routes: Route[];
   ballPaths?: BallPath[];
   gridScale: number;
+  losY?: number;
 }

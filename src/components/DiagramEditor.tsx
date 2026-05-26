@@ -14,6 +14,7 @@ import {
   lastSegmentArrowDirection,
   renderRouteSegment,
   renderRouteHitTarget,
+  ROUTE_COLOR,
 } from "@/lib/route-geometry";
 
 interface DiagramEditorProps {
@@ -23,9 +24,9 @@ interface DiagramEditorProps {
 
 const YARD = 10; // SVG units per yard
 const FIELD_YARDS_X = 20; // sideline-to-sideline width
-const FIELD_YARDS_Y = 25; // depth (line of scrimmage to downfield)
+const FIELD_YARDS_Y = 20; // depth (line of scrimmage to downfield)
 const FIELD_W = FIELD_YARDS_X * YARD; // 200
-const FIELD_H = FIELD_YARDS_Y * YARD; // 250
+const FIELD_H = FIELD_YARDS_Y * YARD; // 200
 const PAD_LEFT = 14;
 const PAD_RIGHT = 4;
 const PAD_Y = 4;
@@ -38,12 +39,11 @@ const HIT_R = 18;
 const CONE_HIT_R = 10;
 const PATH_HIT_STROKE = 16;
 const ROUTE_HIT_STROKE = 16;
-const ROUTE_COLOR = "#8B5CF6";
-const CONE_COLOR = "#D48A30";
-const QB_COLOR = "#EAB308";
-const FOOTBALL_COLOR = "#5C3A1E";
+const CONE_COLOR = "#FF6A1A";
+const QB_COLOR = "#FF6A1A";
+const FOOTBALL_COLOR = "#8B5A2B";
 const FOOTBALL_LACES = "#FFFFFF";
-const BALL_PATH_COLOR = "#5C3A1E";
+const BALL_PATH_COLOR = "rgba(255,255,255,0.45)";
 const BALL_PATH_HIT_STROKE = 16;
 const FINISH_TAP_R = HIT_R;
 const MIN_X = 0;
@@ -55,14 +55,19 @@ const ADD_OFFSET_LATERAL = 5 * YARD;
 const DRAG_THRESHOLD = 2;
 const ALIGN_THRESHOLD = 0.5 * YARD; // 0.5 yards — snap to another cone's row/column
 
-const FIELD_BG = "#FFFFFF";
-const LINE_10 = "#C8C8C8";
-const LINE_5 = "#DCDCDC";
-const LINE_1 = "#EEEEEE";
-const HASH_COLOR = "#E8E8E8";
-const NUMBER_COLOR = "rgba(255,255,255,0.45)";
-const SIDELINE = "#D0D0D0";
-const PATH_LABEL_COLOR = "#555555";
+// Dark-theme palette (Build 5 redesign).
+const FIELD_BG = "#0F1115";
+const LINE_10 = "rgba(255,255,255,0.10)";
+const LINE_5 = "rgba(255,255,255,0.06)";
+const LINE_1 = "rgba(255,255,255,0.04)";
+const HASH_COLOR = "rgba(255,255,255,0.18)";
+const NUMBER_COLOR = "rgba(255,255,255,0.40)";
+const SIDELINE = "rgba(255,255,255,0.18)";
+const PATH_LABEL_COLOR = "rgba(255,255,255,0.55)";
+const LOS_COLOR = "rgba(255,106,26,0.45)";
+const CONE_LABEL_COLOR = "rgba(255,255,255,0.85)";
+const CONE_RING_OPACITY = 0.4;
+const SELECT_COLOR = "#6EA8FF";
 
 const MOVEMENTS: Path["movement"][] = ["sprint", "backpedal", "shuffle", "jog"];
 
@@ -77,25 +82,25 @@ const MOVEMENT_STYLES: Record<
   { color: string; strokeWidth: number; dasharray?: string; label: string }
 > = {
   sprint: {
-    color: "#D48A30",
-    strokeWidth: 4,
+    color: "#FF8A4A",
+    strokeWidth: 2.2,
     label: "Sprint",
   },
   backpedal: {
-    color: "#2563EB",
-    strokeWidth: 4,
-    dasharray: "10 6",
+    color: "#6EA8FF",
+    strokeWidth: 2.2,
+    dasharray: "5 4",
     label: "Backpedal",
   },
   shuffle: {
-    color: "#16A34A",
-    strokeWidth: 4,
-    dasharray: "1 5",
+    color: "#C2FF3D",
+    strokeWidth: 2.2,
+    dasharray: "1 4",
     label: "Shuffle",
   },
   jog: {
-    color: "#9CA3AF",
-    strokeWidth: 2.5,
+    color: "rgba(255,255,255,0.55)",
+    strokeWidth: 1.6,
     label: "Jog",
   },
 };
@@ -145,6 +150,13 @@ function nextFootballId(cones: Cone[]): string {
   const ids = new Set(cones.map((c) => c.id));
   while (ids.has(`fb${n}`)) n++;
   return `fb${n}`;
+}
+
+function nextPlayerId(cones: Cone[]): string {
+  let n = 1;
+  const ids = new Set(cones.map((c) => c.id));
+  while (ids.has(`p${n}`)) n++;
+  return `p${n}`;
 }
 
 function nextRouteId(routes: Route[]): string {
@@ -198,6 +210,25 @@ function nextFootballPosition(cones: Cone[]): { x: number; y: number } {
   };
 }
 
+function nextPlayerPosition(cones: Cone[]): { x: number; y: number } {
+  const players = cones.filter((c) => c.kind === "player");
+  if (players.length === 0) {
+    // First player lines up near the LOS, slightly off-center.
+    return { x: FIELD_W / 2 - ADD_OFFSET_LATERAL, y: FIELD_H - 3 * YARD };
+  }
+  const last = players[players.length - 1];
+  let x = last.x + ADD_OFFSET_LATERAL;
+  let y = last.y;
+  if (x > MAX_X) {
+    x = MIN_X + 5 * YARD;
+    y = last.y - ADD_OFFSET_DEPTH;
+  }
+  return {
+    x: clamp(snap(x), MIN_X, MAX_X),
+    y: clamp(snap(y), MIN_Y, MAX_Y),
+  };
+}
+
 function nextQBPosition(cones: Cone[]): { x: number; y: number } {
   const qbs = cones.filter((c) => c.kind === "qb");
   if (qbs.length === 0) {
@@ -226,6 +257,10 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [showPosPicker, setShowPosPicker] = useState(false);
+  const [pendingPlayerColor, setPendingPlayerColor] = useState<string>(
+    POSITION_COLORS[0].value
+  );
 
   const [mode, setMode] = useState<Mode>("normal");
   const [pathFromId, setPathFromId] = useState<string | null>(null);
@@ -273,6 +308,11 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
   const waypointDragRef = useRef<{
     routeId: string;
     waypointId: string;
+    moved: boolean;
+    pointerId?: number;
+  } | null>(null);
+
+  const losDragRef = useRef<{
     moved: boolean;
     pointerId?: number;
   } | null>(null);
@@ -335,26 +375,30 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
     setSelectedId(id);
   };
 
-  const handleStartRouteDrawing = () => {
-    if (mode === "route") {
-      finishActiveRoute();
-      return;
-    }
-    if (mode === "drawing") return;
-    const id = nextRouteId(data.routes);
-    const newRoute: Route = { id, waypoints: [], segments: [] };
-    update({ ...data, routes: [...data.routes, newRoute] });
-    setActiveRouteId(id);
-    setSelectedId(null);
-    setSelectedRouteId(null);
-    setSelectedWaypointId(null);
-    setEditingPathIdx(null);
-    resetPathDrawingState();
-    setPendingSegmentType("straight");
-    setInsertAfterIndex(null);
-    setInsertMode("after");
-    insertedWaypointIdsRef.current = [];
-    setMode("route");
+  const handleAddPosition = (position: string) => {
+    if (mode !== "normal") return;
+    const id = nextPlayerId(data.cones);
+    const { x, y } = nextPlayerPosition(data.cones);
+    const newPlayer: Cone = {
+      id,
+      x,
+      y,
+      label: position,
+      kind: "player",
+      color: pendingPlayerColor,
+    };
+    update({ ...data, cones: [...data.cones, newPlayer] });
+    setSelectedId(id);
+  };
+
+  const handleColorChange = (color: string) => {
+    if (!selectedId) return;
+    update({
+      ...data,
+      cones: data.cones.map((c) =>
+        c.id === selectedId ? { ...c, color } : c
+      ),
+    });
   };
 
   const finishActiveRoute = () => {
@@ -373,6 +417,34 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
     setInsertMode("after");
     insertedWaypointIdsRef.current = [];
     setMode("normal");
+  };
+
+  const handleStartPlayerRoute = (playerId: string) => {
+    if (mode === "route") finishActiveRoute();
+    if (mode === "drawing") return;
+    const player = data.cones.find((c) => c.id === playerId);
+    if (!player) return;
+    const routeId = nextRouteId(data.routes);
+    const wpId = nextWaypointId([]);
+    const newRoute: Route = {
+      id: routeId,
+      waypoints: [{ id: wpId, x: player.x, y: player.y }],
+      segments: [],
+      color: player.color ?? ROUTE_COLOR,
+      playerId,
+    };
+    update({ ...data, routes: [...data.routes, newRoute] });
+    setActiveRouteId(routeId);
+    setSelectedId(null);
+    setSelectedRouteId(null);
+    setSelectedWaypointId(null);
+    setEditingPathIdx(null);
+    resetPathDrawingState();
+    setPendingSegmentType("straight");
+    setInsertAfterIndex(0);
+    setInsertMode("after");
+    insertedWaypointIdsRef.current = [];
+    setMode("route");
   };
 
   const handleCancelRoute = () => {
@@ -765,10 +837,58 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
 
     setAlignGuides({ x: alignX, y: alignY });
 
+    const movingCone = data.cones.find((c) => c.id === coneId);
+    const dx = movingCone ? sx - movingCone.x : 0;
+    const dy = movingCone ? sy - movingCone.y : 0;
+
     const cones = data.cones.map((c) =>
       c.id === coneId ? { ...c, x: sx, y: sy } : c
     );
-    update({ ...data, cones });
+
+    // Translate any route owned by this player by the same delta so the
+    // route's shape stays anchored to the player marker.
+    const routes =
+      dx === 0 && dy === 0
+        ? data.routes
+        : data.routes.map((r) =>
+            r.playerId === coneId
+              ? {
+                  ...r,
+                  waypoints: r.waypoints.map((w) => ({
+                    ...w,
+                    x: w.x + dx,
+                    y: w.y + dy,
+                  })),
+                }
+              : r
+          );
+
+    update({ ...data, cones, routes });
+  };
+
+  const moveLosTo = (clientY: number) => {
+    if (data.losY === undefined) return;
+    const { y } = screenToSvg(0, clientY);
+    const snapped = clamp(snap(y), MIN_Y, MAX_Y);
+    if (snapped === data.losY) return;
+    update({ ...data, losY: snapped });
+  };
+
+  const onLosPointerDown = (e: React.PointerEvent<SVGLineElement>) => {
+    e.stopPropagation();
+    if (mode !== "normal") return;
+    losDragRef.current = { moved: false, pointerId: e.pointerId };
+  };
+
+  const handleToggleLos = () => {
+    if (mode !== "normal") return;
+    if (data.losY === undefined) {
+      // Default LOS to depth 0 (bottom edge of the field).
+      update({ ...data, losY: FIELD_H });
+    } else {
+      const { losY: _omit, ...rest } = data;
+      update({ ...rest });
+    }
   };
 
   const onConePointerDown = (
@@ -783,6 +903,15 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
 
   const onSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (mode === "drawing" || mode === "route") return;
+
+    const losDrag = losDragRef.current;
+    if (losDrag) {
+      if (losDrag.pointerId !== undefined && e.pointerId !== losDrag.pointerId)
+        return;
+      losDrag.moved = true;
+      moveLosTo(e.clientY);
+      return;
+    }
 
     const wpDrag = waypointDragRef.current;
     if (wpDrag) {
@@ -863,6 +992,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
   const onSvgPointerUp = () => {
     dragRef.current = null;
     waypointDragRef.current = null;
+    losDragRef.current = null;
     setAlignGuides({ x: null, y: null });
   };
 
@@ -980,6 +1110,43 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
           onClick={onSvgBackgroundClick}
         >
           <FootballField />
+
+          {data.losY !== undefined && (
+            <g>
+              <line
+                x1={0}
+                y1={data.losY}
+                x2={FIELD_W}
+                y2={data.losY}
+                stroke={LOS_COLOR}
+                strokeWidth={0.7}
+                strokeDasharray="3 2.5"
+                pointerEvents="none"
+              />
+              <text
+                x={3}
+                y={data.losY - 1.5}
+                fontSize={3.6}
+                fill={LOS_COLOR}
+                fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+                letterSpacing="0.18em"
+                pointerEvents="none"
+              >
+                LOS
+              </text>
+              {/* Transparent hit target for dragging the LOS up/down. */}
+              <line
+                x1={0}
+                y1={data.losY}
+                x2={FIELD_W}
+                y2={data.losY}
+                stroke="transparent"
+                strokeWidth={8}
+                style={{ cursor: mode === "normal" ? "ns-resize" : "default", touchAction: "none" }}
+                onPointerDown={onLosPointerDown}
+              />
+            </g>
+          )}
 
           {alignGuides.x !== null && (
             <line
@@ -1131,38 +1298,51 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
               const len = Math.sqrt(dx * dx + dy * dy) || 1;
               const ux = dx / len;
               const uy = dy / len;
-              const arrowSize = 6;
-              const p1x = last.x - ux * arrowSize + uy * (arrowSize / 2);
-              const p1y = last.y - uy * arrowSize - ux * (arrowSize / 2);
-              const p2x = last.x - ux * arrowSize - uy * (arrowSize / 2);
-              const p2y = last.y - uy * arrowSize + ux * (arrowSize / 2);
-              return `${last.x},${last.y} ${p1x},${p1y} ${p2x},${p2y}`;
+              // Chevron-style arrowhead: long, narrow, with a notched back.
+              const arrowLen = 6;
+              const arrowHalfW = 2.2;
+              const notchInset = 2;
+              const wingLx = last.x - ux * arrowLen + uy * arrowHalfW;
+              const wingLy = last.y - uy * arrowLen - ux * arrowHalfW;
+              const wingRx = last.x - ux * arrowLen - uy * arrowHalfW;
+              const wingRy = last.y - uy * arrowLen + ux * arrowHalfW;
+              const notchX = last.x - ux * (arrowLen - notchInset);
+              const notchY = last.y - uy * (arrowLen - notchInset);
+              return `${last.x},${last.y} ${wingLx},${wingLy} ${notchX},${notchY} ${wingRx},${wingRy}`;
             })();
-            const segStrokeWidth = isSelected ? 4 : 3;
+            const segStrokeWidth = isSelected ? 2.4 : 1.6;
+            const routeColor = route.color ?? ROUTE_COLOR;
             return (
               <g key={route.id}>
                 {route.segments.map((seg, i) => {
                   const from = wps[i];
                   const to = wps[i + 1];
                   if (!from || !to) return null;
-                  return renderRouteSegment(from, to, seg, i, segStrokeWidth);
+                  return renderRouteSegment(
+                    from,
+                    to,
+                    seg,
+                    i,
+                    segStrokeWidth,
+                    routeColor
+                  );
                 })}
 
                 {arrowPoints && (
                   <polygon
                     points={arrowPoints}
-                    fill={ROUTE_COLOR}
+                    fill={routeColor}
                     pointerEvents="none"
                   />
                 )}
 
-                {wps.length > 0 && (
+                {wps.length > 0 && !route.playerId && (
                   <circle
                     cx={wps[0].x}
                     cy={wps[0].y}
                     r={5}
                     fill="none"
-                    stroke={ROUTE_COLOR}
+                    stroke={routeColor}
                     strokeWidth={2}
                     pointerEvents="none"
                   />
@@ -1176,7 +1356,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
                         cx={wp.x}
                         cy={wp.y}
                         r={2}
-                        fill={ROUTE_COLOR}
+                        fill={routeColor}
                         opacity={0.6}
                         pointerEvents="none"
                       />
@@ -1193,7 +1373,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
                       cy={wps[insertAfterIndex].y}
                       r={7}
                       fill="none"
-                      stroke="#2563EB"
+                      stroke={SELECT_COLOR}
                       strokeWidth={1.5}
                       strokeDasharray="2 2"
                       pointerEvents="none"
@@ -1254,7 +1434,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
                           cx={wp.x}
                           cy={wp.y}
                           r={4}
-                          fill={isWpSelected ? "#2563EB" : CONE_COLOR}
+                          fill={isWpSelected ? SELECT_COLOR : CONE_COLOR}
                           stroke="#FFFFFF"
                           strokeWidth={1.5}
                           pointerEvents="none"
@@ -1271,14 +1451,23 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
             const isPathFrom = mode === "drawing" && pathFromId === cone.id;
             const isQB = cone.kind === "qb";
             const isFootball = cone.kind === "football";
-            const baseColor = isQB
-              ? QB_COLOR
-              : isFootball
-                ? FOOTBALL_COLOR
-                : CONE_COLOR;
-            const ringColor = isPathFrom || isSelected ? "#2563EB" : baseColor;
-            const fillColor = isPathFrom || isSelected ? "#2563EB" : baseColor;
-            const radius = isQB ? CONE_R + 1 : CONE_R;
+            const isPlayer = cone.kind === "player";
+            const baseColor =
+              cone.color ??
+              (isQB
+                ? QB_COLOR
+                : isFootball
+                  ? FOOTBALL_COLOR
+                  : CONE_COLOR);
+            const ringColor = isPathFrom || isSelected ? SELECT_COLOR : baseColor;
+            // Keep the dot's real color visible when selected — the halo ring
+            // above carries the selection cue. Only swap the fill when this
+            // cone is the active "from" of a path being drawn.
+            const fillColor = isPathFrom ? SELECT_COLOR : baseColor;
+            const radius = isQB ? CONE_R + 2 : CONE_R;
+            const haloRadius = isQB ? CONE_R + 5 : CONE_R + 3;
+            const label = cone.label ?? "";
+            const showLabelOutside = !isQB && !isFootball && label.trim().length > 0;
             return (
               <g key={cone.id}>
                 <circle
@@ -1347,29 +1536,96 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
                       strokeWidth={0.6}
                     />
                   </g>
+                ) : isQB || isPlayer ? (
+                  <>
+                    {(isPathFrom || isSelected) && (
+                      <circle
+                        cx={cone.x}
+                        cy={cone.y}
+                        r={haloRadius}
+                        fill="none"
+                        stroke={ringColor}
+                        strokeWidth={0.9}
+                        opacity={0.9}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <circle
+                      cx={cone.x}
+                      cy={cone.y}
+                      r={radius}
+                      fill={fillColor}
+                      pointerEvents="none"
+                    />
+                  </>
                 ) : (
-                  <circle
-                    cx={cone.x}
-                    cy={cone.y}
-                    r={radius}
-                    fill={fillColor}
-                    stroke={ringColor}
-                    strokeWidth={1.5}
-                    pointerEvents="none"
-                  />
+                  <g pointerEvents="none">
+                    {(isPathFrom || isSelected) && (
+                      <circle
+                        cx={cone.x}
+                        cy={cone.y}
+                        r={haloRadius}
+                        fill="none"
+                        stroke={ringColor}
+                        strokeWidth={0.9}
+                        opacity={0.9}
+                      />
+                    )}
+                    {/* base ellipse — adds a touch of dimension under the cone */}
+                    <ellipse
+                      cx={cone.x}
+                      cy={cone.y + CONE_R}
+                      rx={CONE_R * 0.95}
+                      ry={CONE_R * 0.28}
+                      fill={fillColor}
+                      opacity={0.55}
+                    />
+                    {/* cone body — triangle, apex pointing up */}
+                    <polygon
+                      points={`${cone.x},${cone.y - CONE_R - 1} ${cone.x - CONE_R * 0.9},${cone.y + CONE_R - 0.5} ${cone.x + CONE_R * 0.9},${cone.y + CONE_R - 0.5}`}
+                      fill={fillColor}
+                    />
+                    {/* reflective band */}
+                    <line
+                      x1={cone.x - CONE_R * 0.55}
+                      y1={cone.y - 0.2}
+                      x2={cone.x + CONE_R * 0.55}
+                      y2={cone.y - 0.2}
+                      stroke="rgba(255,255,255,0.85)"
+                      strokeWidth={0.7}
+                      strokeLinecap="round"
+                    />
+                  </g>
                 )}
                 {isQB && (
                   <text
                     x={cone.x}
                     y={cone.y}
-                    fontSize={5}
-                    fontWeight={500}
-                    fill="#1F1A05"
+                    fontSize={5.5}
+                    fontWeight={700}
+                    fill="#0A0A0D"
                     textAnchor="middle"
                     dominantBaseline="central"
+                    fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
                     pointerEvents="none"
                   >
                     QB
+                  </text>
+                )}
+                {showLabelOutside && (
+                  <text
+                    x={cone.x + radius + 3}
+                    y={cone.y + 1}
+                    fontSize={5}
+                    fontWeight={700}
+                    fill={CONE_LABEL_COLOR}
+                    textAnchor="start"
+                    dominantBaseline="middle"
+                    fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+                    letterSpacing="0.08em"
+                    pointerEvents="none"
+                  >
+                    {label}
                   </text>
                 )}
               </g>
@@ -1424,25 +1680,46 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
           </button>
           <button
             type="button"
-            onClick={handleStartRouteDrawing}
-            aria-pressed={mode === "route"}
+            onClick={() => setShowPosPicker((v) => !v)}
+            disabled={mode !== "normal"}
+            aria-pressed={showPosPicker}
+            className="px-lg py-sm rounded-md text-caption font-medium"
+            style={{
+              backgroundColor: showPosPicker
+                ? "rgba(255,106,26,0.14)"
+                : "var(--color-surface-raised)",
+              color: showPosPicker ? "#FF8A4A" : "var(--color-text-primary)",
+              border: showPosPicker
+                ? "1px solid var(--uff-orange)"
+                : "1px solid var(--color-border-default)",
+              opacity: mode !== "normal" ? 0.5 : 1,
+            }}
+          >
+            + Add Pos.
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleLos}
+            disabled={mode !== "normal"}
+            aria-pressed={data.losY !== undefined}
             className="px-lg py-sm rounded-md text-caption font-medium"
             style={{
               backgroundColor:
-                mode === "route"
-                  ? "rgba(212,138,48,0.12)"
+                data.losY !== undefined
+                  ? "rgba(255,106,26,0.14)"
                   : "var(--color-surface-raised)",
               color:
-                mode === "route"
-                  ? "var(--color-orange-400)"
+                data.losY !== undefined
+                  ? "#FF8A4A"
                   : "var(--color-text-primary)",
               border:
-                mode === "route"
-                  ? "1px solid var(--color-orange-500)"
+                data.losY !== undefined
+                  ? "1px solid var(--uff-orange)"
                   : "1px solid var(--color-border-default)",
+              opacity: mode !== "normal" ? 0.5 : 1,
             }}
           >
-            + Draw Route
+            {data.losY !== undefined ? "− Remove LOS" : "+ Add LOS"}
           </button>
           {mode === "route" && (
             <span
@@ -1502,6 +1779,158 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
         )}
       </div>
 
+      {(showPosPicker ||
+        (selectedCone && selectedCone.kind === "player")) &&
+        mode === "normal" && (
+        <div
+          className="mt-sm rounded-lg flex flex-col gap-sm"
+          style={{
+            padding: "10px 12px",
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid var(--color-border-default)",
+          }}
+        >
+          <div className="flex items-center gap-sm flex-wrap">
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
+              }}
+            >
+              Color
+            </span>
+            <ColorSwatchRow
+              value={pendingPlayerColor}
+              onPick={(color) => {
+                setPendingPlayerColor(color);
+                if (selectedCone && selectedCone.kind === "player") {
+                  handleColorChange(color);
+                }
+              }}
+            />
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={() => {
+                setShowPosPicker(false);
+                setSelectedId(null);
+              }}
+              className="text-caption"
+              style={{
+                color: "var(--color-text-secondary)",
+                background: "transparent",
+                padding: "6px 4px",
+                border: 0,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Done
+            </button>
+          </div>
+          <div className="flex items-center gap-sm flex-wrap">
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
+              }}
+            >
+              Position
+            </span>
+            <PositionPickerRow onPick={handleAddPosition} />
+          </div>
+          {selectedCone && selectedCone.kind === "player" && (
+            <div
+              className="flex flex-col gap-sm"
+              style={{
+                marginTop: 4,
+                paddingTop: 10,
+                borderTop: "1px solid var(--color-border-default)",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--color-text-secondary)",
+                  fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
+                }}
+              >
+                Selected position
+              </span>
+              <input
+                type="text"
+                value={selectedCone.label}
+                onChange={(e) => handleLabelChange(e.target.value)}
+                placeholder="e.g., WR1, Slot, Mike"
+                className="w-full rounded-md px-md py-sm text-body"
+                style={{
+                  backgroundColor: "var(--color-surface-base)",
+                  color: "var(--color-text-primary)",
+                  border: "1px solid var(--color-border-default)",
+                }}
+              />
+              <div className="flex items-center justify-between gap-sm flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => handleStartPlayerRoute(selectedCone.id)}
+                  className="px-lg py-sm rounded-md text-caption font-medium"
+                  style={{
+                    backgroundColor: "rgba(255,106,26,0.14)",
+                    color: "#FF8A4A",
+                    border: "1px solid var(--uff-orange)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 20l6-6 4 4 6-10" />
+                    <path d="M16 8h4v4" />
+                  </svg>
+                  Add route for {selectedCone.label || "this player"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  className="text-caption font-medium"
+                  style={{
+                    color: "var(--color-error)",
+                    background: "transparent",
+                    padding: "8px 4px",
+                    border: 0,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {mode === "route" && activeRoute && activeRoute.waypoints.length >= 1 && (
         <div className="mt-md">
           <p
@@ -1548,7 +1977,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
             disabled={!canFinishRoute}
             className="px-lg py-sm rounded-md text-caption font-medium"
             style={{
-              backgroundColor: "var(--color-orange-500)",
+              backgroundColor: "var(--uff-orange)",
               color: "#FFFFFF",
               opacity: canFinishRoute ? 1 : 0.5,
             }}
@@ -1678,7 +2107,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
                 onClick={handleContinueRoute}
                 className="px-lg py-sm rounded-md text-caption font-medium"
                 style={{
-                  backgroundColor: "var(--color-orange-500)",
+                  backgroundColor: "var(--uff-orange)",
                   color: "#FFFFFF",
                 }}
               >
@@ -1814,7 +2243,7 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
               onClick={handleConfirmPath}
               className="px-lg py-sm rounded-md text-caption font-medium"
               style={{
-                backgroundColor: "var(--color-orange-500)",
+                backgroundColor: "var(--uff-orange)",
                 color: "#FFFFFF",
               }}
             >
@@ -1855,7 +2284,10 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
         </div>
       )}
 
-      {selectedCone && !showPathForm && mode !== "drawing" && (
+      {selectedCone &&
+        selectedCone.kind !== "player" &&
+        !showPathForm &&
+        mode !== "drawing" && (
         <div
           className="mt-md rounded-lg p-lg flex flex-col gap-sm"
           style={{
@@ -1867,13 +2299,24 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
             className="label-micro"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Selected Cone
+            Selected{" "}
+            {selectedCone.kind === "football"
+              ? "Ball"
+              : selectedCone.kind === "qb"
+                ? "QB"
+                : "Cone"}
           </p>
           <input
             type="text"
             value={selectedCone.label}
             onChange={(e) => handleLabelChange(e.target.value)}
-            placeholder="e.g., Start, Finish"
+            placeholder={
+              selectedCone.kind === "football"
+                ? "e.g., Ball"
+                : selectedCone.kind === "qb"
+                  ? "Defaults to QB"
+                  : "Optional label (e.g., Start, Finish)"
+            }
             className="w-full rounded-md px-md py-sm text-body"
             style={{
               backgroundColor: "var(--color-surface-base)",
@@ -1927,15 +2370,114 @@ export default function DiagramEditor({ value, onChange }: DiagramEditorProps) {
   );
 }
 
+const POSITION_PRESETS = [
+  "WR",
+  "RB",
+  "TE",
+  "C",
+  "DL",
+  "LB",
+  "DB",
+  "S",
+  "DEF",
+] as const;
+
+const POSITION_COLORS: ReadonlyArray<{ name: string; value: string }> = [
+  { name: "Orange", value: "#FF6A1A" },
+  { name: "Blue", value: "#6EA8FF" },
+  { name: "Lime", value: "#C2FF3D" },
+  { name: "White", value: "rgba(255,255,255,0.88)" },
+  { name: "Red", value: "#FF4D6A" },
+];
+
+function ColorSwatchRow({
+  value,
+  onPick,
+}: {
+  value: string;
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-xs">
+      {POSITION_COLORS.map((c) => {
+        const on = c.value === value;
+        return (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => onPick(c.value)}
+            aria-label={`Pick ${c.name}`}
+            aria-pressed={on}
+            title={c.name}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: c.value,
+              border: on
+                ? "2px solid rgba(255,255,255,0.95)"
+                : "1px solid rgba(255,255,255,0.18)",
+              boxShadow: on ? "0 0 0 2px rgba(255,255,255,0.18)" : undefined,
+              cursor: "pointer",
+              padding: 0,
+              transition: "box-shadow 120ms ease, border-color 120ms ease",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function PositionPickerRow({ onPick }: { onPick: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-xs">
+      {POSITION_PRESETS.map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onPick(p)}
+          className="rounded-pill text-caption font-medium"
+          style={{
+            padding: "5px 11px",
+            minHeight: 32,
+            fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.08em",
+            backgroundColor: "rgba(255,255,255,0.04)",
+            color: "rgba(255,255,255,0.72)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            cursor: "pointer",
+            transition: "background 120ms ease, border-color 120ms ease, color 120ms ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255,106,26,0.14)";
+            e.currentTarget.style.color = "#FF8A4A";
+            e.currentTarget.style.borderColor = "rgba(255,106,26,0.42)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.72)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+          }}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function FootballField() {
   // Yard lines run horizontally; depth grows from bottom (0) to top (25).
+  // Major (every 5 yds) lines are solid; intermediate lines are dashed.
   const lines: React.ReactNode[] = [];
-  for (let depth = 0; depth <= FIELD_YARDS_Y; depth++) {
+  for (let depth = 1; depth <= FIELD_YARDS_Y; depth++) {
     const y = FIELD_H - depth * YARD;
     const isTen = depth % 10 === 0;
     const isFive = depth % 5 === 0;
     const stroke = isTen ? LINE_10 : isFive ? LINE_5 : LINE_1;
-    const strokeWidth = isTen ? 1 : isFive ? 0.8 : 0.4;
+    const strokeWidth = isTen ? 0.8 : isFive ? 0.6 : 0.4;
     lines.push(
       <line
         key={`yl-${depth}`}
@@ -1945,6 +2487,7 @@ function FootballField() {
         y2={y}
         stroke={stroke}
         strokeWidth={strokeWidth}
+        strokeDasharray={isFive ? undefined : "1.5 2"}
       />
     );
   }
@@ -1985,12 +2528,14 @@ function FootballField() {
     numbers.push(
       <text
         key={`nl-${depth}`}
-        x={-4}
+        x={-3}
         y={y}
-        fontSize={7}
+        fontSize={5.5}
         fill={NUMBER_COLOR}
         textAnchor="end"
         dominantBaseline="middle"
+        fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+        letterSpacing="0.1em"
       >
         {depth}
       </text>
@@ -2003,14 +2548,21 @@ function FootballField() {
       {lines}
       {hashes}
       {/* Sidelines */}
-      <line x1={0} y1={0} x2={0} y2={FIELD_H} stroke={SIDELINE} strokeWidth={1} />
+      <line
+        x1={0}
+        y1={0}
+        x2={0}
+        y2={FIELD_H}
+        stroke={SIDELINE}
+        strokeWidth={0.8}
+      />
       <line
         x1={FIELD_W}
         y1={0}
         x2={FIELD_W}
         y2={FIELD_H}
         stroke={SIDELINE}
-        strokeWidth={1}
+        strokeWidth={0.8}
       />
       {numbers}
     </g>

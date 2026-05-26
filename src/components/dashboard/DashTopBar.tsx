@@ -10,23 +10,39 @@ type Crumb = { label: string; href?: string };
 
 type Props = {
   crumbs?: Crumb[];
+  /** Short uppercase mono label rendered to the LEFT of the title (e.g. "SCOPE"). */
+  eyebrow?: string;
   title: string;
+  /** Same look as eyebrow but rendered to the RIGHT of the title. */
   kicker?: string;
+  /** Lifecycle pill rendered on the right side (e.g. "CREATE" / "DRAFT" / "PUBLISHED"). */
+  status?: string;
   actions?: ReactNode;
   showSearch?: boolean;
   userInitials?: string;
   userAccent?: string;
 };
 
+function pickStatusColor(status: string): string {
+  const k = status.trim().toUpperCase();
+  if (k.startsWith("DRAFT")) return "var(--uff-orange)";
+  if (k.startsWith("PUBLISHED")) return "#4ADE80";
+  // CREATE / NEW / UNSAVED / anything else falls back to lime.
+  return "var(--uff-lime)";
+}
+
 export default function DashTopBar({
   crumbs = [],
+  eyebrow,
   title,
   kicker,
+  status,
   actions,
   showSearch = true,
   userInitials = "U",
   userAccent = "var(--uff-orange)",
 }: Props) {
+  const statusColor = status ? pickStatusColor(status) : null;
   return (
     <div className="topbar">
       <div
@@ -45,7 +61,7 @@ export default function DashTopBar({
               alignItems: "center",
               gap: 6,
               fontSize: 12,
-              color: "var(--uff-text-mute)",
+              color: "var(--uff-text)",
             }}
           >
             {crumbs.map((c, i) => (
@@ -65,12 +81,31 @@ export default function DashTopBar({
             ))}
           </div>
         )}
+        {eyebrow && (
+          <>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11.5,
+                color: "var(--uff-lime)",
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+              }}
+            >
+              {eyebrow}
+            </span>
+            <span style={{ color: "var(--uff-text)", fontSize: 12 }}>·</span>
+          </>
+        )}
         <strong
           style={{
-            color: "var(--uff-text)",
-            fontSize: 18,
-            fontWeight: 600,
-            letterSpacing: "-0.01em",
+            color: "var(--uff-orange)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 20,
+            fontWeight: 700,
+            letterSpacing: ".08em",
+            textTransform: "uppercase",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -78,14 +113,41 @@ export default function DashTopBar({
         >
           {title}
         </strong>
+        {status && statusColor && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              marginLeft: 4,
+              fontFamily: "var(--font-mono)",
+              fontSize: 11.5,
+              fontWeight: 700,
+              letterSpacing: ".14em",
+              textTransform: "uppercase",
+              color: statusColor,
+            }}
+          >
+            <span
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                background: statusColor,
+                boxShadow: `0 0 0 1.5px color-mix(in srgb, ${statusColor} 22%, transparent)`,
+              }}
+            />
+            {status}
+          </span>
+        )}
         {kicker && (
           <>
-            <span style={{ color: "var(--uff-text-mute)", fontSize: 12 }}>·</span>
+            <span style={{ color: "var(--uff-text)", fontSize: 12 }}>·</span>
             <span
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 11.5,
-                color: "var(--uff-text-mute)",
+                color: "var(--uff-text)",
                 letterSpacing: ".04em",
               }}
             >
@@ -103,7 +165,14 @@ export default function DashTopBar({
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginLeft: showSearch ? undefined : "auto",
+        }}
+      >
         {actions}
         <button className="icon-btn" type="button" aria-label="Notifications">
           <DashIcon.bell size={16} />

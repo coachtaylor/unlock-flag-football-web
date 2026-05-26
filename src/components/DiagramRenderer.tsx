@@ -4,6 +4,7 @@ import type { DiagramData, Path } from "@/types/diagram";
 import {
   lastSegmentArrowDirection,
   renderRouteSegment,
+  ROUTE_COLOR,
 } from "@/lib/route-geometry";
 
 interface DiagramRendererProps {
@@ -14,25 +15,25 @@ const MOVEMENT_STYLES: Record<
   Path["movement"],
   { color: string; strokeWidth: number; dasharray?: string; label: string }
 > = {
-  sprint: { color: "#D48A30", strokeWidth: 4, label: "Sprint" },
+  sprint: { color: "#FF8A4A", strokeWidth: 2.2, label: "Sprint" },
   backpedal: {
-    color: "#2563EB",
-    strokeWidth: 4,
-    dasharray: "10 6",
+    color: "#6EA8FF",
+    strokeWidth: 2.2,
+    dasharray: "5 4",
     label: "Backpedal",
   },
   shuffle: {
-    color: "#16A34A",
-    strokeWidth: 4,
-    dasharray: "1 5",
+    color: "#C2FF3D",
+    strokeWidth: 2.2,
+    dasharray: "1 4",
     label: "Shuffle",
   },
-  jog: { color: "#9CA3AF", strokeWidth: 2.5, label: "Jog" },
+  jog: { color: "rgba(255,255,255,0.55)", strokeWidth: 1.6, label: "Jog" },
 };
 
 const YARD = 10;
 const FIELD_YARDS_X = 20;
-const FIELD_YARDS_Y = 25;
+const FIELD_YARDS_Y = 20;
 const FIELD_W = FIELD_YARDS_X * YARD;
 const FIELD_H = FIELD_YARDS_Y * YARD;
 const PAD_LEFT = 14;
@@ -43,14 +44,23 @@ const VIEW_H = FIELD_H + PAD_Y * 2;
 const VIEWBOX = `${-PAD_LEFT} ${-PAD_Y} ${VIEW_W} ${VIEW_H}`;
 const CONE_R = 4;
 
-const FIELD_BG = "#FFFFFF";
-const LINE_10 = "#C8C8C8";
-const LINE_5 = "#DCDCDC";
-const LINE_1 = "#EEEEEE";
-const HASH_COLOR = "#E8E8E8";
-const NUMBER_COLOR = "rgba(255,255,255,0.45)";
-const SIDELINE = "#D0D0D0";
-const PATH_LABEL_COLOR = "#555555";
+// Dark-theme palette (Build 5 redesign) — keep in sync with DiagramEditor.
+const FIELD_BG = "#0F1115";
+const LINE_10 = "rgba(255,255,255,0.10)";
+const LINE_5 = "rgba(255,255,255,0.06)";
+const LINE_1 = "rgba(255,255,255,0.04)";
+const HASH_COLOR = "rgba(255,255,255,0.18)";
+const NUMBER_COLOR = "rgba(255,255,255,0.40)";
+const SIDELINE = "rgba(255,255,255,0.18)";
+const PATH_LABEL_COLOR = "rgba(255,255,255,0.55)";
+const LOS_COLOR = "rgba(255,106,26,0.45)";
+const CONE_COLOR = "#FF6A1A";
+const QB_COLOR = "#FF6A1A";
+const FOOTBALL_COLOR = "#8B5A2B";
+const FOOTBALL_LACES = "#FFFFFF";
+const BALL_PATH_COLOR = "rgba(255,255,255,0.45)";
+const CONE_LABEL_COLOR = "rgba(255,255,255,0.85)";
+const CONE_RING_OPACITY = 0.4;
 
 export default function DiagramRenderer({ data }: DiagramRendererProps) {
   const coneById = new Map(data.cones.map((c) => [c.id, c]));
@@ -78,6 +88,30 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
           aria-label="Drill setup diagram"
         >
           <FootballField />
+
+          {data.losY !== undefined && (
+            <g>
+              <line
+                x1={0}
+                y1={data.losY}
+                x2={FIELD_W}
+                y2={data.losY}
+                stroke={LOS_COLOR}
+                strokeWidth={0.7}
+                strokeDasharray="3 2.5"
+              />
+              <text
+                x={3}
+                y={data.losY - 1.5}
+                fontSize={3.6}
+                fill={LOS_COLOR}
+                fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+                letterSpacing="0.18em"
+              >
+                LOS
+              </text>
+            </g>
+          )}
 
           {data.paths.map((path, idx) => {
             const from = coneById.get(path.from);
@@ -157,18 +191,24 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
             const last = wps[wps.length - 1];
             const prev = wps[wps.length - 2];
             const lastSeg = route.segments[route.segments.length - 1];
+            const routeColor = route.color ?? ROUTE_COLOR;
             const arrowPoints = (() => {
               if (wps.length < 2 || !last || !prev) return null;
               const { dx, dy } = lastSegmentArrowDirection(prev, last, lastSeg);
               const len = Math.sqrt(dx * dx + dy * dy) || 1;
               const ux = dx / len;
               const uy = dy / len;
-              const arrowSize = 6;
-              const p1x = last.x - ux * arrowSize + uy * (arrowSize / 2);
-              const p1y = last.y - uy * arrowSize - ux * (arrowSize / 2);
-              const p2x = last.x - ux * arrowSize - uy * (arrowSize / 2);
-              const p2y = last.y - uy * arrowSize + ux * (arrowSize / 2);
-              return `${last.x},${last.y} ${p1x},${p1y} ${p2x},${p2y}`;
+              // Chevron-style arrowhead: long, narrow, with a notched back.
+              const arrowLen = 6;
+              const arrowHalfW = 2.2;
+              const notchInset = 2;
+              const wingLx = last.x - ux * arrowLen + uy * arrowHalfW;
+              const wingLy = last.y - uy * arrowLen - ux * arrowHalfW;
+              const wingRx = last.x - ux * arrowLen - uy * arrowHalfW;
+              const wingRy = last.y - uy * arrowLen + ux * arrowHalfW;
+              const notchX = last.x - ux * (arrowLen - notchInset);
+              const notchY = last.y - uy * (arrowLen - notchInset);
+              return `${last.x},${last.y} ${wingLx},${wingLy} ${notchX},${notchY} ${wingRx},${wingRy}`;
             })();
             return (
               <g key={route.id}>
@@ -176,20 +216,10 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                   const from = wps[i];
                   const to = wps[i + 1];
                   if (!from || !to) return null;
-                  return renderRouteSegment(from, to, seg, i, 3);
+                  return renderRouteSegment(from, to, seg, i, 1.6, routeColor);
                 })}
                 {arrowPoints && (
-                  <polygon points={arrowPoints} fill="#8B5CF6" />
-                )}
-                {wps.length > 0 && (
-                  <circle
-                    cx={wps[0].x}
-                    cy={wps[0].y}
-                    r={5}
-                    fill="none"
-                    stroke="#8B5CF6"
-                    strokeWidth={2}
-                  />
+                  <polygon points={arrowPoints} fill={routeColor} />
                 )}
               </g>
             );
@@ -206,8 +236,8 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                     cy={cone.y}
                     rx={6}
                     ry={3.5}
-                    fill="#5C3A1E"
-                    stroke="#5C3A1E"
+                    fill={FOOTBALL_COLOR}
+                    stroke={FOOTBALL_COLOR}
                     strokeWidth={1.2}
                   />
                   <line
@@ -215,7 +245,7 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                     y1={cone.y}
                     x2={cone.x + 2.5}
                     y2={cone.y}
-                    stroke="#FFFFFF"
+                    stroke={FOOTBALL_LACES}
                     strokeWidth={0.8}
                   />
                   <line
@@ -223,7 +253,7 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                     y1={cone.y - 1}
                     x2={cone.x - 1.5}
                     y2={cone.y + 1}
-                    stroke="#FFFFFF"
+                    stroke={FOOTBALL_LACES}
                     strokeWidth={0.6}
                   />
                   <line
@@ -231,7 +261,7 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                     y1={cone.y - 1}
                     x2={cone.x}
                     y2={cone.y + 1}
-                    stroke="#FFFFFF"
+                    stroke={FOOTBALL_LACES}
                     strokeWidth={0.6}
                   />
                   <line
@@ -239,35 +269,77 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                     y1={cone.y - 1}
                     x2={cone.x + 1.5}
                     y2={cone.y + 1}
-                    stroke="#FFFFFF"
+                    stroke={FOOTBALL_LACES}
                     strokeWidth={0.6}
                   />
                 </g>
               );
             }
-            const color = isQB ? "#EAB308" : "#D48A30";
-            const r = isQB ? CONE_R + 1 : CONE_R;
+            const isPlayer = cone.kind === "player";
+            const color = cone.color ?? (isQB ? QB_COLOR : CONE_COLOR);
+            const r = isQB ? CONE_R + 2 : CONE_R;
+            const halo = isQB ? CONE_R + 5 : CONE_R + 3;
+            const label = cone.label ?? "";
+            const showLabelOutside =
+              !isQB && label.trim().length > 0;
             return (
               <g key={cone.id}>
-                <circle
-                  cx={cone.x}
-                  cy={cone.y}
-                  r={r}
-                  fill={color}
-                  stroke={color}
-                  strokeWidth={1.5}
-                />
-                {isQB && (
+                {isQB ? (
+                  <>
+                    <circle cx={cone.x} cy={cone.y} r={r} fill={color} />
+                    <text
+                      x={cone.x}
+                      y={cone.y}
+                      fontSize={5.5}
+                      fontWeight={700}
+                      fill="#0A0A0D"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+                    >
+                      QB
+                    </text>
+                  </>
+                ) : isPlayer ? (
+                  <circle cx={cone.x} cy={cone.y} r={r} fill={color} />
+                ) : (
+                  <>
+                    <ellipse
+                      cx={cone.x}
+                      cy={cone.y + CONE_R}
+                      rx={CONE_R * 0.95}
+                      ry={CONE_R * 0.28}
+                      fill={color}
+                      opacity={0.55}
+                    />
+                    <polygon
+                      points={`${cone.x},${cone.y - CONE_R - 1} ${cone.x - CONE_R * 0.9},${cone.y + CONE_R - 0.5} ${cone.x + CONE_R * 0.9},${cone.y + CONE_R - 0.5}`}
+                      fill={color}
+                    />
+                    <line
+                      x1={cone.x - CONE_R * 0.55}
+                      y1={cone.y - 0.2}
+                      x2={cone.x + CONE_R * 0.55}
+                      y2={cone.y - 0.2}
+                      stroke="rgba(255,255,255,0.85)"
+                      strokeWidth={0.7}
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
+                {showLabelOutside && (
                   <text
-                    x={cone.x}
-                    y={cone.y}
+                    x={cone.x + r + 3}
+                    y={cone.y + 1}
                     fontSize={5}
-                    fontWeight={500}
-                    fill="#1F1A05"
-                    textAnchor="middle"
-                    dominantBaseline="central"
+                    fontWeight={700}
+                    fill={CONE_LABEL_COLOR}
+                    textAnchor="start"
+                    dominantBaseline="middle"
+                    fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+                    letterSpacing="0.08em"
                   >
-                    QB
+                    {label}
                   </text>
                 )}
               </g>
@@ -313,8 +385,8 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                   y1={3}
                   x2={20}
                   y2={3}
-                  stroke="#8B5CF6"
-                  strokeWidth={3}
+                  stroke={ROUTE_COLOR}
+                  strokeWidth={2.2}
                   strokeLinecap="round"
                 />
               </svg>
@@ -334,7 +406,7 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
                   y1={3}
                   x2={20}
                   y2={3}
-                  stroke="#5C3A1E"
+                  stroke={BALL_PATH_COLOR}
                   strokeWidth={2}
                   strokeDasharray="4 3"
                   strokeLinecap="round"
@@ -356,12 +428,12 @@ export default function DiagramRenderer({ data }: DiagramRendererProps) {
 
 function FootballField() {
   const lines: React.ReactNode[] = [];
-  for (let depth = 0; depth <= FIELD_YARDS_Y; depth++) {
+  for (let depth = 1; depth <= FIELD_YARDS_Y; depth++) {
     const y = FIELD_H - depth * YARD;
     const isTen = depth % 10 === 0;
     const isFive = depth % 5 === 0;
     const stroke = isTen ? LINE_10 : isFive ? LINE_5 : LINE_1;
-    const strokeWidth = isTen ? 1 : isFive ? 0.8 : 0.4;
+    const strokeWidth = isTen ? 0.8 : isFive ? 0.6 : 0.4;
     lines.push(
       <line
         key={`yl-${depth}`}
@@ -371,6 +443,7 @@ function FootballField() {
         y2={y}
         stroke={stroke}
         strokeWidth={strokeWidth}
+        strokeDasharray={isFive ? undefined : "1.5 2"}
       />
     );
   }
@@ -409,12 +482,14 @@ function FootballField() {
     numbers.push(
       <text
         key={`nl-${depth}`}
-        x={-4}
+        x={-3}
         y={y}
-        fontSize={7}
+        fontSize={5.5}
         fill={NUMBER_COLOR}
         textAnchor="end"
         dominantBaseline="middle"
+        fontFamily="var(--font-mono), 'JetBrains Mono', monospace"
+        letterSpacing="0.1em"
       >
         {depth}
       </text>
@@ -426,14 +501,21 @@ function FootballField() {
       <rect x={0} y={0} width={FIELD_W} height={FIELD_H} fill={FIELD_BG} />
       {lines}
       {hashes}
-      <line x1={0} y1={0} x2={0} y2={FIELD_H} stroke={SIDELINE} strokeWidth={1} />
+      <line
+        x1={0}
+        y1={0}
+        x2={0}
+        y2={FIELD_H}
+        stroke={SIDELINE}
+        strokeWidth={0.8}
+      />
       <line
         x1={FIELD_W}
         y1={0}
         x2={FIELD_W}
         y2={FIELD_H}
         stroke={SIDELINE}
-        strokeWidth={1}
+        strokeWidth={0.8}
       />
       {numbers}
     </g>

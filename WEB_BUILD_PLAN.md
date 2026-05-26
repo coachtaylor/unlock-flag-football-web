@@ -1,8 +1,8 @@
 # Unlock Flag Football — Web Build Plan
 
-Last updated: 2026-05-24
+Last updated: 2026-05-24 (audited against mobile feature set + current web code on this date — Build 4 expanded for multi-type benchmarks, Build 5.5 inserted for practice block model, Build 6 narrowed, Build 6.5 added for injury/observations/post-log, Build 7 added for dashboard widget parity; old Build 7–9 renumbered to 8–10)
 Owner: Taylor
-Companion docs: `WEB_PRD.md`, `WEB_SYSTEM_DESIGN.md`
+Companion docs: `WEB_PRD.md`, `WEB_SYSTEM_DESIGN.md`, `MOBILE_APP_REFERENCE.md` (canonical feature parity reference for the mobile app)
 
 ## How to use this doc
 
@@ -297,31 +297,43 @@ Make the dashboard feel native on desktop. Currently it's a single-column phone 
 
 ---
 
-## Build 4 — Drills list + detail responsive upgrade ⏳
+## Build 4 — Drills list + detail responsive upgrade + multi-type benchmarks ⏳
 
 ### Goal
-Drills is one of the highest-value desktop surfaces (captains building libraries from videos they found online). Make it feel like a real desktop tool.
+Drills is one of the highest-value desktop surfaces (captains building libraries from videos they found online). Make it feel like a real desktop tool, AND bring the drill form up to mobile parity on benchmark types (currently web only supports `timed | rated`; mobile supports six types).
+
+### Mobile parity gap addressed
+Per `MOBILE_APP_REFERENCE.md` §6.4, mobile drills support **six benchmark types** as a multi-select: `timed`, `rated`, `reps`, `pct` (made/attempts), `flags`, `drops`. Stored as `team_drills.benchmark_types[]`. Web `DrillForm.tsx` currently hardcodes a single-select `"None" | "Timed" | "Rated"`. This build closes that gap.
+
+Multi-category tagging via `team_drill_categories` junction is already working on web — no change needed there. The drill category list (15 categories with phase/skill split per `constants/categories.ts`) is also already wired.
 
 ### In scope
 - **Drills list (`/drills`)** responsive upgrade:
   - Mobile: existing card stack (no change)
   - Tablet: 2-column card grid
-  - Desktop: convert to a table view with sortable columns (Name, Category, Status, Updated). Filter panel moves from top bar to left rail.
+  - Desktop: convert to a table view with sortable columns (Name, Category, Benchmark types, Status, Updated). Filter panel moves from top bar to left rail.
   - Search bar gets keyboard focus on `/` keyboard shortcut on desktop
 - **Drill detail page (`/drills/[id]`)** responsive upgrade:
   - Mobile: existing single column
   - Desktop: two columns — left = drill info, diagram, setup instructions; right = metadata, edit/delete actions, benchmark history
-- **Drill form (`/drills/new`, `/drills/[id]/edit`)** stays single-column but capped at `max-w-2xl` so it doesn't sprawl on desktop. Form fields and the diagram editor stack vertically.
+- **Drill form (`/drills/new`, `/drills/[id]/edit`)**:
+  - Stays single-column but capped at `max-w-2xl` so it doesn't sprawl on desktop
+  - **Replace single-select benchmark type with a Y/N "Use for benchmarks?" gate + multi-select of the six types** (mirror the mobile `DrillForm` pattern from session 2026-05-17)
+  - Update server action to persist `benchmark_types text[]` instead of a single string
+  - Update drill detail "Run benchmark" CTA to surface only when at least one type is set
+- **Drill list / detail surfaces benchmark types** as small chip badges (one per active type) so captains can see at a glance what a drill captures.
 
 ### Out of scope
 - Diagram editor mouse interactions (that's Build 5 — a discrete project)
 - Bulk operations (multi-select, bulk delete, bulk reassign)
 - Drill versioning UI
+- The benchmark *capture* widgets for the new types — those live in Build 6 (logging flow). This build only updates the *drill definition* side.
 
 ### Files touched
 - Modified: `src/app/(app)/drills/page.tsx`, `DrillLibraryClient.tsx`
 - Modified: `src/app/(app)/drills/[id]/page.tsx`
 - Modified: `src/app/(app)/drills/new/page.tsx`, `src/app/(app)/drills/[id]/edit/page.tsx`, `DrillForm.tsx`
+- Modified: drill server actions (create/update) to handle `benchmark_types[]` payload
 
 ### Acceptance criteria
 - Drills list responsive across breakpoints, with table view at desktop
@@ -330,10 +342,13 @@ Drills is one of the highest-value desktop surfaces (captains building libraries
 - `/` keyboard shortcut focuses the search input on desktop
 - Drill detail page uses two columns on desktop
 - Drill form is comfortable to fill on both mobile and desktop, capped at `max-w-2xl`
+- Drill form lets the captain mark a drill as benchmarkable and pick one or more of the six types
+- Existing drills with a single legacy type render correctly (write a one-shot migration / coalesce read query if needed)
 
 ### Risks
 - **Table view on desktop hides the visual draft/publish indicator that cards had.** Mitigation: add a Status column with a clear badge.
 - **Search shortcut conflicts with browser shortcuts.** Mitigation: scope the shortcut to the page (don't intercept when an input is focused or modifier keys are held).
+- **Legacy single-type drills.** If the web has already shipped drills with the old single-string field, ensure the read path can coalesce a legacy value into the new array. Worst case: write a migration script.
 
 ---
 
@@ -385,66 +400,261 @@ The diagram editor was designed touch-first. On desktop, mouse interactions need
 
 ---
 
-## Build 6 — Roster + Benchmarks + Practice responsive upgrades ⏳
+## Build 5.5 — Practice block model (data + planner rewrite) ⏳
 
 ### Goal
-Bring the remaining authenticated pages to feature parity with the dashboard and drills in terms of desktop UX. Smaller individual scope per page than drills, so they're grouped.
+Bring the web practice planner up to the mobile *data shape*. The current web `PracticePlanForm.tsx` treats a practice as a flat list of `{drillId, durationMinutes}` rows. Mobile (per `MOBILE_APP_REFERENCE.md` §6.6) treats a practice as **blocks → drills**, with between-block water breaks and parallel-group drills. None of that exists on web. Build 6's responsive desktop polish is impossible until the block model is in.
+
+### Why this is its own build
+This is a structural rewrite of one of the largest feature areas. It's not a polish pass. Trying to do it as a sub-task of Build 6 (responsive upgrades) is what made Build 6 in the previous version of this plan misleading.
+
+### Mobile parity gap addressed
+- `practice_plan_blocks` (named, ordered blocks per plan with `target_minutes`)
+- `team_practice_blocks` (per-team reusable block templates)
+- `practice_plan_drills.plan_block_id` + `parallel_group` (drills inside blocks; same-group drills run concurrently)
+- `practice_plan_breaks` (between-block water breaks, anchored by `after_block_order`)
+- `practice_plan_attendees` (RSVP / "Who's coming")
+- RPC `replace_practice_plan_blocks(plan_id, blocks_payload, breaks_payload)` — atomic three-arg replace with cross-block parallel-group validation
+- Block colors via deterministic name-hash palette (4 named defaults + 8-color hash palette)
+
+Schema migrations are already applied (mobile session 2026-05-22). Web just needs to consume them.
+
+### In scope
+- **Data layer:**
+  - Read paths for `practice_plan_blocks`, `practice_plan_drills` (with `plan_block_id` + `parallel_group`), `practice_plan_breaks`, `practice_plan_attendees`
+  - Server actions that call `replace_practice_plan_blocks` RPC on save
+  - Block library queries against `team_practice_blocks`
+- **Practice editor rewrite (`/practice/[id]/edit`, `/practice/new`):**
+  - Top-level: title + date/time in header
+  - Body: ordered block cards with colored left rail, block name, target minutes, summed drill minutes
+  - Per block: drill rows (with parallel-group grouping), up/down reorder, duration + reps overrides via steppers, per-drill cues field, remove
+  - Between blocks: insert water-break affordance + water-break row component
+  - Block library sheet to add/clone from `team_practice_blocks` or create new
+  - Move-drill-to-block affordance
+  - RSVP / "Who's coming" section + roster-table modal that writes `practice_plan_attendees`
+- **Practice plan detail (`/practice/[id]`):**
+  - Render blocks in order with their drills (collapsed summary by default, tap/click to expand)
+  - Between-block water breaks interleaved
+  - RSVP summary
+- **Practice list (`/practice`):**
+  - Status pill (draft / scheduled / live / completed)
+  - Block count + total duration + RSVP count chips
+  - Duplicate plan action (deep-copies blocks + drills + breaks)
+- **Color palette:** new `lib/block-colors.ts` mirroring mobile `constants/block-colors.ts`
+
+### Out of scope
+- Desktop responsive polish on the editor (Build 6)
+- Run-practice live mode and post-practice log (Build 6.5)
+- Drag-to-reorder via `@dnd-kit/core` — use up/down chevron reorder for parity with mobile, defer DnD to Build 6 if it adds desktop value
+
+### Files touched
+- Major rewrite: `src/app/(app)/practice/PracticePlanForm.tsx`
+- Modified: `src/app/(app)/practice/page.tsx`, `PracticeListClient.tsx`, `practice/[id]/page.tsx`, `practice/[id]/edit/page.tsx`, `practice/new/page.tsx`
+- New: `src/components/practice/PlanBlockCard.tsx`, `BlockLibrarySheet.tsx`, `MoveDrillToBlockSheet.tsx`, `TopLevelBreakCard.tsx`, `GapZone.tsx`, `PracticeAttendanceSheet.tsx`
+- New: `src/lib/block-colors.ts`
+- New / modified: server actions for plan save (calling `replace_practice_plan_blocks`), RSVP upsert
+
+### Acceptance criteria
+- A captain can create a plan, add 2+ blocks (one from template, one custom), add drills to each block, set a parallel group on two drills in a block, add a between-block water break, set RSVP for half the roster, and save — all writes land atomically via the RPC.
+- A captain can duplicate a plan and the new copy contains all blocks, drills, breaks, and parallel groups (RSVP does NOT carry over).
+- Practice list shows the new status pill, block count, total duration, and RSVP count.
+- All four lifecycle states (`draft` / `scheduled` / `live` / `completed`) render distinctly on the detail page.
+- Mobile parity check: open the same practice on mobile and confirm the same structure renders identically.
+
+### Risks
+- **RPC payload shape drift.** The mobile-shipped RPC expects a specific JSON shape for `blocks_payload` + `breaks_payload`. Mitigation: copy the payload builder from `unlock-mobile/lib/practice-save.ts` (or equivalent) verbatim.
+- **Existing flat-shape plans on web (if any).** If web has shipped any plans with the old flat `practice_plan_drills` (no `plan_block_id`), they need backfilling. Mitigation: one-shot migration that wraps each plan's drills in a single auto-generated block.
+- **Scope creep into responsive polish.** The temptation will be strong. Resist. Block model first, polish in Build 6.
+
+---
+
+## Build 6 — Roster + Benchmarks + Practice responsive upgrades + multi-type benchmark capture ⏳
+
+### Goal
+Bring the remaining authenticated pages to desktop feature parity. Includes the multi-type benchmark capture widgets that Build 4 set up the drill side for.
+
+### Mobile parity gap addressed
+- Benchmark capture widgets for the four newer types: `reps`, `pct` (made/attempts), `flags`, `drops`. `BenchmarkLogClient.tsx` currently only handles `timed | rated`.
+- Per `MOBILE_APP_REFERENCE.md` §6.7 the capture shell + per-type widgets live in `components/benchmark/CaptureShell.tsx` + `CaptureWidgets.tsx` on mobile — mirror that structure on web.
+
+### Depends on
+- Build 5.5 (practice block model) — the practice responsive work below assumes blocks exist.
 
 ### In scope
 - **Roster list (`/roster`)** responsive upgrade:
   - Mobile: existing list
   - Desktop: table view with columns (Name, Positions, Jersey #, Status, Last benchmark). Inline status toggle (active/inactive). Quick "Add player" button in the header.
 - **Player detail (`/roster/[id]`)** responsive upgrade:
-  - Desktop: two columns — left = player info + edit, right = benchmark history with a basic chart (per-drill progress over time)
+  - Desktop: two columns — left = `AthleteHero` (avatar from `color_index`, name, jersey, positions, badges), right = benchmark history with a basic chart (per-drill progress over time)
+  - Injury badge on hero ("Injured", "Injured · Captain") — see Build 6.5 for the modal that sets it
 - **Benchmark hub (`/benchmarks`)** responsive upgrade:
   - Mobile: existing flow
   - Desktop: drill selector + player selector side-by-side, larger touch targets, summary of selections before launching the logging flow
-- **Benchmark logging flow** stays mobile-optimized (linear, focused), capped at `max-w-2xl` on desktop. This is a focus task; it's fine if it doesn't sprawl.
+- **Benchmark logging flow (`/benchmarks/log`)**:
+  - Adds capture widgets for all six types: `timed` (stopwatch + manual), `rated` (1-5 anchored), `reps` (stepper), `pct` (made/attempts dual stepper), `flags` (counter), `drops` (counter)
+  - A drill with multiple types in `benchmark_types[]` prompts for each type in sequence per player per set
+  - Stays mobile-optimized (linear, focused), capped at `max-w-2xl` on desktop
+  - Captain self-assessment guardrail (advisory only): warn when the logged-in captain is the player being rated on a `rated` drill
 - **Practice list (`/practice`)** responsive upgrade:
-  - Mobile: existing list
-  - Desktop: table view with columns (Date, Title, Status, Drills count). Quick "New practice plan" button in the header.
+  - Desktop: table view with columns (Date, Title, Status, Block count, Duration, RSVP). Quick "New practice plan" button in the header.
 - **Practice plan detail / edit (`/practice/[id]`, `/practice/[id]/edit`)** responsive upgrade:
-  - Desktop: three-pane layout — left = drill library picker (filterable), center = practice plan timeline (drag to reorder), right = drill details + notes for the selected drill
-  - Mobile: existing tabbed/stacked layout
-- **Post-practice log (`/practice/[id]/log`)** stays focused, capped at `max-w-2xl`
+  - Mobile: keep the Build 5.5 layout
+  - Desktop: side-by-side panes — left = block library + drill library, center = plan structure (blocks → drills, with breaks interleaved), right = block/drill detail editor for the current selection
+  - Drag-to-reorder via `@dnd-kit/core` on desktop (within a block AND between blocks; mobile keeps up/down chevrons)
+- **Post-practice log (`/practice/[id]/log`)** — basic shell only; full log flow is Build 6.5
 
 ### Out of scope
-- Charting library beyond the basic player-progress sparkline (defer to Build 7 if needed)
+- Charting library beyond the basic player-progress sparkline (defer to Build 8)
 - Real-time co-editing of practice plans
 - Bulk benchmark assessment (assess multiple drills in one sitting)
-- Drag-to-reorder requires a library — pick `@dnd-kit/core` (lightweight, accessible) and add as a dependency
+- Injury modal, observations feed, post-practice log content — all Build 6.5
 
 ### Files touched
 - Modified: `src/app/(app)/roster/page.tsx`, `RosterListClient.tsx`, `roster/[id]/page.tsx`, related forms
 - Modified: `src/app/(app)/benchmarks/page.tsx`, `BenchmarksHubClient.tsx`, `benchmarks/log/page.tsx`, `BenchmarkLogClient.tsx`
-- Modified: `src/app/(app)/practice/page.tsx`, `PracticeListClient.tsx`, `practice/[id]/page.tsx`, `practice/[id]/edit/page.tsx`, `PracticePlanForm.tsx`
+- New: `src/components/benchmark/CaptureShell.tsx`, `CaptureWidgets.tsx` (mirror mobile)
+- Modified: `src/app/(app)/practice/page.tsx`, `PracticeListClient.tsx`, `practice/[id]/page.tsx`, `practice/[id]/edit/page.tsx`
 - New dependency: `@dnd-kit/core` for practice plan drag-to-reorder on desktop
 
 ### Acceptance criteria
 - All listed pages responsive across breakpoints
 - Desktop table views work with sortable columns where applicable
-- Practice plan editor on desktop allows drag-to-reorder drills
-- Player detail page shows a simple per-drill benchmark trend chart
+- Practice plan editor on desktop allows drag-to-reorder drills, including between blocks
+- Benchmark capture supports all six types, picking the right widget per type. A drill with multiple types is captured in sequence.
+- Player detail page shows a simple per-drill benchmark trend chart and an injury badge when the player is flagged
 - Mobile experience does not regress on any page
 
 ### Risks
-- **Drag-to-reorder library adds significant bundle size.** `@dnd-kit/core` is reasonably small but check the bundle. If it's too heavy, native HTML drag-and-drop is acceptable (uglier API but free).
-- **Three-pane practice editor at desktop sizes might feel cluttered.** Mitigation: each pane has clear visual separation (border, header label). Resizable panes are out of scope.
+- **Drag-to-reorder between blocks gets messy with parallel groups.** Mitigation: dropping a drill into a block clears its `parallel_group`; the user re-groups manually after the move. Document this in the editor's affordance.
+- **`@dnd-kit/core` bundle size.** Reasonably small, check the bundle. If it's too heavy, native HTML drag-and-drop is acceptable.
+- **Multi-type capture turns into a long flow.** Mitigation: per-set capture all-types-on-one-screen (one player, one drill, one set: all required types side by side) rather than sequencing them.
 
 ---
 
-## Build 7 — Charts and dashboard insights ⏳
+## Build 6.5 — Injury tracking + observations feed + post-practice log ⏳
 
 ### Goal
-Add real charts to the dashboard and player detail page now that desktop layouts can support them. Insights become visual, not just numerical.
+Three smaller mobile-parity gaps that all relate to capturing rich coaching data, grouped into one build because none warrants its own.
+
+### Mobile parity gap addressed
+1. **Injury tracking** (`MOBILE_APP_REFERENCE.md` §6.5): `team_players.is_injured` + `injury_note`, branded "Mark injured / Mark healthy" modal on player detail, "Injured" eyebrow badge on the hero.
+2. **Player observations feed** (§6.5): chronological coaching notes from `player_notes` (text + practice_date + player_id), surfaced on player detail. Written during post-practice log.
+3. **Post-practice log flow** (§6.6): structured per-drill completion + per-drill `log_note` (which feeds `DrillNoteHistorySheet` on drill detail) + per-player observations (writes `player_notes`) + team performance notes / highlights / areas-to-improve / attendance count / energy level. Completing the log moves the practice to `completed`.
+
+### In scope
+- **Injury controls** on `/roster/[id]`:
+  - "Mark injured" / "Mark healthy" buttons
+  - Branded inline modal that captures the injury note when marking injured (NOT a native `confirm()` — match mobile)
+  - Server action toggling `team_players.is_injured` + `injury_note`
+  - Hero badge with eyebrow text: "Injured", or "Injured · Captain" when both flags apply
+  - Read path updates: list views, RSVP rows, and (Build 7) the dashboard attendance widget all expose the injured flag where relevant
+- **Observations feed** on `/roster/[id]`:
+  - Chronological list under hero (mobile calls it "Observations")
+  - Each row: note text, practice date, practice title (linking to that practice)
+  - Read from `player_notes` joined to `practice_plans`
+- **Post-practice log** at `/practice/[id]/log`:
+  - Numbered section cards matching mobile's 2026-05-19 rebuild
+  - Section 1: per-drill completion (done / skipped) + per-drill `log_note` text area
+  - Section 2: per-player observations — pick a player, write a note, save → `player_notes`
+  - Section 3: team performance notes, highlights, areas to improve
+  - Section 4: attendance count (auto-pulled from RSVP, editable) + energy level
+  - Saving the log: marks the practice `completed`, writes `practice_logs`, persists per-drill `log_note` rows on `practice_plan_drills`
+  - If the user already ran the practice (via a future Build 8.5 "Run mode" or directly on mobile), prefill from existing state
+
+### Out of scope
+- Run-practice live mode on web (deferred — see open question §12.2 of `MOBILE_APP_REFERENCE.md`). Web reads run-state data captured on mobile but doesn't write it.
+- Observation editing / deletion (write-only feed for MVP)
+- Adding observations directly from player detail (only via post-practice log for MVP)
+
+### Files touched
+- Modified: `src/app/(app)/roster/[id]/page.tsx` + add an `InjuryModal.tsx` and `ObservationsFeed.tsx` component
+- Modified: `PlayerForm.tsx` (do NOT add injury controls here — injury lives on detail only, matching mobile)
+- New: `src/app/(app)/practice/[id]/log/page.tsx` (or rewrite the existing stub) + `PostPracticeLogClient.tsx`
+- New: server actions for injury toggle, observation create, post-practice log save (with `log_note` per drill)
+- Modified: `DrillNoteHistorySheet` (or web equivalent) to read from `practice_plan_drills.log_note` — confirm there's no separate `team_drill_notes` table being assumed
+
+### Acceptance criteria
+- Marking a player injured writes both `is_injured = true` and the typed note; healthy resets both
+- Injured badge appears on player hero and persists across reloads
+- After a post-practice log is submitted, each per-drill note appears on that drill's detail page in the notes history
+- Each per-player observation submitted from the log appears in the player's observations feed with the correct practice date and title
+- Completing the log transitions the practice plan status to `completed` and the practice list reflects it
+- Mobile-app render of the same player / practice / drill matches what the web wrote
+
+### Risks
+- **Native `confirm()` instead of branded modal.** Easy to fall back on. The mobile session (2026-05-22) explicitly replaced the native Alert with a branded modal for brand consistency. Match it.
+- **Observation feed bloat over time.** Mitigation: paginate or virtualize after N notes. For MVP a simple chronological list is fine.
+
+---
+
+---
+
+## Build 7 — Team dashboard widget parity ⏳
+
+### Goal
+The team dashboard responsive layout shipped in Build 3, but the *widgets* on it are a stripped-down subset of what mobile has. Mobile's team dashboard (per `MOBILE_APP_REFERENCE.md` §6.3) is the heart of the app — Build 3 gave it space to breathe, this build fills the space with the actual widgets.
+
+### Mobile parity gap addressed
+None of these widgets exist on web today; all of them exist on mobile and the data is already in Supabase:
+
+1. **Pinned pulses (per-drill)** — for drills the user has pinned, show current average (seconds for timed, 1-5 for rated, etc.), delta vs. previous period, and a 6-week sparkline. "What's our progression on this drill?"
+2. **Drill mix donut** — categorical breakdown of drills run in completed practices (offense / defense / conditioning / footwork / etc.). Center shows total drill completions. Highlights an underweighted category if one stands out. Includes a weekly mini-chart.
+3. **Attendance widget** — overall rate (0–100), delta vs. prior 4 weeks, 7-practice sparkline, **offense vs. defense rate breakdown**, and a streaks row showing players with the longest attendance streaks.
+4. **Next practice card** — upcoming practice with date, title, time, status, duration, attendee row (`AvatarStack` + RSVP count). Click → practice detail.
+5. **Captain View Toggle** — when the logged-in user is a captain (`team_players.is_captain = true`), a small pill toggle at top: "Coach view" (default) vs "Player view." Player view filters every widget below to only that player's data.
+
+### In scope
+- Data layer:
+  - `vw_pinned_pulses` or equivalent query for per-drill averages + deltas + sparkline series
+  - `vw_drill_mix` for category mix
+  - `vw_attendance` with the offense/defense breakdown
+  - Streak calculation (might need a new view if not already on the mobile schema)
+  - Pin/unpin drill action — writes to a `team_drill_pins` table (or whatever mobile uses)
+- Widgets (web components mirroring the mobile component names from `MOBILE_APP_REFERENCE.md` §8):
+  - `PinnedPulseCard` (+ `Spark` sparkline primitive)
+  - `CategoryDonut` + `CategoryWeeklyMini`
+  - `AttendanceRing` + `AttendBar` + `StreakDots` / `StreakRow`
+  - `NextPracticeCard` (with `AvatarStack`)
+  - `CaptainViewToggle`
+- Layout integration into the team dashboard grid (Build 3 set up the responsive grid; this build fills the side and main columns)
+- Locked-insight empty states for each widget when the data isn't there yet ("Run X to unlock Y")
+
+### Out of scope
+- Generic charting on player detail (Build 8 — keep the charting effort consolidated)
+- Custom widget builder
+- Comparative team-vs-team charts
+- Drag-to-rearrange dashboard widgets
+
+### Files touched
+- Modified: `src/app/(workspace)/dashboard/team/[teamId]/page.tsx` + its data loader
+- New: `src/components/dashboard/widgets/` directory with one file per widget
+- New: `src/components/dashboard/CaptainViewToggle.tsx`
+- New: server action for pin/unpin drill
+
+### Acceptance criteria
+- A team with enough data sees all five widgets populated. A brand-new team sees locked-insight cards on each with a clear unlock condition.
+- Captain View Toggle: flipping to Player view filters Pinned pulses + Attendance to only the captain's data; toggle persists across navigation (URL param or local storage).
+- Next practice card shows correct status pill matching the new lifecycle (`scheduled` / `live` / `completed`).
+- Mobile render of the same team dashboard shows the same widget content (parity sanity check).
+
+### Risks
+- **Donut + sparkline libraries balloon the bundle.** Mitigation: hand-roll the sparkline (it's a single SVG path) and the donut (two arcs). Recharts isn't justified yet — defer it to Build 8 where it's actually needed for player progress charts.
+- **Attendance streak query is expensive on large rosters.** Mitigation: materialized view or a `vw_attendance_streaks` that pre-computes the top N players. Negligible at MVP roster size (15), worth flagging for later.
+- **Captain View Toggle scope leak.** Mitigation: only Pinned pulses + Attendance respond to the toggle for MVP. Other widgets stay team-wide. Document this.
+
+---
+
+## Build 8 — Charts and player insights ⏳
+
+### Goal
+Add real charts to the player detail page now that the dashboard widget pass is done and the desktop layout can support them.
 
 ### In scope
 - Pick a chart library. Recommend `Recharts` (well-maintained, React-native API, reasonable bundle size, decent defaults). Add as a dependency.
-- Dashboard additions:
-  - "Team trend" chart on the dashboard: average benchmark performance over time per category
-  - Sparkline on each strength/weakness card showing trend over the last N assessments
 - Player detail additions:
-  - Per-drill benchmark progress chart (already mentioned in Build 6 — fully build it here)
+  - Per-drill benchmark progress chart (multi-line if a drill has multiple benchmark types — e.g., `pct` shows two series for made and attempts, or a single derived percentage line)
+  - Optional: career-best annotation, PR markers
+- Optional dashboard polish if any pulse/widget from Build 7 would benefit from a more sophisticated chart than the hand-rolled sparkline
 - Empty state for charts when there's not enough data: "Run more benchmarks to see this trend" (locked insight pattern)
 
 ### Out of scope
@@ -453,13 +663,12 @@ Add real charts to the dashboard and player detail page now that desktop layouts
 - Comparative team-vs-team charts (only one team exists in MVP context)
 
 ### Files touched
-- Modified: `src/app/(app)/page.tsx` (dashboard charts)
 - Modified: `src/app/(app)/roster/[id]/page.tsx` (player chart)
 - New: `src/components/app/charts/` directory with reusable chart components
 - New dependency: `recharts`
 
 ### Acceptance criteria
-- At least two new charts shipped (team trend + per-drill player progress)
+- Per-drill player progress chart renders with sane defaults for each of the six benchmark types
 - Charts respect the design system (orange/green/blue per the color rules)
 - Charts have an empty state when there's not enough data
 - Charts don't render off-screen or overflow on mobile (small or hidden on phones is OK)
@@ -467,10 +676,11 @@ Add real charts to the dashboard and player detail page now that desktop layouts
 ### Risks
 - **Charts feel decorative if the data isn't there.** Mitigation: the locked-insight pattern says "do more X to unlock this trend." Same idea here.
 - **Recharts default styling won't match the design system.** Mitigation: budget time to theme the charts (axis colors, grid lines, tooltips).
+- **Six benchmark types × one chart component = visual sprawl.** Mitigation: pick a default visualization per type (`timed` = lower-is-better line, `rated` = stepped 1-5, `pct` = percentage line with attempt-count overlay, `reps` / `flags` / `drops` = bar). Documented in the chart component file.
 
 ---
 
-## Build 8 — Polish pass ⏳
+## Build 9 — Polish pass ⏳
 
 ### Goal
 A focused pass through the whole app to clean up loose ends, fix small visual bugs introduced during the responsive work, and tighten interactions.
@@ -487,7 +697,7 @@ A focused pass through the whole app to clean up loose ends, fix small visual bu
 - Hover states on all interactive elements (desktop)
 - Mobile-browser sanity check on every page after the desktop changes
 - Sign out flow audit — make sure it works from both sidebar and (if added) header menu
-- Settings page revisit — currently minimal, make sure it has the basics (team name, sign out, link to support email)
+- **Settings page rebuild** — currently minimal (email read-only, current team name read-only, sign out). Add: team/league switcher for users in multiple teams, profile editing (display name), and a basic delete-account stub. Per `MOBILE_APP_REFERENCE.md` §6.8, mobile settings is also minimal — this is web's chance to add the missing pieces.
 - Take a real dashboard screenshot for the marketing page, replace the placeholder
 
 ### Out of scope
@@ -507,7 +717,7 @@ A focused pass through the whole app to clean up loose ends, fix small visual bu
 
 ---
 
-## Build 9 — Production prep ⏳
+## Build 10 — Production prep ⏳
 
 ### Goal
 Get the app ready to actually share with users beyond just Taylor.
@@ -547,10 +757,17 @@ These are vertical slices. After each build, the app is shippable in the sense t
 **Realistic milestones for a solo PM with Claude Code:**
 - After Build 1: "Web app moved and structured, but still looks the same."
 - After Build 2: "We have a real homepage now."
-- After Build 3-4: "Dashboard and drills feel like a desktop app."
+- After Build 2.5: "Onboarding + leagues + user/league/team dashboards on web."
+- After Build 3: "Team dashboard has a real desktop layout (but the rich widgets aren't there yet)."
+- After Build 4: "Drills feel like a desktop tool; multi-type benchmarks supported on the drill side."
 - After Build 5: "Diagram builder is good enough to do real work on a laptop."
-- After Build 6-7: "Everything is responsive and the dashboard has charts."
-- After Build 8-9: "Ready to share with the other two teams in the org."
+- After Build 5.5: "Practice planner has the same block-based structure as mobile (data parity hit)."
+- After Build 6: "Roster + benchmarks + practice editor are all responsive. All six benchmark types capture-able."
+- After Build 6.5: "Injury tracking, observations feed, and post-practice logging are in. Feature parity with mobile (minus run mode) reached."
+- After Build 7: "Team dashboard is rich — pulses, drill mix, attendance, streaks, captain toggle. Feels like the heart of the app."
+- After Build 8: "Player progress charts ship."
+- After Build 9: "Polished, accessible, no rough edges."
+- After Build 10: "Ready to share with the other two teams in the org."
 
 ## What's NOT in this plan (and where it lives)
 
@@ -561,6 +778,10 @@ These are vertical slices. After each build, the app is shippable in the sense t
 - Coach analytics dashboard (org-level metrics across teams): future, not before validation
 - Customer support tooling: future
 - Test suite: separate engineering effort
+- **Web "Run practice" live mode:** mobile has it; web probably never gets it (laptop on the field is impractical). Web reads run-mode data captured on mobile (`run_status`, attendance, structured tag notes) but doesn't write it. See `MOBILE_APP_REFERENCE.md` §12 open question 2. If product decides web should have a read-only practice-review surface, slot it into Build 6 or 7.
+- **Inviting other users via email link:** out of scope until coach MVP validation. Today all users self-onboard.
+- **Multi-league support for one user:** mobile data model supports it; UX is single-league for MVP.
+- **Migrating legacy `teams.organization_name` strings into real `leagues` records:** intentional skip per Build 2.5 spec.
 
 ## How to actually run a build
 

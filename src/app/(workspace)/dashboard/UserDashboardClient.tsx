@@ -99,13 +99,26 @@ export default function UserDashboardClient({ data }: { data: UserHomeData }) {
                   label="My teams"
                   meta={`${teams.length} · standalone`}
                   cta={
-                    <Link
-                      href="/teams/new"
-                      className="wbtn"
-                      style={{ height: 34, fontSize: 12.5, padding: "0 12px" }}
-                    >
-                      <Icon.plus size={12} /> Add team
-                    </Link>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Link
+                        href="/teams/join"
+                        className="wbtn ghost"
+                        style={{
+                          height: 34,
+                          fontSize: 12.5,
+                          padding: "0 12px",
+                        }}
+                      >
+                        Join with team ID
+                      </Link>
+                      <Link
+                        href="/teams/new"
+                        className="wbtn"
+                        style={{ height: 34, fontSize: 12.5, padding: "0 12px" }}
+                      >
+                        <Icon.plus size={12} /> Add team
+                      </Link>
+                    </div>
                   }
                 >
                   <div
@@ -151,51 +164,40 @@ function WelcomeStrip({
     <div
       className="w-card hero"
       style={{
-        padding: 24,
+        padding: 18,
         display: "flex",
         alignItems: "center",
-        gap: 28,
+        gap: 18,
         flexWrap: "wrap",
       }}
     >
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
         <div
           style={{
-            fontSize: 10.5,
-            fontWeight: 700,
-            letterSpacing: ".16em",
-            color: "var(--uff-orange)",
-            marginBottom: 6,
-          }}
-        >
-          WELCOME BACK
-        </div>
-        <div
-          style={{
-            fontSize: 28,
+            fontSize: 22,
             fontWeight: 600,
             letterSpacing: "-0.02em",
-            lineHeight: 1.1,
+            lineHeight: 1.2,
             color: "var(--uff-text)",
           }}
         >
-          Pick a workspace, or start something new.
+          Pick a workspace to coach.
         </div>
         <div
           style={{
-            fontSize: 13,
+            fontSize: 12.5,
             color: "var(--uff-text-dim)",
-            marginTop: 8,
+            marginTop: 6,
             maxWidth: 520,
             lineHeight: 1.5,
           }}
         >
-          Your leagues and standalone teams live here. Open one to manage drills,
-          roster, and practice plans.
+          Leagues and standalone teams. Open one to manage roster, drills, and
+          practices.
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
         <HeroStat label="Leagues" v={leagueCount} />
         <HeroStat label="Teams" v={teamCount} />
         <HeroStat label="Members" v={totalMembers} />
@@ -206,7 +208,7 @@ function WelcomeStrip({
 
 function HeroStat({ label, v }: { label: string; v: number | string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span
         style={{
           fontSize: 10,
@@ -221,7 +223,7 @@ function HeroStat({ label, v }: { label: string; v: number | string }) {
       <span
         style={{
           fontFamily: "var(--font-mono)",
-          fontSize: 28,
+          fontSize: 22,
           fontWeight: 700,
           letterSpacing: "-0.02em",
           lineHeight: 1,
@@ -248,7 +250,7 @@ function LeagueCard({ league }: { league: UserLeague }) {
         display: "block",
       }}
     >
-      <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -321,8 +323,8 @@ function LeagueCard({ league }: { league: UserLeague }) {
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
-            padding: 12,
+            gap: 10,
+            padding: 10,
             background: "var(--uff-surface-2)",
             borderRadius: 10,
             border: "1px solid var(--uff-line-soft)",
@@ -366,7 +368,7 @@ function TeamCard({ team }: { team: UserTeam }) {
         display: "block",
       }}
     >
-      <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -432,8 +434,8 @@ function TeamCard({ team }: { team: UserTeam }) {
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 12,
-            padding: 12,
+            gap: 10,
+            padding: 10,
             background: "var(--uff-surface-2)",
             borderRadius: 10,
             border: "1px solid var(--uff-line-soft)",
@@ -533,6 +535,13 @@ function LeaguesOnlyHint() {
         show up here.
       </span>
       <Link
+        href="/teams/join"
+        className="wbtn ghost"
+        style={{ height: 30, fontSize: 12, padding: "0 10px" }}
+      >
+        Join with team ID
+      </Link>
+      <Link
         href="/teams/new?standalone=1"
         className="wbtn"
         style={{ height: 30, fontSize: 12, padding: "0 10px" }}
@@ -551,8 +560,8 @@ function EmptyState() {
     >
       <EmptyCard
         kicker="LEAGUE"
-        title="Manage many teams at once."
-        body="Set up a league if you run a club, a tournament, or a season with multiple teams under one roof."
+        title="Run a club or league."
+        body="For a club, tournament, or season with multiple teams."
         primary="New league"
         primaryHref="/onboarding/create-league?scope=league"
         secondary={["Bulk roster sync", "Cross-team schedules", "One admin scope"]}
@@ -560,8 +569,8 @@ function EmptyState() {
       />
       <EmptyCard
         kicker="SINGLE TEAM"
-        title="Coach or captain one squad."
-        body="Add a standalone team to run practices, build drills, and benchmark your players."
+        title="Coach one team."
+        body="Run practices, build drills, and benchmark a single roster."
         primary="New team"
         primaryHref="/teams/new"
         secondary={["Practice planner", "Drill library", "Roster + benchmarks"]}
@@ -595,10 +604,10 @@ function EmptyCard({
     <div
       className="w-card"
       style={{
-        padding: 28,
+        padding: 20,
         display: "flex",
         flexDirection: "column",
-        gap: 18,
+        gap: 12,
         position: "relative",
         overflow: "hidden",
         background: ghost
@@ -607,7 +616,7 @@ function EmptyCard({
         borderTop: `2px solid ${accent}`,
       }}
     >
-      <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10 }}>
         <div
           style={{
             fontSize: 10.5,
@@ -620,10 +629,10 @@ function EmptyCard({
         </div>
         <div
           style={{
-            fontSize: 22,
+            fontSize: 18,
             fontWeight: 700,
             letterSpacing: "-0.02em",
-            lineHeight: 1.15,
+            lineHeight: 1.2,
             color: "var(--uff-text)",
           }}
         >
@@ -631,7 +640,7 @@ function EmptyCard({
         </div>
         <div
           style={{
-            fontSize: 13.5,
+            fontSize: 12.5,
             color: "var(--uff-text-dim)",
             lineHeight: 1.5,
           }}

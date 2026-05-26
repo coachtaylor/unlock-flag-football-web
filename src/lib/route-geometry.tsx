@@ -1,7 +1,7 @@
 import type React from "react";
 import type { RouteSegment, RouteWaypoint } from "@/types/diagram";
 
-export const ROUTE_COLOR = "#8B5CF6";
+export const ROUTE_COLOR = "#FF8A4A";
 
 export function zigzagPoints(
   from: RouteWaypoint,
@@ -54,7 +54,8 @@ export function renderRouteSegment(
   to: RouteWaypoint,
   segment: RouteSegment,
   index: number,
-  strokeWidth: number = 3
+  strokeWidth: number = 3,
+  color: string = ROUTE_COLOR
 ): React.ReactNode {
   switch (segment.type) {
     case "zigzag": {
@@ -64,7 +65,7 @@ export function renderRouteSegment(
           key={`rs-${index}`}
           points={`${from.x},${from.y} ${cx},${cy} ${to.x},${to.y}`}
           fill="none"
-          stroke={ROUTE_COLOR}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -79,7 +80,7 @@ export function renderRouteSegment(
           key={`rs-${index}`}
           d={`M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`}
           fill="none"
-          stroke={ROUTE_COLOR}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           pointerEvents="none"
@@ -94,7 +95,7 @@ export function renderRouteSegment(
           y1={from.y}
           x2={to.x}
           y2={to.y}
-          stroke={ROUTE_COLOR}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           pointerEvents="none"

@@ -8,7 +8,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashTopBar from "@/components/dashboard/DashTopBar";
-import { DashIcon, Icon } from "@/components/uff/icons";
+import TeamSidebar from "@/components/dashboard/TeamSidebar";
+import { Icon } from "@/components/uff/icons";
 import { teamColorHex } from "@/components/uff/team-colors";
 
 type StrengthRow = {
@@ -103,6 +104,15 @@ export default async function TeamDashboardPage({
   }
   if (!canView) notFound();
 
+  const roleLabel =
+    membership?.role === "captain"
+      ? "CAPTAIN"
+      : membership?.role === "coach"
+      ? "COACH"
+      : team.league_id
+      ? "LEAGUE ADMIN"
+      : "TEAM";
+
   const [
     strengthRes,
     recentBenchmarksRes,
@@ -185,6 +195,8 @@ export default async function TeamDashboardPage({
     <div className="uff-web">
       {/* Team-context sidebar — primary app nav (Drills, Roster, Practice). */}
       <TeamSidebar
+        active="dashboard"
+        teamId={teamId}
         teamColor={teamColor}
         teamName={team.team_name}
         leagueId={team.league_id}
@@ -199,10 +211,9 @@ export default async function TeamDashboardPage({
           crumbs={
             team.league_id
               ? [
-                  { label: "Workspaces", href: "/dashboard" },
                   { label: "League", href: `/dashboard/league/${team.league_id}` },
                 ]
-              : [{ label: "Workspaces", href: "/dashboard" }]
+              : []
           }
           title={team.team_name}
           kicker={team.format?.toUpperCase()}
@@ -224,7 +235,7 @@ export default async function TeamDashboardPage({
           <div
             className="w-card"
             style={{
-              padding: 24,
+              padding: 16,
               borderTop: `2px solid ${teamColor}`,
               background: `linear-gradient(180deg, ${teamColor}14 0%, transparent 50%), var(--uff-surface)`,
             }}
@@ -235,31 +246,21 @@ export default async function TeamDashboardPage({
                 fontWeight: 700,
                 letterSpacing: ".18em",
                 color: "var(--uff-text-mute)",
-                marginBottom: 8,
+                marginBottom: 6,
               }}
             >
-              TEAM DASHBOARD
+              {roleLabel}
             </div>
             <div
               style={{
-                fontSize: 28,
+                fontSize: 22,
                 fontWeight: 700,
                 letterSpacing: "-0.02em",
-                lineHeight: 1.15,
+                lineHeight: 1.2,
                 color: "var(--uff-text)",
               }}
             >
               {team.team_name}
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                color: "var(--uff-text-dim)",
-                marginTop: 8,
-              }}
-            >
-              {team.format?.toUpperCase()}
-              {membership?.role ? ` · You're ${membership.role}` : team.league_id ? " · You admin the league" : ""}
             </div>
           </div>
 
@@ -379,169 +380,6 @@ export default async function TeamDashboardPage({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Team-context sidebar — local to this page since it mirrors the
-// existing (app) primary nav but rendered inside the .uff-web shell.
-// ─────────────────────────────────────────────────────────────────────
-function TeamSidebar({
-  teamColor,
-  teamName,
-  leagueId,
-  user,
-}: {
-  teamColor: string;
-  teamName: string;
-  leagueId: string | null;
-  user: { firstName: string; lastName: string };
-}) {
-  const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
-  const items: { id: string; label: string; href: string; icon: typeof DashIcon.home }[] = [
-    { id: "dashboard", label: "Dashboard", href: "#", icon: DashIcon.home },
-    { id: "drills", label: "Drills", href: "/drills", icon: DashIcon.drills },
-    { id: "roster", label: "Roster", href: "/roster", icon: DashIcon.team },
-    { id: "practice", label: "Practice", href: "/practice", icon: DashIcon.practice },
-    { id: "benchmarks", label: "Benchmarks", href: "/benchmarks", icon: DashIcon.rules },
-    { id: "settings", label: "Settings", href: "/settings", icon: DashIcon.gear },
-  ];
-
-  return (
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="mark">U</div>
-        <div className="name">
-          <span className="t">Unlock FF</span>
-          <span className="s">Coach console</span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          margin: "0 -2px 6px",
-          padding: 12,
-          borderRadius: 12,
-          background: "rgba(255,255,255,0.025)",
-          border: "1px solid var(--uff-line-soft)",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 3,
-            background: teamColor,
-            borderRadius: "0 2px 2px 0",
-          }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              background: teamColor,
-              color: "#1a0f08",
-              display: "grid",
-              placeItems: "center",
-              fontFamily: "var(--font-mono)",
-              fontWeight: 800,
-              fontSize: 13,
-              letterSpacing: "-0.04em",
-            }}
-          >
-            {teamName[0]}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 9.5,
-                color: "var(--uff-text-mute)",
-                fontWeight: 700,
-                letterSpacing: ".16em",
-                marginBottom: 2,
-              }}
-            >
-              TEAM
-            </div>
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 700,
-                letterSpacing: "-0.01em",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "var(--uff-text)",
-              }}
-            >
-              {teamName}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="navlbl">Team</div>
-      {items.map((it) => (
-        <Link
-          key={it.id}
-          href={it.href}
-          className={`navitem ${it.id === "dashboard" ? "active" : ""}`}
-        >
-          <it.icon size={18} />
-          <span>{it.label}</span>
-        </Link>
-      ))}
-
-      <div className="spacer" />
-
-      <Link
-        href={leagueId ? `/dashboard/league/${leagueId}` : "/dashboard"}
-        className="navitem"
-        style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
-      >
-        <Icon.arrowLeft size={13} />
-        <span>{leagueId ? "Back to league" : "All workspaces"}</span>
-      </Link>
-
-      <div
-        style={{
-          marginTop: 8,
-          padding: "10px 12px",
-          borderRadius: 12,
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid var(--uff-line-soft)",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            background: "var(--uff-orange)",
-            color: "#1a0f08",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 11,
-            fontWeight: 800,
-          }}
-        >
-          {initials || "U"}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.2, color: "var(--uff-text)" }}>
-            {user.firstName} {user.lastName}
-          </div>
-        </div>
-      </div>
-    </aside>
-  );
-}
 
 function StatCell({
   label,
@@ -557,10 +395,10 @@ function StatCell({
     <div
       className="td-stat-cell"
       style={{
-        padding: "18px 20px",
+        padding: "var(--stat-pad-y) var(--stat-pad-x)",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: 4,
       }}
     >
       <span
@@ -601,7 +439,7 @@ function SectionHead({ label }: { label: string }) {
         display: "flex",
         alignItems: "center",
         gap: 10,
-        marginTop: 4,
+        marginTop: 0,
       }}
     >
       <span
@@ -632,19 +470,19 @@ function EmptyTeamCard() {
   // two secondary steps that get you there. Wider, more breathing room
   // than the old stacked list.
   const steps = [
-    { n: 1, t: "Add your players", sub: "Build the roster.", href: "/roster/new" },
-    { n: 2, t: "Create your drills", sub: "Seed the library.", href: "/drills/new" },
+    { n: 2, t: "Add drills", sub: "Build your library.", href: "/drills/new" },
+    { n: 3, t: "Plan a practice", sub: "Build the agenda.", href: "/practice/new" },
   ];
   return (
     <div
       className="w-card"
       style={{
-        padding: "40px 28px",
+        padding: "24px 20px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         textAlign: "center",
-        gap: 16,
+        gap: 12,
         position: "relative",
         overflow: "hidden",
         background:
@@ -664,31 +502,30 @@ function EmptyTeamCard() {
       <h2
         style={{
           margin: 0,
-          fontSize: 28,
+          fontSize: 22,
           fontWeight: 800,
           letterSpacing: "-0.02em",
-          lineHeight: 1.15,
+          lineHeight: 1.2,
           color: "var(--uff-text)",
           maxWidth: 520,
         }}
       >
-        Run your first benchmark to bring this dashboard to life.
+        Start with your roster.
       </h2>
       <p
         style={{
           margin: 0,
-          fontSize: 14,
+          fontSize: 13,
           color: "var(--uff-text-dim)",
-          lineHeight: 1.55,
+          lineHeight: 1.5,
           maxWidth: 460,
         }}
       >
-        Once you log a benchmark, you&apos;ll see team strengths and
-        weaknesses, per-player progression, and a feed of what&apos;s been
-        worked on.
+        Add players, run drills, and log practices. Strengths, gaps, and
+        progression show up here as the data comes in.
       </p>
       <Link
-        href="/benchmarks"
+        href="/roster/new"
         className="wbtn primary"
         style={{
           marginTop: 4,
@@ -697,7 +534,7 @@ function EmptyTeamCard() {
           padding: "0 22px",
         }}
       >
-        Run your first benchmark <Icon.arrowRight size={14} />
+        Add players <Icon.arrowRight size={14} />
       </Link>
 
       <div
@@ -705,10 +542,10 @@ function EmptyTeamCard() {
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
-          gap: 12,
+          gap: 10,
           width: "100%",
           maxWidth: 520,
-          marginTop: 12,
+          marginTop: 8,
         }}
       >
         {steps.map((s) => (
@@ -719,8 +556,8 @@ function EmptyTeamCard() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 12,
-              padding: 14,
+              gap: 10,
+              padding: 10,
               textDecoration: "none",
               color: "inherit",
               textAlign: "left",
@@ -827,7 +664,7 @@ function TeamOverview({ rows }: { rows: StrengthRow[] }) {
             key={row.category_name}
             className="td-row-hover"
             style={{
-              padding: 16,
+              padding: 12,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -944,7 +781,7 @@ function RecentAssessments({ rows }: { rows: RecentBenchmarkRow[] }) {
           <div
             className="td-row-hover"
             style={{
-              padding: 16,
+              padding: 12,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -1049,7 +886,7 @@ function RecentPractices({ rows }: { rows: PracticeHistoryRow[] }) {
             href={`/practice/${row.practice_plan_id}`}
             className="w-card td-row-hover"
             style={{
-              padding: 16,
+              padding: 12,
               textDecoration: "none",
               color: "inherit",
               display: "flex",
