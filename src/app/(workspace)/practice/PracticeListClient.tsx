@@ -6,7 +6,7 @@
 // reads at a glance.
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PlanSummary, PlanStatus } from "@/lib/practice/plan-data";
 import { blockColor } from "@/lib/practice/block-colors";
@@ -320,14 +320,34 @@ function FeaturedPlanCard({
   isPending: boolean;
   onDuplicate: () => void;
 }) {
+  const router = useRouter();
+  const [hovered, setHovered] = useState(false);
   return (
     <div
+      onClick={(e) => {
+        // Ignore clicks that originated on a nested interactive element
+        // (edit/duplicate icon buttons). Those handle their own navigation.
+        if ((e.target as HTMLElement).closest("[data-stop-card-nav]")) return;
+        router.push(`/practice/${plan.id}`);
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") router.push(`/practice/${plan.id}`);
+      }}
       style={{
-        background: "#15110d",
+        background: hovered ? "#1a140e" : "#15110d",
         border: "1px solid var(--uff-orange)",
         borderRadius: 12,
         padding: 12,
         position: "relative",
+        cursor: "pointer",
+        boxShadow: hovered
+          ? "0 0 0 1px var(--uff-orange), 0 8px 24px rgba(255,106,26,0.18)"
+          : "none",
+        transition: "background .12s, box-shadow .12s",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -338,6 +358,7 @@ function FeaturedPlanCard({
             <span style={{ flex: 1 }} />
             <Link
               href={`/practice/${plan.id}/edit`}
+              data-stop-card-nav
               className="icon-btn"
               title="Edit plan"
               style={{
@@ -353,6 +374,7 @@ function FeaturedPlanCard({
             </Link>
             <button
               type="button"
+              data-stop-card-nav
               className="icon-btn"
               title="Duplicate plan"
               style={{ width: 26, height: 26 }}
@@ -409,21 +431,14 @@ function FeaturedPlanCard({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 24, marginTop: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
-        {/* Mix bar + tiny legend below it. Bar extends to fill the row up to
-            the action buttons; legend wraps under it with name + share %. */}
+        {/* Mix bar + tiny legend below it. Bar fills the rest of the row;
+            the entire card is the click target, so no separate CTA needed. */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
           <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
         </div>
-        <Link
-          href={`/practice/${plan.id}`}
-          className="wbtn primary"
-          style={{ height: 30, padding: "0 14px", fontSize: 12.5, gap: 5, textDecoration: "none" }}
-        >
-          Open plan
-        </Link>
       </div>
     </div>
   );
