@@ -38,6 +38,7 @@ export type SavePlanPayload = {
   title: string;
   practice_date: string;
   start_time: string | null;
+  end_time: string | null;
   status: "draft" | "scheduled";
   blocks: SaveBlockInput[];
   breaks: SaveBreakInput[];
@@ -57,6 +58,7 @@ export async function savePlan(payload: SavePlanPayload): Promise<{ ok: true } |
       title: payload.title,
       practice_date: payload.practice_date,
       start_time: payload.start_time,
+      end_time: payload.end_time,
       status: payload.status,
       updated_at: new Date().toISOString(),
     })

@@ -179,6 +179,7 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
                     <span>
                       {formatDateLabel(plan.practice_date)}
                       {formatTimeLabel(plan.start_time) ? ` · ${formatTimeLabel(plan.start_time)}` : ""}
+                      {formatTimeLabel(plan.end_time) ? `–${formatTimeLabel(plan.end_time)}` : ""}
                     </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

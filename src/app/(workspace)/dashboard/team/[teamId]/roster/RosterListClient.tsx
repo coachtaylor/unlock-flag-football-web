@@ -237,46 +237,29 @@ export default function RosterListClient({
           </p>
         </div>
       ) : (
-        <>
-          {/* Desktop: table */}
-          <div
-            className="roster-table w-card"
-            style={{ padding: 0, overflow: "hidden" }}
-          >
-            <div className="roster-row-grid roster-head">
-              <span />
-              <span>Player</span>
-              <span>Positions</span>
-              <span style={{ textAlign: "center" }}>#</span>
-              <span>Status</span>
-              <span>Last benchmark</span>
-              <span />
-            </div>
-
-            {filtered.map((p, i) => (
-              <RosterRow
-                key={p.id}
-                p={p}
-                href={`${rosterBasePath}/${p.id}`}
-                stripe={i % 2 === 1}
-              />
-            ))}
+        <div
+          className="roster-table w-card"
+          style={{ padding: 0, overflow: "hidden" }}
+        >
+          <div className="roster-row-grid roster-head">
+            <span />
+            <span>Player</span>
+            <span>Positions</span>
+            <span style={{ textAlign: "center" }}>#</span>
+            <span>Status</span>
+            <span>Last benchmark</span>
+            <span />
           </div>
 
-          {/* Mobile: stacked cards */}
-          <div
-            className="roster-cards"
-            style={{ display: "flex", flexDirection: "column", gap: 10 }}
-          >
-            {filtered.map((p) => (
-              <PlayerCard
-                key={p.id}
-                p={p}
-                href={`${rosterBasePath}/${p.id}`}
-              />
-            ))}
-          </div>
-        </>
+          {filtered.map((p, i) => (
+            <RosterRow
+              key={p.id}
+              p={p}
+              href={`${rosterBasePath}/${p.id}`}
+              stripe={i % 2 === 1}
+            />
+          ))}
+        </div>
       )}
 
       <style>{`
@@ -309,12 +292,6 @@ export default function RosterListClient({
         .roster-row.stripe { background: rgba(255,255,255,0.012); }
         .roster-row.stripe:hover { background: rgba(255,255,255,0.03); }
 
-        /* Show table on desktop, cards on phones. */
-        .roster-cards { display: none; }
-        @media (max-width: 900px) {
-          .roster-table { display: none; }
-          .roster-cards { display: flex; }
-        }
         @media (max-width: 900px) {
           .roster-action-row > .wbtn { margin-left: 0 !important; }
         }
@@ -422,89 +399,6 @@ function RosterRow({
       >
         <Icon.chevR size={13} />
       </div>
-    </Link>
-  );
-}
-
-function PlayerCard({ p, href }: { p: RosterPlayer; href: string }) {
-  return (
-    <Link
-      href={href}
-      className="w-card"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: 14,
-        textDecoration: "none",
-        color: "inherit",
-      }}
-    >
-      <Avatar player={p} size={40} fontSize={13} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span
-            style={{
-              fontSize: 14.5,
-              fontWeight: 600,
-              color: "var(--uff-text)",
-              letterSpacing: "-0.005em",
-            }}
-          >
-            {p.name}
-          </span>
-          {p.jerseyNumber && (
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 12,
-                color: "var(--uff-text-mute)",
-              }}
-            >
-              #{p.jerseyNumber}
-            </span>
-          )}
-          {p.isCaptain && <CaptainPip />}
-          {p.isInjured && <InjuredPip />}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            flexWrap: "wrap",
-            marginTop: 6,
-            alignItems: "center",
-          }}
-        >
-          {p.positions.map((pos) => (
-            <PositionPill key={pos} pos={pos} />
-          ))}
-          {p.lastBench ? (
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 11.5,
-                color: "var(--uff-text-dim)",
-                marginLeft: p.positions.length > 0 ? 6 : 0,
-              }}
-            >
-              {p.lastBench.value} · {p.lastBench.when}
-            </span>
-          ) : (
-            <span
-              style={{
-                fontSize: 11.5,
-                color: "var(--uff-text-mute)",
-                fontStyle: "italic",
-                marginLeft: p.positions.length > 0 ? 6 : 0,
-              }}
-            >
-              No benchmarks yet
-            </span>
-          )}
-        </div>
-      </div>
-      <StatusPill status={p.status} injured={p.isInjured} compact />
     </Link>
   );
 }

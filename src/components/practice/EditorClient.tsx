@@ -79,6 +79,7 @@ function toEdit(plan: EditorPlan): {
   title: string;
   date: string;
   start_time: string | null;
+  end_time: string | null;
   status: PlanStatus;
   blocks: EditBlock[];
   breaks: EditBreak[];
@@ -88,6 +89,7 @@ function toEdit(plan: EditorPlan): {
     title: plan.title,
     date: plan.practice_date,
     start_time: plan.start_time,
+    end_time: plan.end_time,
     status: plan.status,
     blocks: plan.blocks.map((b) => ({
       ...b,
@@ -105,6 +107,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
   const [title, setTitle] = useState(initial.title);
   const [date, setDate] = useState(initial.date);
   const [startTime, setStartTime] = useState<string | null>(initial.start_time);
+  const [endTime, setEndTime] = useState<string | null>(initial.end_time);
   const [status, setStatus] = useState<PlanStatus>(initial.status);
   const [blocks, setBlocks] = useState<EditBlock[]>(initial.blocks);
   const [breaks, setBreaks] = useState<EditBreak[]>(initial.breaks);
@@ -123,7 +126,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       title,
       practice_date: date,
       start_time: startTime,
-      end_time: null,
+      end_time: endTime,
       status,
       notes: plan.notes,
       blocks: blocks.map((b) => ({ ...b, drills: b.drills })),
@@ -339,6 +342,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       title,
       practice_date: date,
       start_time: startTime,
+      end_time: endTime,
       status: nextStatus,
       blocks: buildPayloadBlocks(),
       breaks: visibleBreaksPayload,
@@ -395,7 +399,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
               <FieldRow label="Title">
                 <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle()} />
               </FieldRow>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 10 }}>
                 <FieldRow label="Date">
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle()} />
                 </FieldRow>
@@ -404,6 +408,14 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                     type="time"
                     value={startTime ?? ""}
                     onChange={(e) => setStartTime(e.target.value || null)}
+                    style={inputStyle()}
+                  />
+                </FieldRow>
+                <FieldRow label="End time">
+                  <input
+                    type="time"
+                    value={endTime ?? ""}
+                    onChange={(e) => setEndTime(e.target.value || null)}
                     style={inputStyle()}
                   />
                 </FieldRow>
