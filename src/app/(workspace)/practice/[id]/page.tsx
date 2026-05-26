@@ -12,12 +12,12 @@ import {
   PracticeStatusPill,
   BudgetBar,
   MiniStat,
-  RsvpBar,
   PIcon,
   formatDateLabel,
   formatTimeLabel,
 } from "@/components/practice/atoms";
 import { BlockReadCard, BreakReadRow } from "@/components/practice/BlockReadCard";
+import ManageAttendanceCard, { type RsvpPlayer } from "@/components/practice/ManageAttendanceCard";
 import { blockColor } from "@/lib/practice/block-colors";
 import { duplicatePlanAndRedirect } from "@/lib/practice/actions";
 
@@ -63,24 +63,21 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
 
   const t = planTotals(plan);
   const rows = interleavePlan(plan);
-  const playerById = new Map<string, { initials: string; color: string; name: string }>();
-  for (const p of players ?? []) {
-    playerById.set(p.id as string, {
-      initials: initialsFor((p.player_name as string) ?? "?"),
-      color: playerColorForIndex((p.color_index as number) ?? 0),
-      name: (p.player_name as string) ?? "Player",
-    });
-  }
-  const rosterSize = (players ?? []).length;
 
-  const attendeesIn = plan.attendees
-    .filter((a) => a.rsvp === true)
-    .map((a) => playerById.get(a.player_id))
-    .filter((p): p is { initials: string; color: string; name: string } => !!p);
-  const attendeesOut = plan.attendees
-    .filter((a) => a.rsvp === false)
-    .map((a) => playerById.get(a.player_id))
-    .filter((p): p is { initials: string; color: string; name: string } => !!p);
+  // Build the full roster payload for the manage-attendance card. We want
+  // every active player on the team so the modal can flip their status,
+  // not just the ones who've already RSVP'd.
+  const roster: RsvpPlayer[] = (players ?? []).map((p) => ({
+    id: p.id as string,
+    name: (p.player_name as string) ?? "Player",
+    position:
+      Array.isArray(p.positions) && p.positions.length > 0 ? (p.positions[0] as string) : null,
+    initials: initialsFor((p.player_name as string) ?? "?"),
+    color: playerColorForIndex((p.color_index as number) ?? 0),
+  }));
+  const initialAttendees: Record<string, boolean | null> = Object.fromEntries(
+    plan.attendees.map((a) => [a.player_id, a.rsvp]),
+  );
 
   const teamColor = teamColorHex(team.team_color as string);
   const initials =
@@ -243,29 +240,12 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
 
             {/* Side rail */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 80 }}>
-              <div className="w-card" style={{ padding: 18 }}>
-                <div className="sect-head" style={{ marginBottom: 14 }}>
-                  <div className="title">
-                    <span className="tk" />
-                    Who&rsquo;s coming
-                  </div>
-                  <Link
-                    href={`/practice/${plan.id}/edit`}
-                    className="wbtn ghost"
-                    style={{ height: 28, fontSize: 11, padding: "0 10px", textDecoration: "none" }}
-                  >
-                    Manage
-                  </Link>
-                </div>
-                <RsvpBar i={t.rsvpIn} m={0} o={t.rsvpOut} total={rosterSize} />
-
-                <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <RsvpGroup label="Confirmed" count={attendeesIn.length} color="var(--uff-lime)" players={attendeesIn} />
-                  {attendeesOut.length > 0 && (
-                    <RsvpGroup label="Can't make it" count={attendeesOut.length} color="var(--uff-text-mute)" players={attendeesOut} dim />
-                  )}
-                </div>
-              </div>
+              <ManageAttendanceCard
+                planId={plan.id}
+                dateLabel={formatDateLabel(plan.practice_date)}
+                roster={roster}
+                initialAttendees={initialAttendees}
+              />
 
               <div className="w-card subdued" style={{ padding: 16 }}>
                 <div className="sect-head" style={{ marginBottom: 12 }}>
@@ -296,98 +276,3 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
   );
 }
 
-function RsvpGroup({
-  label,
-  count,
-  color,
-  players,
-  dim,
-}: {
-  label: string;
-  count: number;
-  color: string;
-  players: { initials: string; color: string; name: string }[];
-  dim?: boolean;
-}) {
-  if (count === 0) return null;
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 2, background: color }} />
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: ".1em",
-            color: "var(--uff-text-dim)",
-            textTransform: "uppercase",
-          }}
-        >
-          {label}
-        </span>
-        <span
-          className="mono"
-          style={{
-            marginLeft: "auto",
-            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-            fontSize: 11,
-            color: "var(--uff-text-mute)",
-          }}
-        >
-          {count}
-        </span>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {players.slice(0, 9).map((p, i) => (
-          <div
-            key={i}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "3px 7px",
-              background: dim ? "transparent" : "rgba(255,255,255,0.03)",
-              border: "1px solid var(--uff-line-soft)",
-              borderRadius: 999,
-              opacity: dim ? 0.5 : 1,
-            }}
-          >
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: "50%",
-                background: p.color,
-                color: "#1a0f08",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 8,
-                fontWeight: 800,
-                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-              }}
-            >
-              {p.initials}
-            </span>
-            <span style={{ fontSize: 10.5, color: "var(--uff-text-dim)" }}>{p.name.split(" ")[0]}</span>
-          </div>
-        ))}
-        {players.length > 9 && (
-          <span
-            style={{
-              padding: "3px 7px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid var(--uff-line-soft)",
-              fontSize: 10.5,
-              color: "var(--uff-text-mute)",
-              fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-            }}
-          >
-            +{players.length - 9}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
