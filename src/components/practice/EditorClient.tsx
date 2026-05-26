@@ -75,6 +75,20 @@ type EditBreak = PlanBreak & { key: string };
 let __cid = 0;
 const cid = (prefix: string) => `${prefix}-${++__cid}-${Date.now()}`;
 
+// Add minutes to a "HH:MM" or "HH:MM:SS" time string, wrapping past midnight.
+// Returns the same shape it was given. Used to keep End time in sync with
+// Start time (default offset = 120 = 2h).
+function addMinutes(time: string, minutes: number): string {
+  const [hStr, mStr, sStr] = time.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const total = (h * 60 + m + minutes) % (24 * 60);
+  const wrapped = total < 0 ? total + 24 * 60 : total;
+  const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
+  const mm = String(wrapped % 60).padStart(2, "0");
+  return sStr !== undefined ? `${hh}:${mm}:${sStr}` : `${hh}:${mm}`;
+}
+
 function toEdit(plan: EditorPlan): {
   title: string;
   date: string;
@@ -406,14 +420,22 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                 <FieldRow label="Start time">
                   <input
                     type="time"
+                    step={300}
                     value={startTime ?? ""}
-                    onChange={(e) => setStartTime(e.target.value || null)}
+                    onChange={(e) => {
+                      const v = e.target.value || null;
+                      setStartTime(v);
+                      // Auto-bump end time to start + 2h. Always — if a
+                      // user wants a different end they can set it after.
+                      setEndTime(v ? addMinutes(v, 120) : null);
+                    }}
                     style={inputStyle()}
                   />
                 </FieldRow>
                 <FieldRow label="End time">
                   <input
                     type="time"
+                    step={300}
                     value={endTime ?? ""}
                     onChange={(e) => setEndTime(e.target.value || null)}
                     style={inputStyle()}
