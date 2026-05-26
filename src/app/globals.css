@@ -698,6 +698,40 @@
 .uff-web .wbtn.ghost:hover { color: var(--uff-text); background: rgba(255, 255, 255, 0.03); }
 .uff-web .wbtn:disabled { cursor: not-allowed; opacity: 0.55; }
 
+/* Filter / range chip used in roster + history time-range rows */
+.uff-web .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--uff-surface-2);
+  border: 1px solid var(--uff-line-soft);
+  border-radius: 999px;
+  color: var(--uff-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.uff-web .chip:hover { color: var(--uff-text); background: rgba(255, 255, 255, 0.04); }
+.uff-web .chip.on {
+  background: rgba(255, 106, 26, 0.12);
+  border-color: rgba(255, 106, 26, 0.45);
+  color: var(--uff-orange);
+}
+.uff-web .chip .ct {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--uff-text-mute);
+  margin-left: 2px;
+}
+.uff-web .chip.on .ct { color: var(--uff-orange); }
+
 /* Responsive collapse: hide dashboard sidebar below md, allow page to stretch */
 @media (max-width: 767px) {
   .uff-web {

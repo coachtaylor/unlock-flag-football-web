@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import PlayerForm from "../PlayerForm";
 
-export default async function NewPlayerPage() {
+export default async function LegacyNewPlayerRedirect() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,7 +15,6 @@ export default async function NewPlayerPage() {
     .limit(1)
     .maybeSingle();
 
-  if (!membership) redirect("/team-setup");
-
-  return <PlayerForm teamId={membership.team_id as string} />;
+  if (!membership) redirect("/onboarding/scope");
+  redirect(`/dashboard/team/${membership.team_id}/roster/new`);
 }

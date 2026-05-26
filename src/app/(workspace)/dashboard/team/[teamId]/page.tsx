@@ -273,7 +273,7 @@ export default async function TeamDashboardPage({
           </div>
 
           {isEmptyTeam ? (
-            <EmptyTeamCard />
+            <EmptyTeamCard teamId={teamId} />
           ) : (
             <div className="td-body-grid">
               <div className="td-body-main">
@@ -283,7 +283,7 @@ export default async function TeamDashboardPage({
               <div className="td-body-side">
                 <div>
                   <SectionHead label="Recent assessments" />
-                  <RecentAssessments rows={recentBenchmarks} />
+                  <RecentAssessments rows={recentBenchmarks} teamId={teamId} />
                 </div>
                 <div>
                   <SectionHead label="Recent practices" />
@@ -464,7 +464,7 @@ function SectionHead({ label }: { label: string }) {
   );
 }
 
-function EmptyTeamCard() {
+function EmptyTeamCard({ teamId }: { teamId: string }) {
   // Brand-new team: no players, drills, or benchmarks. Centered hero
   // card with a single primary CTA (Run your first benchmark) and the
   // two secondary steps that get you there. Wider, more breathing room
@@ -473,6 +473,7 @@ function EmptyTeamCard() {
     { n: 2, t: "Add drills", sub: "Build your library.", href: "/drills/new" },
     { n: 3, t: "Plan a practice", sub: "Build the agenda.", href: "/practice/new" },
   ];
+  const rosterNewHref = `/dashboard/team/${teamId}/roster/new`;
   return (
     <div
       className="w-card"
@@ -525,7 +526,7 @@ function EmptyTeamCard() {
         progression show up here as the data comes in.
       </p>
       <Link
-        href="/roster/new"
+        href={rosterNewHref}
         className="wbtn primary"
         style={{
           marginTop: 4,
@@ -733,7 +734,13 @@ function TeamOverview({ rows }: { rows: StrengthRow[] }) {
   );
 }
 
-function RecentAssessments({ rows }: { rows: RecentBenchmarkRow[] }) {
+function RecentAssessments({
+  rows,
+  teamId,
+}: {
+  rows: RecentBenchmarkRow[];
+  teamId: string;
+}) {
   if (rows.length === 0) {
     return (
       <div
@@ -828,7 +835,7 @@ function RecentAssessments({ rows }: { rows: RecentBenchmarkRow[] }) {
         return playerId ? (
           <Link
             key={row.id}
-            href={`/roster/${playerId}`}
+            href={`/dashboard/team/${teamId}/roster/${playerId}`}
             style={{
               display: "block",
               textDecoration: "none",

@@ -52,3 +52,35 @@ export function isTeamColorId(value: unknown): value is TeamColorId {
     (TEAM_COLOR_IDS as readonly string[]).includes(value)
   );
 }
+
+// Per-player avatar palette. Mirrors unlock-mobile's 20-swatch palette
+// (migration 45) so the same player.color_index produces the same hex
+// on web and mobile. Always look up via this helper — never derive
+// avatar color from position or any other field.
+export const PLAYER_COLORS = [
+  "#FF6A1A", // orange
+  "#C2FF3D", // lime
+  "#6EA8FF", // blue
+  "#FFB347", // gold
+  "#FF6A8B", // pink
+  "#7DDFD2", // cyan
+  "#B89BFF", // violet
+  "#FFCE52", // saffron
+  "#A7E8B0", // mint
+  "#FF9B6E", // coral
+  "#9DB0FF", // periwinkle
+  "#F4F4F2", // bone
+  "#FF8C42", // tangerine
+  "#8BE5A1", // sage
+  "#7FB3FF", // sky
+  "#F2A6FF", // lilac
+  "#E8C77A", // wheat
+  "#6FD9B5", // jade
+  "#FF7CA8", // rose
+  "#D9B3FF", // mauve
+];
+
+export function playerColorForIndex(colorIndex: number | null | undefined): string {
+  if (colorIndex == null || colorIndex < 0) return PLAYER_COLORS[0];
+  return PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
+}
