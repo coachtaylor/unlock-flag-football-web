@@ -50,7 +50,7 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
       .maybeSingle(),
     supabase
       .from("team_players")
-      .select("id, player_name, color_index, jersey_number, positions")
+      .select("id, player_name, color_index, jersey_number, positions, is_injured")
       .eq("team_id", plan.team_id)
       .eq("status", "active"),
     supabase
@@ -74,6 +74,7 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
       Array.isArray(p.positions) && p.positions.length > 0 ? (p.positions[0] as string) : null,
     initials: initialsFor((p.player_name as string) ?? "?"),
     color: playerColorForIndex((p.color_index as number) ?? 0),
+    isInjured: !!p.is_injured,
   }));
   const initialAttendees: Record<string, boolean | null> = Object.fromEntries(
     plan.attendees.map((a) => [a.player_id, a.rsvp]),

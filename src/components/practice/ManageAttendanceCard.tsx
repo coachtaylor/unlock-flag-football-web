@@ -23,6 +23,7 @@ export type RsvpPlayer = {
   position: string | null;
   initials: string;
   color: string;
+  isInjured?: boolean;
 };
 
 type Props = {
@@ -188,7 +189,7 @@ export default function ManageAttendanceCard({
                     alignItems: "center",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <span
                       style={{
                         width: 28,
@@ -202,11 +203,24 @@ export default function ManageAttendanceCard({
                         fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
                         fontSize: 11,
                         fontWeight: 800,
+                        flexShrink: 0,
                       }}
                     >
                       {p.initials}
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--uff-text)" }}>{p.name}</span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--uff-text)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {p.name}
+                    </span>
+                    {p.isInjured && <InjuredTag />}
                   </div>
                   <span
                     className="mono"
@@ -337,13 +351,16 @@ function RsvpGroup({
         {players.slice(0, 9).map((p) => (
           <span
             key={p.id}
+            title={p.isInjured ? `${p.name} · injured` : p.name}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
               padding: "3px 7px",
               background: dim ? "transparent" : "rgba(255,255,255,0.03)",
-              border: "1px solid var(--uff-line-soft)",
+              border: p.isInjured
+                ? "1px solid rgba(255,77,77,0.40)"
+                : "1px solid var(--uff-line-soft)",
               borderRadius: 999,
               opacity: dim ? 0.5 : 1,
             }}
@@ -361,6 +378,7 @@ function RsvpGroup({
                 fontSize: 8,
                 fontWeight: 800,
                 fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                boxShadow: p.isInjured ? "0 0 0 1.5px var(--uff-red)" : "none",
               }}
             >
               {p.initials}
@@ -498,6 +516,42 @@ function StatBtn({
       )}
       {label}
     </button>
+  );
+}
+
+// Small red pill rendered next to an injured player's name. Matches the
+// "Injured" eyebrow treatment from the player-detail hero (Build 6.5).
+function InjuredTag() {
+  return (
+    <span
+      title="This player is currently marked injured"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 6px",
+        borderRadius: 4,
+        background: "rgba(255,77,77,0.12)",
+        border: "1px solid rgba(255,77,77,0.30)",
+        color: "var(--uff-red)",
+        fontSize: 9.5,
+        fontWeight: 700,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: "var(--uff-red)",
+        }}
+      />
+      Injured
+    </span>
   );
 }
 
