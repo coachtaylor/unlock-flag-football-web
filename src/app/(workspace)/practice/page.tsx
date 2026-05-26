@@ -88,13 +88,20 @@ export default async function PracticeListPage() {
   }
 
   // Stats — derived from completed plans only.
+  // fetchPlanSummaries returns plans ordered by practice_date desc, so
+  // completedPlans[0] is the most recent completed practice.
   const completedPlans = plans.filter((p) => p.status === "completed");
   const lastN = Math.min(completedPlans.length, 8);
   const recent = completedPlans.slice(0, lastN);
-  const attendPct =
-    recent.length > 0 && (players?.length ?? 0) > 0
+  const rosterSize = (players ?? []).length;
+  const lastPracticeAttendPct =
+    completedPlans.length > 0 && rosterSize > 0
+      ? Math.round((completedPlans[0].rsvp_in / rosterSize) * 100)
+      : 0;
+  const overallAttendPct =
+    completedPlans.length > 0 && rosterSize > 0
       ? Math.round(
-          (recent.reduce((a, p) => a + p.rsvp_in, 0) / (recent.length * (players?.length ?? 1))) * 100,
+          (completedPlans.reduce((a, p) => a + p.rsvp_in, 0) / (completedPlans.length * rosterSize)) * 100,
         )
       : 0;
   const fieldMin =
@@ -152,7 +159,14 @@ export default async function PracticeListPage() {
             plans={plans}
             rosterSize={(players ?? []).length}
             rosterByPlan={rosterByPlan}
-            stats={{ practices: lastN, attendPct, fieldMin, avgDrills }}
+            stats={{
+              practices: lastN,
+              totalCompleted: completedPlans.length,
+              lastPracticeAttendPct,
+              overallAttendPct,
+              fieldMin,
+              avgDrills,
+            }}
           />
         </div>
       </div>

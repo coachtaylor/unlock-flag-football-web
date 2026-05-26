@@ -42,7 +42,14 @@ export type ListProps = {
   plans: PlanSummary[];
   rosterSize: number;
   rosterByPlan: Record<string, ConfirmedAvatar[]>;
-  stats: { practices: number; attendPct: number; fieldMin: number; avgDrills: number };
+  stats: {
+    practices: number;
+    totalCompleted: number;
+    lastPracticeAttendPct: number;
+    overallAttendPct: number;
+    fieldMin: number;
+    avgDrills: number;
+  };
 };
 
 export default function PracticeListClient({
@@ -81,7 +88,9 @@ export default function PracticeListClient({
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <StatsRow
           lastN={stats.practices}
-          attendPct={stats.attendPct}
+          totalCompleted={stats.totalCompleted}
+          lastPracticeAttendPct={stats.lastPracticeAttendPct}
+          overallAttendPct={stats.overallAttendPct}
           fieldMin={stats.fieldMin}
           avgDrills={stats.avgDrills}
         />
@@ -129,65 +138,106 @@ export default function PracticeListClient({
   );
 }
 
-// ── Stats row (single inline line, no card chrome) ─────────────────────
+// ── Stats row ──────────────────────────────────────────────────────────
+// 4-column grid of practice KPIs. Numbers are the focus; labels sit below
+// in a tiny uppercase eyebrow. Vertical hairlines separate columns.
 function StatsRow({
   lastN,
-  attendPct,
+  totalCompleted,
+  lastPracticeAttendPct,
+  overallAttendPct,
   fieldMin,
   avgDrills,
 }: {
   lastN: number;
-  attendPct: number;
+  totalCompleted: number;
+  lastPracticeAttendPct: number;
+  overallAttendPct: number;
   fieldMin: number;
   avgDrills: number;
 }) {
   return (
     <div
       style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        gap: 0,
+        background: "var(--uff-surface)",
+        border: "1px solid var(--uff-line-soft)",
+        borderRadius: 10,
+        overflow: "hidden",
+      }}
+    >
+      <StatCell
+        label="Last practice"
+        value={`${lastPracticeAttendPct}%`}
+        sub="attendance"
+        valueColor="var(--uff-lime)"
+      />
+      <StatCell
+        label={`Overall · ${totalCompleted}`}
+        value={`${overallAttendPct}%`}
+        sub="attendance"
+        valueColor="var(--uff-lime)"
+        leftDivider
+      />
+      <StatCell label={`Avg · ${lastN}`} value={`${fieldMin}m`} sub="on field" leftDivider />
+      <StatCell label={`Avg · ${lastN}`} value={avgDrills.toFixed(1)} sub="drills" leftDivider />
+    </div>
+  );
+}
+
+function StatCell({
+  label,
+  value,
+  sub,
+  valueColor,
+  leftDivider,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  valueColor?: string;
+  leftDivider?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "12px 16px",
+        borderLeft: leftDivider ? "1px solid var(--uff-line-soft)" : "none",
         display: "flex",
-        alignItems: "baseline",
-        gap: 14,
-        flexWrap: "wrap",
-        padding: "8px 0",
-        borderBottom: "1px solid var(--uff-line-soft)",
-        fontSize: 12.5,
+        flexDirection: "column",
+        gap: 4,
       }}
     >
       <span
         style={{
-          fontSize: 10,
+          fontSize: 9.5,
           fontWeight: 700,
           letterSpacing: ".14em",
           color: "var(--uff-text-mute)",
           textTransform: "uppercase",
         }}
       >
-        Last {lastN}
+        {label}
       </span>
-      <InlineStat value={`${attendPct}%`} label="attend" valueColor="var(--uff-lime)" />
-      <InlineStat value={`${fieldMin}m`} label="on field" />
-      <InlineStat value={avgDrills.toFixed(1)} label="avg drills" />
-    </div>
-  );
-}
-
-function InlineStat({ value, label, valueColor }: { value: string; label: string; valueColor?: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
       <span
         className="mono"
         style={{
           fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-          fontSize: 14,
-          fontWeight: 700,
+          fontSize: 24,
+          fontWeight: 800,
           color: valueColor ?? "var(--uff-text)",
-          letterSpacing: "-0.01em",
+          letterSpacing: "-0.02em",
+          lineHeight: 1,
         }}
       >
         {value}
       </span>
-      <span style={{ color: "var(--uff-text-mute)", fontSize: 11.5 }}>{label}</span>
-    </span>
+      <span style={{ fontSize: 10.5, color: "var(--uff-text-mute)", letterSpacing: ".02em" }}>
+        {sub}
+      </span>
+    </div>
   );
 }
 
