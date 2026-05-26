@@ -482,7 +482,7 @@ function MixBarLegend({
         flexWrap: "wrap",
         alignItems: "center",
         gap: "4px 26px",
-        fontSize: 10,
+        fontSize: 11.5,
         color: "var(--uff-text-mute)",
         lineHeight: 1.3,
       }}
@@ -491,8 +491,8 @@ function MixBarLegend({
         if (b.minutes === 0) return null;
         const c = blockColor(b.name);
         return (
-          <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c.accent }} />
+          <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.accent }} />
             <span style={{ color: "var(--uff-text-dim)" }}>{b.name}</span>
             <span
               className="mono"
@@ -508,8 +508,8 @@ function MixBarLegend({
         );
       })}
       {breakMinutes > 0 && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#6EA8FF", opacity: 0.7 }} />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#6EA8FF", opacity: 0.7 }} />
           <span style={{ color: "var(--uff-text-dim)" }}>Water</span>
           <span
             className="mono"
