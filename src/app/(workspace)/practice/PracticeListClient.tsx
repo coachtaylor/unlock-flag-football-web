@@ -22,6 +22,18 @@ import {
 } from "@/components/practice/atoms";
 import { duplicatePlanAndRedirect, newPlanAndRedirect } from "@/lib/practice/actions";
 
+// Pencil icon used by the hero card's edit affordance. PIcon doesn't ship
+// an edit glyph yet, so inline a minimal one here rather than touching the
+// shared atoms set.
+function EditIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 20h4l10-10-4-4L4 16v4z" />
+      <path d="M14 6l4 4" />
+    </svg>
+  );
+}
+
 type ConfirmedAvatar = { initials: string; color: string };
 
 export type ListProps = {
@@ -274,6 +286,14 @@ function FeaturedPlanCard({
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <PracticeStatusPill status={plan.status} mini />
             <span style={{ flex: 1 }} />
+            <Link
+              href={`/practice/${plan.id}/edit`}
+              className="icon-btn"
+              title="Edit plan"
+              style={{ width: 26, height: 26, textDecoration: "none" }}
+            >
+              <EditIcon size={12} />
+            </Link>
             <button
               type="button"
               className="icon-btn"
@@ -340,23 +360,6 @@ function FeaturedPlanCard({
           <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
           <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
         </div>
-        <Link
-          href={`/practice/${plan.id}/edit`}
-          style={{
-            height: 30,
-            padding: "0 12px",
-            display: "inline-flex",
-            alignItems: "center",
-            color: "var(--uff-text-dim)",
-            fontSize: 12.5,
-            fontWeight: 600,
-            textDecoration: "none",
-            background: "transparent",
-            border: 0,
-          }}
-        >
-          Edit
-        </Link>
         <Link
           href={`/practice/${plan.id}`}
           className="wbtn primary"
