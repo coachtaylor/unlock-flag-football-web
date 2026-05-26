@@ -334,10 +334,11 @@ function FeaturedPlanCard({
 
       <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
-        {/* Mix bar extends to fill the row between avatars and the action
-            buttons. The flex `gap` keeps a 12px breathing room from Edit. */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Mix bar + tiny legend below it. Bar extends to fill the row up to
+            the action buttons; legend wraps under it with name + share %. */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
           <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
+          <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
         </div>
         <Link
           href={`/practice/${plan.id}/edit`}
@@ -459,6 +460,70 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
         </div>
       </div>
     </Link>
+  );
+}
+
+// Compact legend for the hero mix bar: colored dot + block name + share %.
+// Water break (if any) renders as a single blue entry at the end.
+function MixBarLegend({
+  blocks,
+  breakMinutes,
+}: {
+  blocks: { id: string; name: string; minutes: number }[];
+  breakMinutes: number;
+}) {
+  const total = blocks.reduce((a, b) => a + b.minutes, 0) + breakMinutes;
+  if (total === 0) return null;
+  const pct = (n: number) => Math.round((n / total) * 100);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "3px 10px",
+        fontSize: 10,
+        color: "var(--uff-text-mute)",
+        lineHeight: 1.3,
+      }}
+    >
+      {blocks.map((b) => {
+        if (b.minutes === 0) return null;
+        const c = blockColor(b.name);
+        return (
+          <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c.accent }} />
+            <span style={{ color: "var(--uff-text-dim)" }}>{b.name}</span>
+            <span
+              className="mono"
+              style={{
+                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                fontWeight: 700,
+                color: "var(--uff-text)",
+              }}
+            >
+              {pct(b.minutes)}%
+            </span>
+          </span>
+        );
+      })}
+      {breakMinutes > 0 && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#6EA8FF", opacity: 0.7 }} />
+          <span style={{ color: "var(--uff-text-dim)" }}>Water</span>
+          <span
+            className="mono"
+            style={{
+              fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+              fontWeight: 700,
+              color: "var(--uff-text)",
+            }}
+          >
+            {pct(breakMinutes)}%
+          </span>
+        </span>
+      )}
+    </div>
   );
 }
 
