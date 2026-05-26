@@ -99,6 +99,7 @@ export function blockMinutes(block: PlanBlock): number {
 export type PlanTotals = {
   drillsMin: number;
   breakMin: number;
+  breakCount: number;
   total: number;
   drillCount: number;
   blockCount: number;
@@ -109,6 +110,17 @@ export type PlanTotals = {
   rsvpMaybe: number;
   target: number;
 };
+
+// Breaks "render" only when their after_block_order matches an existing
+// block_order (or is -1, meaning "before the first block"). Anything else
+// is an orphan — usually left over from a block removal or reorder that
+// didn't fix up its anchored breaks. Totals should match what's rendered,
+// so we filter through this here.
+export function visibleBreaks(plan: PracticePlan): PlanBreak[] {
+  const valid = new Set<number>(plan.blocks.map((b) => b.block_order));
+  valid.add(-1);
+  return plan.breaks.filter((br) => valid.has(br.after_block_order));
+}
 
 export function planTotals(plan: PracticePlan): PlanTotals {
   let drillsMin = 0;
@@ -127,7 +139,8 @@ export function planTotals(plan: PracticePlan): PlanTotals {
       if (d.benchmark_types && d.benchmark_types.length > 0) benchCount += 1;
     }
   }
-  const breakMin = plan.breaks.reduce((a, br) => a + br.duration_minutes, 0);
+  const renderBreaks = visibleBreaks(plan);
+  const breakMin = renderBreaks.reduce((a, br) => a + br.duration_minutes, 0);
   const total = drillsMin + breakMin;
   // RSVP currently stored as a single boolean; "maybe" doesn't exist on
   // the schema yet. We surface in/out only; reserve maybe for future.
@@ -139,6 +152,7 @@ export function planTotals(plan: PracticePlan): PlanTotals {
   return {
     drillsMin,
     breakMin,
+    breakCount: renderBreaks.length,
     total,
     drillCount,
     blockCount: plan.blocks.length,

@@ -195,7 +195,24 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
     });
   }
   function removeBlock(blockKey: string) {
-    setBlocks((bs) => bs.filter((b) => b.key !== blockKey).map((b, i) => ({ ...b, block_order: i })));
+    // Find the removed block's order BEFORE we drop it, so we can fix up
+    // breaks anchored to it (delete the ones pointing AT the removed
+    // block, shift higher anchors down by 1).
+    setBlocks((bs) => {
+      const removed = bs.find((b) => b.key === blockKey);
+      if (!removed) return bs;
+      const removedOrder = removed.block_order;
+      setBreaks((br) =>
+        br
+          .filter((b) => b.after_block_order !== removedOrder)
+          .map((b) =>
+            b.after_block_order > removedOrder
+              ? { ...b, after_block_order: b.after_block_order - 1 }
+              : b,
+          ),
+      );
+      return bs.filter((b) => b.key !== blockKey).map((b, i) => ({ ...b, block_order: i }));
+    });
   }
   function reorderBlock(blockKey: string, dir: -1 | 1) {
     setBlocks((bs) => {
@@ -204,7 +221,19 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       if (i < 0 || j < 0 || j >= bs.length) return bs;
       const cp = bs.slice();
       [cp[i], cp[j]] = [cp[j], cp[i]];
-      return cp.map((b, k) => ({ ...b, block_order: k }));
+      const reindexed = cp.map((b, k) => ({ ...b, block_order: k }));
+      // Breaks were anchored to the OLD block_orders at positions i and j.
+      // After the swap, the block formerly at i is now at j and vice versa,
+      // so a break anchored to i should now be anchored to j (and vice
+      // versa) to stay attached to the same block.
+      setBreaks((br) =>
+        br.map((b) => {
+          if (b.after_block_order === i) return { ...b, after_block_order: j };
+          if (b.after_block_order === j) return { ...b, after_block_order: i };
+          return b;
+        }),
+      );
+      return reindexed;
     });
   }
   function addDrillToBlock(blockKey: string, drill: DrillCatalogEntry) {
@@ -293,6 +322,18 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
 
   async function commitSave(nextStatus: "draft" | "scheduled") {
     setError(null);
+    // Drop orphan breaks (whose after_block_order doesn't point at an
+    // existing block) before saving — they'd never render anyway, and
+    // sending them would silently inflate the total on the next load.
+    const validOrders = new Set<number>(blocks.map((b, i) => i));
+    validOrders.add(-1);
+    const visibleBreaksPayload = breaks
+      .filter((br) => validOrders.has(br.after_block_order))
+      .map((br, i) => ({
+        after_block_order: br.after_block_order,
+        break_order: i,
+        duration_minutes: br.duration_minutes,
+      }));
     const res = await savePlan({
       plan_id: plan.id,
       title,
@@ -300,11 +341,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       start_time: startTime,
       status: nextStatus,
       blocks: buildPayloadBlocks(),
-      breaks: breaks.map((br, i) => ({
-        after_block_order: br.after_block_order,
-        break_order: i,
-        duration_minutes: br.duration_minutes,
-      })),
+      breaks: visibleBreaksPayload,
     });
     if (!res.ok) {
       setError(res.error);
@@ -1610,7 +1647,7 @@ function PlanTotalsCard({ plan }: { plan: PracticePlan }) {
       </div>
       <TotalsRow row="Blocks" v={plan.blocks.length} />
       <TotalsRow row="Drills" v={t.drillCount} />
-      <TotalsRow row="Water breaks" v={plan.breaks.length} />
+      <TotalsRow row="Water breaks" v={t.breakCount} />
       <TotalsRow row="Parallel slots" v={t.parallelSlots} />
       <TotalsRow row="Total minutes" v={`${t.total}m`} accent />
     </div>
