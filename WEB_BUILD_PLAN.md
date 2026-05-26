@@ -589,7 +589,24 @@ Three smaller mobile-parity gaps that all relate to capturing rich coaching data
 
 ---
 
-## Build 7 — Team dashboard widget parity ⏳
+## Build 7 — Team dashboard widget parity ✅
+
+### Shipped (2026-05-26)
+- Refactored `/dashboard/team/[teamId]` around the UFF Web coach console design (`UFF Web.html`). Hero + Next-practice row, Pinned Pulses strip (KPI sparklines, 4 cards), Benchmark Trends (Recharts line chart), Movers leaderboard, Drill Mix donut (with underweight nudge), Practice Cadence heatmap, Attendance widget (rate + delta + offense/defense + streak dots), Needs Attention card, Recent Activity feed, Most-Run Drills bar list.
+- Captain View Toggle added in the topbar — visible only when `team_players.is_captain=true` AND `team_players.user_id = auth.uid()`. `?view=player` URL param scopes Pinned Pulses + Attendance to that captain's own player record. Other widgets stay team-wide per the plan's risk note.
+- Single data loader `lib/dashboard/team-home-data.ts` does one Promise.all then computes all widget aggregates in JS — no new SQL views added (the existing `team_drills.is_dashboard_pinned` column carries pin state; `practice_plan_attendees.attended` drives attendance + streaks; categories come from `team_drill_categories` joined to `drill_categories`).
+- Pin/unpin server action at `(workspace)/dashboard/team/[teamId]/actions.ts` + `PinButton` client component wired into drill detail topbar. Toggles `team_drills.is_dashboard_pinned` + `dashboard_pinned_at`, then revalidates dashboard + drill detail.
+- Recharts added (`recharts@latest`) for the Benchmark Trends chart only. Sparklines + donut + cadence + side-bar gauges still hand-rolled SVG per the plan's bundle-size concern.
+- `loading.tsx` skeleton rebuilt to mirror the new grid (hero + KPI + trends + 4-up + activity rows) at 1024/1280px breakpoints.
+- Locked-insight empty states on every widget. Brand-new team falls through to a single bottom card guiding "pin a drill, log a benchmark, complete a practice".
+- Branch: `build-7-dashboard-widgets` off `build-5.5-practice-blocks`. Single commit. Not merged to main.
+
+### Notes / known divergences from the plan
+- Plan said hand-roll sparkline + donut to avoid Recharts. We added Recharts anyway for the trends widget (user explicitly opted-in during scope clarification). Sparkline + donut + cadence remain hand-rolled.
+- Drill mix categorizes via the `team_drill_categories` junction (already present) + a small `categoryKey()` heuristic that maps category names → known buckets (offense / defense / footwork / routes / conditioning / fundamentals / qb / flag). Anything outside that set falls into "other".
+- Offense/defense split for attendance derives from `team_players.positions[]` string matching, not a dedicated `side` column. Heuristic — players with positions containing "qb / wr / rb / center / receiver / rusher_offense / offense" count as offense; "cb / safety / rusher / lb / db / defense" count as defense. A player on both sides is counted in both rates.
+- Activity feed currently pulls from `benchmark_results.created_at` + `practice_plans.created_at` only — drill-library edits and pin events not yet logged.
+- Squad-benchmark delta in the hero is derived from the top pinned drill's current-vs-prior window. Not season-wide because we don't yet have a "season start" anchor on `teams`.
 
 ### Goal
 The team dashboard responsive layout shipped in Build 3, but the *widgets* on it are a stripped-down subset of what mobile has. Mobile's team dashboard (per `MOBILE_APP_REFERENCE.md` §6.3) is the heart of the app — Build 3 gave it space to breathe, this build fills the space with the actual widgets.

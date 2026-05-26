@@ -28,6 +28,7 @@ import {
 } from "@/components/uff-web/drills/atoms";
 import type { DiagramData } from "@/types/diagram";
 import { archiveDrill, duplicateDrill } from "./actions";
+import PinButton from "@/components/dashboard/widgets/PinButton";
 
 export const dynamic = "force-dynamic";
 
@@ -279,6 +280,11 @@ export default async function DrillDetailPage({ params }: Props) {
                   Run benchmark
                 </Link>
               )}
+              <PinButton
+                drillId={drill.id as string}
+                teamId={team.id as string}
+                pinned={pinned}
+              />
               <Link href={`/drills/${drill.id}/edit`} className="wbtn">
                 Edit drill
               </Link>

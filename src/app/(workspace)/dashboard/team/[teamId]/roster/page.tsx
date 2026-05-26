@@ -112,7 +112,7 @@ export default async function TeamRosterPage({
     .order("player_name", { ascending: true });
 
   const playerIds = (players ?? []).map((p) => p.id as string);
-  let recentByPlayer = new Map<string, BenchmarkJoin>();
+  const recentByPlayer = new Map<string, BenchmarkJoin>();
   if (playerIds.length > 0) {
     const { data: benches } = await supabase
       .from("benchmark_results")

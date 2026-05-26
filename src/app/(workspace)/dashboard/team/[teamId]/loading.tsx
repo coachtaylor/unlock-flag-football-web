@@ -1,6 +1,7 @@
-// Streaming skeleton for the team dashboard. Mirrors the real layout:
-// sidebar + topbar + hero + stat strip + 2-col body (main+side at lg+).
-// Avoids using the page's components so it stays cheap and decoupled.
+// Streaming skeleton for the team dashboard. Mirrors the Build 7 layout:
+// hero + next-practice row, KPI strip, trends + movers, 4-up quad, and
+// activity + most-run. Avoids importing the page's components so the
+// skeleton stays cheap and decoupled.
 
 export default function TeamDashboardLoading() {
   return (
@@ -19,100 +20,71 @@ export default function TeamDashboardLoading() {
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div className="topbar">
-          <span
-            className="td-skel"
-            style={{ width: 180, height: 18, borderRadius: 4 }}
-          />
+          <span className="td-skel" style={{ width: 180, height: 18, borderRadius: 4 }} />
           <span style={{ flex: 1 }} />
-          <span
-            className="td-skel"
-            style={{ width: 38, height: 38, borderRadius: 10 }}
-          />
-          <span
-            className="td-skel"
-            style={{ width: 38, height: 38, borderRadius: 9999 }}
-          />
+          <span className="td-skel" style={{ width: 38, height: 38, borderRadius: 10 }} />
+          <span className="td-skel" style={{ width: 38, height: 38, borderRadius: 9999 }} />
         </div>
 
-        <div className="page" style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}>
-          {/* Hero */}
-          <div className="w-card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 10 }}>
-            <span className="td-skel" style={{ width: 120, height: 10, borderRadius: 3 }} />
-            <span className="td-skel" style={{ width: "60%", maxWidth: 320, height: 28, borderRadius: 6 }} />
-            <span className="td-skel" style={{ width: 180, height: 12, borderRadius: 3 }} />
-          </div>
-
-          {/* Stat strip */}
-          <div className="w-card td-stat-strip">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="td-stat-cell" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-                <span className="td-skel" style={{ width: 60, height: 10, borderRadius: 3 }} />
-                <span className="td-skel" style={{ width: 48, height: 22, borderRadius: 4 }} />
-              </div>
-            ))}
-          </div>
-
-          {/* Body: main + side */}
-          <div className="td-body-grid">
-            <div className="td-body-main">
-              <SectionHeadSkeleton />
-              <div className="td-overview-grid">
+        <div className="page" style={{ maxWidth: 1440, margin: "0 auto", width: "100%", gap: 20 }}>
+          {/* Hero + Next */}
+          <div className="td-skel-row td-skel-row-hero">
+            <div className="w-card hero" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14, minHeight: 240 }}>
+              <span className="td-skel" style={{ width: 200, height: 11, borderRadius: 3 }} />
+              <span className="td-skel" style={{ width: "60%", maxWidth: 360, height: 28, borderRadius: 6 }} />
+              <span className="td-skel" style={{ width: "80%", height: 12, borderRadius: 3 }} />
+              <span className="td-skel" style={{ width: "70%", height: 12, borderRadius: 3 }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginTop: 8 }}>
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
-                  >
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span className="td-skel" style={{ width: "60%", height: 13, borderRadius: 3 }} />
-                      <span className="td-skel" style={{ width: "40%", height: 10, borderRadius: 3 }} />
-                    </div>
-                    <span className="td-skel" style={{ width: 56, height: 14, borderRadius: 3 }} />
+                  <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span className="td-skel" style={{ width: "70%", height: 10, borderRadius: 3 }} />
+                    <span className="td-skel" style={{ width: 60, height: 18, borderRadius: 4 }} />
                   </div>
                 ))}
               </div>
             </div>
-
-            <div className="td-body-side">
-              <div>
-                <SectionHeadSkeleton />
-                <div className="w-card" style={{ padding: 0, overflow: "hidden" }}>
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: 16,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                        borderTop: i === 0 ? undefined : "1px solid var(--uff-line-soft)",
-                      }}
-                    >
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span className="td-skel" style={{ width: "70%", height: 13, borderRadius: 3 }} />
-                        <span className="td-skel" style={{ width: "50%", height: 10, borderRadius: 3 }} />
-                      </div>
-                      <span className="td-skel" style={{ width: 40, height: 14, borderRadius: 3 }} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <SectionHeadSkeleton />
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <div key={i} className="w-card" style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span className="td-skel" style={{ width: "60%", height: 13, borderRadius: 3 }} />
-                        <span className="td-skel" style={{ width: "40%", height: 10, borderRadius: 3 }} />
-                      </div>
-                      <span className="td-skel" style={{ width: 64, height: 12, borderRadius: 3 }} />
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="w-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12, minHeight: 240 }}>
+              <SectionHeadSkeleton />
+              <span className="td-skel" style={{ width: "70%", height: 18, borderRadius: 4 }} />
+              <span className="td-skel" style={{ width: "50%", height: 12, borderRadius: 3 }} />
+              <span className="td-skel" style={{ width: "100%", height: 8, borderRadius: 999, marginTop: 8 }} />
+              <span className="td-skel" style={{ width: "60%", height: 12, borderRadius: 3 }} />
             </div>
+          </div>
+
+          {/* KPI strip */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="w-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10, minHeight: 116 }}>
+                <span className="td-skel" style={{ width: "60%", height: 10, borderRadius: 3 }} />
+                <span className="td-skel" style={{ width: 70, height: 24, borderRadius: 4 }} />
+                <span className="td-skel" style={{ width: "100%", height: 28, borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
+
+          {/* Trends + Movers */}
+          <div className="td-skel-row td-skel-row-trends">
+            <div className="w-card" style={{ padding: 20, minHeight: 280, display: "flex", flexDirection: "column", gap: 12 }}>
+              <SectionHeadSkeleton />
+              <span className="td-skel" style={{ width: "100%", height: 220, borderRadius: 6 }} />
+            </div>
+            <div className="w-card" style={{ padding: 20, minHeight: 280, display: "flex", flexDirection: "column", gap: 10 }}>
+              <SectionHeadSkeleton />
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} className="td-skel" style={{ width: "100%", height: 28, borderRadius: 4 }} />
+              ))}
+            </div>
+          </div>
+
+          {/* 4-up */}
+          <div className="td-skel-row td-skel-row-quad">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="w-card" style={{ padding: 20, minHeight: 260, display: "flex", flexDirection: "column", gap: 10 }}>
+                <SectionHeadSkeleton />
+                <span className="td-skel" style={{ width: "100%", height: 180, borderRadius: 6 }} />
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -127,6 +99,15 @@ export default function TeamDashboardLoading() {
         @keyframes td-skel-shimmer {
           0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
+        }
+        .td-skel-row { display: grid; gap: 16px; grid-template-columns: 1fr; }
+        @media (min-width: 1024px) {
+          .td-skel-row-hero { grid-template-columns: 1.4fr 1fr; }
+          .td-skel-row-trends { grid-template-columns: 1.6fr 1fr; }
+          .td-skel-row-quad { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (min-width: 1280px) {
+          .td-skel-row-quad { grid-template-columns: repeat(4, 1fr); }
         }
       `}</style>
     </div>
