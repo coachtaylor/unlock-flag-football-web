@@ -481,7 +481,7 @@ function MixBarLegend({
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "3px 10px",
+        gap: "4px 18px",
         fontSize: 10,
         color: "var(--uff-text-mute)",
         lineHeight: 1.3,
