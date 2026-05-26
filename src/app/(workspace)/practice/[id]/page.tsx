@@ -124,12 +124,12 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
           }
         />
 
-        <div className="page" style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }}>
+        <div className="page" style={{ maxWidth: 1440, margin: "0 auto", width: "100%" }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 720px) 320px",
-              gap: 20,
+              gridTemplateColumns: "minmax(0, 1fr) 440px",
+              gap: 24,
               alignItems: "start",
             }}
           >
