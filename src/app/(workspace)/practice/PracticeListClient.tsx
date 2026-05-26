@@ -35,7 +35,6 @@ export type ListProps = {
 
 export default function PracticeListClient({
   teamId,
-  teamName,
   plans,
   rosterSize,
   rosterByPlan,
@@ -47,9 +46,7 @@ export default function PracticeListClient({
   if (plans.length === 0) {
     return (
       <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <PageHeader teamName={teamName} teamId={teamId} />
-          <StatsStrip lastN={0} attendPct={0} fieldMin={0} avgDrills={0} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <EmptyListState teamId={teamId} />
         </div>
       </div>
@@ -69,9 +66,8 @@ export default function PracticeListClient({
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <PageHeader teamName={teamName} teamId={teamId} />
-        <StatsStrip
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <StatsRow
           lastN={stats.practices}
           attendPct={stats.attendPct}
           fieldMin={stats.fieldMin}
@@ -80,7 +76,7 @@ export default function PracticeListClient({
 
         {next && (
           <div>
-            <SectionEyebrow color="var(--uff-orange)" label="Up next" right={<RelativeWhen iso={next.practice_date} />} />
+            <SectionLabel label="Up next" right={<RelativeWhen iso={next.practice_date} />} />
             <FeaturedPlanCard
               plan={next}
               avatars={rosterByPlan[next.id] ?? []}
@@ -97,8 +93,8 @@ export default function PracticeListClient({
 
         {thisWeek.length > 0 && (
           <div>
-            <SectionEyebrow color="var(--uff-text)" label="This week" count={thisWeek.length} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <SectionLabel label="This week" count={thisWeek.length} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {thisWeek.map((p) => (
                 <PlanSummaryCard key={p.id} plan={p} />
               ))}
@@ -108,8 +104,8 @@ export default function PracticeListClient({
 
         {completed.length > 0 && (
           <div>
-            <SectionEyebrow color="var(--uff-blue, #6EA8FF)" label="Recent" count={completed.length} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <SectionLabel label="Recent" count={completed.length} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {completed.map((p) => (
                 <PlanSummaryCard key={p.id} plan={p} completed />
               ))}
@@ -121,48 +117,8 @@ export default function PracticeListClient({
   );
 }
 
-// ── Page header ────────────────────────────────────────────────────────
-// Title + new-plan action. The "PURPLE F." breadcrumb already lives in the
-// DashTopBar above this — no need to repeat it as a colored eyebrow here.
-function PageHeader({ teamName: _teamName, teamId }: { teamName: string; teamId: string }) {
-  const [isPending, startTransition] = useTransition();
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          fontSize: 24,
-          fontWeight: 800,
-          letterSpacing: "-0.02em",
-          color: "var(--uff-text)",
-          lineHeight: 1.1,
-        }}
-      >
-        Practice
-      </div>
-      <form
-        action={(fd) => {
-          startTransition(() => newPlanAndRedirect(fd));
-        }}
-      >
-        <input type="hidden" name="teamId" value={teamId} />
-        <button
-          type="submit"
-          title="New practice plan"
-          disabled={isPending}
-          className="wbtn primary"
-          style={{ height: 34, padding: "0 12px", fontSize: 13, gap: 6 }}
-        >
-          <PIcon.plus size={13} /> New plan
-        </button>
-      </form>
-    </div>
-  );
-}
-
-// ── Stats strip ────────────────────────────────────────────────────────
-function StatsStrip({
+// ── Stats row (single inline line, no card chrome) ─────────────────────
+function StatsRow({
   lastN,
   attendPct,
   fieldMin,
@@ -176,131 +132,80 @@ function StatsStrip({
   return (
     <div
       style={{
-        background: "var(--uff-surface)",
-        border: "1px solid var(--uff-line-soft)",
-        borderRadius: 12,
-        padding: "12px 16px",
         display: "flex",
-        alignItems: "center",
-        gap: 16,
+        alignItems: "baseline",
+        gap: 14,
+        flexWrap: "wrap",
+        padding: "8px 0",
+        borderBottom: "1px solid var(--uff-line-soft)",
+        fontSize: 12.5,
       }}
     >
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            fontSize: 9.5,
-            fontWeight: 800,
-            letterSpacing: ".14em",
-            color: "var(--uff-text-mute)",
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}
-        >
-          LAST {lastN} PRACTICE{lastN === 1 ? "" : "S"}
-        </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 20, flexWrap: "wrap" }}>
-          <BigStat n={attendPct} unit="%" label="ATTEND" valueColor="var(--uff-lime)" />
-          <BigStat n={fieldMin} unit="m" label="ON FIELD" valueColor="var(--uff-text)" />
-          <BigStat n={avgDrills} unit="" label="AVG DRILLS" valueColor="var(--uff-text)" precise />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BigStat({
-  n,
-  unit,
-  label,
-  valueColor,
-  precise,
-}: {
-  n: number;
-  unit: string;
-  label: string;
-  valueColor: string;
-  precise?: boolean;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-      <span
-        className="mono"
-        style={{
-          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-          fontSize: 22,
-          fontWeight: 800,
-          color: valueColor,
-          letterSpacing: "-0.03em",
-        }}
-      >
-        {precise ? n.toFixed(1) : n}
-      </span>
-      <span
-        className="mono"
-        style={{
-          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "var(--uff-text-mute)",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        {unit}
-      </span>
       <span
         style={{
-          fontSize: 9.5,
+          fontSize: 10,
           fontWeight: 700,
           letterSpacing: ".14em",
           color: "var(--uff-text-mute)",
-          marginLeft: 5,
+          textTransform: "uppercase",
         }}
       >
-        {label}
+        Last {lastN}
       </span>
+      <InlineStat value={`${attendPct}%`} label="attend" valueColor="var(--uff-lime)" />
+      <InlineStat value={`${fieldMin}m`} label="on field" />
+      <InlineStat value={avgDrills.toFixed(1)} label="avg drills" />
     </div>
   );
 }
 
-// ── Section eyebrow ────────────────────────────────────────────────────
-function SectionEyebrow({
-  color,
+function InlineStat({ value, label, valueColor }: { value: string; label: string; valueColor?: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+      <span
+        className="mono"
+        style={{
+          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+          fontSize: 14,
+          fontWeight: 700,
+          color: valueColor ?? "var(--uff-text)",
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {value}
+      </span>
+      <span style={{ color: "var(--uff-text-mute)", fontSize: 11.5 }}>{label}</span>
+    </span>
+  );
+}
+
+// ── Section label (tiny uppercase signpost, no decorative rule) ────────
+function SectionLabel({
   label,
   count,
   right,
 }: {
-  color: string;
   label: string;
   count?: number;
   right?: React.ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-      <span style={{ width: 3, height: 14, background: color, borderRadius: 2 }} />
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
       <span
         style={{
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: ".16em",
-          color: "var(--uff-text)",
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: ".14em",
+          color: "var(--uff-text-mute)",
           textTransform: "uppercase",
         }}
       >
         {label}
+        {count != null && (
+          <span style={{ marginLeft: 6, opacity: 0.7 }}>{count}</span>
+        )}
       </span>
-      {count != null && (
-        <span
-          className="mono"
-          style={{
-            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-            fontSize: 12,
-            color: "var(--uff-text-mute)",
-          }}
-        >
-          {count}
-        </span>
-      )}
-      <span style={{ flex: 1, height: 1, background: "var(--uff-line-soft)" }} />
+      <span style={{ flex: 1 }} />
       {right}
     </div>
   );
@@ -353,41 +258,46 @@ function FeaturedPlanCard({
   isPending: boolean;
   onDuplicate: () => void;
 }) {
-  const legend = plan.blocks.map((b) => ({ id: b.id, name: b.name, mn: b.minutes, c: blockColor(b.name) }));
   return (
     <div
       style={{
         background: "#15110d",
         border: "1px solid var(--uff-orange)",
-        borderRadius: 14,
-        padding: 16,
+        borderRadius: 12,
+        padding: 12,
         position: "relative",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+      {/* Mix bar sits flush along the top edge as a 3px Notion-style stripe */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={3} />
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 4 }}>
         <DateTile iso={plan.practice_date} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <PracticeStatusPill status={plan.status} mini />
             <span style={{ flex: 1 }} />
             <button
               type="button"
               className="icon-btn"
               title="Duplicate plan"
-              style={{ width: 30, height: 30 }}
+              style={{ width: 26, height: 26 }}
               onClick={onDuplicate}
               disabled={isPending}
             >
-              <PIcon.copy size={13} />
+              <PIcon.copy size={12} />
             </button>
           </div>
           <div
             style={{
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 700,
-              letterSpacing: "-0.015em",
+              letterSpacing: "-0.01em",
               color: "var(--uff-text)",
-              lineHeight: 1.15,
+              lineHeight: 1.2,
             }}
           >
             {plan.title}
@@ -396,16 +306,16 @@ function FeaturedPlanCard({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
+              gap: 6,
               flexWrap: "wrap",
-              marginTop: 6,
-              fontSize: 12,
+              marginTop: 4,
+              fontSize: 11.5,
               color: "var(--uff-text-dim)",
             }}
           >
             {plan.start_time && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <PIcon.clock size={12} /> {formatTimeLabel(plan.start_time)}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <PIcon.clock size={11} /> {formatTimeLabel(plan.start_time)}
               </span>
             )}
             <span style={{ color: "var(--uff-line)" }}>·</span>
@@ -413,14 +323,34 @@ function FeaturedPlanCard({
               {durLabel(plan.total_minutes)}
             </span>
             <span style={{ color: "var(--uff-line)" }}>·</span>
-            <span>{plan.drill_count} drills</span>
-            <span style={{ color: "var(--uff-line)" }}>·</span>
-            <span>{plan.block_count} blocks</span>
+            <span>
+              {plan.drill_count}d · {plan.block_count}b
+            </span>
             {plan.rsvp_in > 0 && (
               <>
                 <span style={{ color: "var(--uff-line)" }}>·</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <PIcon.people size={12} /> {plan.rsvp_in}/{rosterSize}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                  <PIcon.people size={11} /> {plan.rsvp_in}/{rosterSize}
+                </span>
+              </>
+            )}
+            {/* Block dots collapse into the meta row to retain the mix at a glance */}
+            {plan.blocks.length > 0 && (
+              <>
+                <span style={{ color: "var(--uff-line)" }}>·</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                  {plan.blocks.map((b) => (
+                    <span
+                      key={b.id}
+                      title={`${b.name} · ${b.minutes}m`}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: blockColor(b.name).accent,
+                      }}
+                    />
+                  ))}
                 </span>
               </>
             )}
@@ -428,46 +358,32 @@ function FeaturedPlanCard({
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
-          {legend.map((L) => (
-            <div key={L.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: L.c.accent }} />
-              <span style={{ color: "var(--uff-text-dim)" }}>{L.name}</span>
-              <span
-                className="mono"
-                style={{
-                  fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-                  fontWeight: 700,
-                  color: "var(--uff-text)",
-                }}
-              >
-                {L.mn}m
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
-        {avatars.length > 0 && (
-          <AvatarStack items={avatars} size={22} max={5} />
-        )}
+      <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+        {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
         <span style={{ flex: 1 }} />
         <Link
           href={`/practice/${plan.id}/edit`}
-          className="wbtn"
-          style={{ height: 34, padding: "0 14px", fontSize: 13, textDecoration: "none" }}
+          style={{
+            height: 30,
+            padding: "0 12px",
+            display: "inline-flex",
+            alignItems: "center",
+            color: "var(--uff-text-dim)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            textDecoration: "none",
+            background: "transparent",
+            border: 0,
+          }}
         >
           Edit
         </Link>
         <Link
           href={`/practice/${plan.id}`}
           className="wbtn primary"
-          style={{ height: 34, padding: "0 16px", fontSize: 13, gap: 6, textDecoration: "none" }}
+          style={{ height: 30, padding: "0 14px", fontSize: 12.5, gap: 5, textDecoration: "none" }}
         >
-          <PIcon.whistle size={13} /> Open plan
+          Open plan
         </Link>
       </div>
     </div>
@@ -482,26 +398,26 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
       style={{
         background: "var(--uff-surface)",
         border: "1px solid var(--uff-line-soft)",
-        borderRadius: 14,
-        padding: 14,
+        borderRadius: 10,
+        padding: "10px 12px",
         display: "flex",
-        alignItems: "flex-start",
-        gap: 14,
+        alignItems: "center",
+        gap: 12,
         cursor: "pointer",
         textDecoration: "none",
       }}
     >
-      <DateTile iso={plan.practice_date} size="sm" />
+      <CompactDate iso={plan.practice_date} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
           <div
             style={{
               flex: 1,
               minWidth: 0,
-              fontSize: 16,
-              fontWeight: 700,
+              fontSize: 14,
+              fontWeight: 600,
               color: "var(--uff-text)",
-              letterSpacing: "-0.01em",
+              letterSpacing: "-0.005em",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -515,57 +431,84 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
             flexWrap: "wrap",
-            fontSize: 12.5,
+            fontSize: 11.5,
             color: "var(--uff-text-dim)",
-            marginBottom: 10,
           }}
         >
           {plan.start_time && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <PIcon.clock size={12} /> {formatTimeLabel(plan.start_time)}
-            </span>
+            <>
+              <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
+                {formatTimeLabel(plan.start_time)}
+              </span>
+              <span style={{ color: "var(--uff-line)" }}>·</span>
+            </>
           )}
-          <span style={{ color: "var(--uff-line)" }}>·</span>
           <span className="mono" style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)" }}>
             {durLabel(plan.total_minutes)}
           </span>
           <span style={{ color: "var(--uff-line)" }}>·</span>
-          <span>{plan.drill_count} drills</span>
-          {plan.block_count > 0 && (
+          <span>
+            {plan.drill_count}d · {plan.block_count}b
+          </span>
+          {completed && plan.rsvp_in > 0 && (
             <>
               <span style={{ color: "var(--uff-line)" }}>·</span>
-              <span>{plan.block_count} blocks</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <PIcon.people size={11} /> {plan.rsvp_in}
+              </span>
             </>
           )}
+          {plan.blocks.length > 0 && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: "auto" }}>
+              {plan.blocks.map((b) => (
+                <span
+                  key={b.id}
+                  title={`${b.name} · ${b.minutes}m`}
+                  style={{ width: 5, height: 5, borderRadius: "50%", background: blockColor(b.name).accent }}
+                />
+              ))}
+            </span>
+          )}
         </div>
-        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
-
-        {completed && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginTop: 10,
-              paddingTop: 10,
-              borderTop: "1px solid var(--uff-line-soft)",
-              fontSize: 12,
-              color: "var(--uff-text-dim)",
-            }}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <PIcon.people size={13} /> {plan.rsvp_in} attended
-            </span>
-            <span style={{ flex: 1 }} />
-            <span style={{ color: "var(--uff-text-mute)" }}>
-              <PIcon.chevR size={12} />
-            </span>
-          </div>
-        )}
       </div>
     </Link>
+  );
+}
+
+// Tighter inline date stamp for summary rows — replaces the 60×60 DateTile.
+function CompactDate({ iso }: { iso: string }) {
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  const mon = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  const day = String(d.getDate());
+  return (
+    <div
+      style={{
+        width: 40,
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+        lineHeight: 1,
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", color: "var(--uff-text-mute)" }}>
+        {mon}
+      </span>
+      <span
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          color: "var(--uff-text)",
+          marginTop: 2,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        {day}
+      </span>
+    </div>
   );
 }
 

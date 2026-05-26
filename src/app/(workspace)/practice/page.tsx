@@ -1,11 +1,13 @@
 // /practice — list of plans for the user's primary team (Build 5.5).
 // Renders the .uff-web shell with the team-context sidebar.
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleTeams } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { playerColorForIndex } from "@/components/uff/team-colors";
+import { Icon } from "@/components/uff/icons";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanSummaries } from "@/lib/practice/plan-data";
@@ -137,6 +139,11 @@ export default async function PracticeListPage() {
           kicker={kicker}
           userInitials={initials}
           showSearch={false}
+          actions={
+            <Link href="/practice/new" className="wbtn primary">
+              <Icon.plus size={13} /> New plan
+            </Link>
+          }
         />
         <div className="page" style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }}>
           <PracticeListClient
