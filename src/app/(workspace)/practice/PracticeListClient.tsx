@@ -332,11 +332,11 @@ function FeaturedPlanCard({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
         {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
-        {/* Mix bar takes the available space between avatars and action buttons.
-            Capped at maxWidth so it doesn't sprawl across the whole row. */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 280, marginRight: 4 }}>
+        {/* Mix bar extends to fill the row between avatars and the action
+            buttons. The flex `gap` keeps a 12px breathing room from Edit. */}
+        <div style={{ flex: 1, minWidth: 0 }}>
           <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
         </div>
         <Link
@@ -448,9 +448,11 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
               </>
             )}
           </div>
-          {/* Mix bar — right-aligned, fills remaining space, capped so it stays readable */}
+          {/* Mix bar — extends to fill whatever space is left after the meta
+              text. The row's gap keeps a small breathing room from the right
+              edge. */}
           {plan.blocks.length > 0 && (
-            <div style={{ flex: 1, minWidth: 60, maxWidth: 220, marginLeft: "auto" }}>
+            <div style={{ flex: 1, minWidth: 60, marginLeft: "auto" }}>
               <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={5} />
             </div>
           )}
