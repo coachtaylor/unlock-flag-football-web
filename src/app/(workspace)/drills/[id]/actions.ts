@@ -90,6 +90,22 @@ export async function duplicateDrill(formData: FormData) {
     await supabase.from("team_drill_categories").insert(cats);
   }
 
+  // Carry skill tags too — a duplicate that loses its skills would force
+  // the coach to re-pick them, which defeats the point of the duplicate.
+  const { data: originalSkills } = await supabase
+    .from("drill_skills")
+    .select("skill_id, weight")
+    .eq("drill_id", drillId);
+  if (originalSkills && originalSkills.length > 0) {
+    await supabase.from("drill_skills").insert(
+      originalSkills.map((s) => ({
+        drill_id: inserted.id as string,
+        skill_id: s.skill_id,
+        weight: s.weight,
+      })),
+    );
+  }
+
   revalidatePath(`/drills`);
   redirect(`/drills/${inserted.id}/edit`);
 }

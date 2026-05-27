@@ -36,6 +36,14 @@ import {
 import { generateSetupInstructions } from "@/lib/generate-setup-instructions";
 import type { DiagramData } from "@/types/diagram";
 import type { SidebarWorkspace } from "@/lib/dashboard/sidebar-workspaces";
+import SkillPicker, {
+  type SkillPickerValue,
+} from "@/components/uff-web/drills/SkillPicker";
+import type {
+  DrillSkillLink,
+  DrillSkillWeight,
+  Skill,
+} from "@/lib/types/skills";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -59,6 +67,10 @@ export type DrillFormInitial = {
   description: string;
   sourceUrl: string;
   categoryIds: string[];
+  // Tagged skills the drill develops. Empty for new drills + drills that
+  // existed before build-10. Populated from drill_skills for clones of
+  // preset drills and for drills that have been hand-tagged.
+  skills: DrillSkillLink[];
   benchmarkTypes: BenchKind[];
   benchmarkConfig: BenchConfig;
   defaultDurationMin: number;
@@ -84,6 +96,9 @@ type Props = {
   team: Team;
   user: User;
   categories: Category[];
+  // Full skill taxonomy (25 rows). Fetched server-side and passed in so
+  // the picker doesn't need to re-fetch on every form mount.
+  skills: Skill[];
   initial?: DrillFormInitial;
   sidebarWorkspaces?: SidebarWorkspace[];
 };
@@ -119,7 +134,7 @@ const BENCH_SAMPLE: Record<BenchKind, string> = {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export default function DrillForm({ team, user, categories, initial, sidebarWorkspaces }: Props) {
+export default function DrillForm({ team, user, categories, skills, initial, sidebarWorkspaces }: Props) {
   const router = useRouter();
   const isEditing = !!initial;
 
@@ -150,6 +165,13 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
   const [sourceUrl, setSourceUrl] = useState(initial?.sourceUrl ?? "");
   const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(
     new Set(initial?.categoryIds ?? []),
+  );
+  const [pickedSkills, setPickedSkills] = useState<SkillPickerValue>(
+    () => {
+      const m = new Map<string, DrillSkillWeight>();
+      (initial?.skills ?? []).forEach((s) => m.set(s.skill_id, s.weight));
+      return m;
+    },
   );
   const [duration, setDuration] = useState<number>(
     initial?.defaultDurationMin ?? 10,
@@ -417,6 +439,33 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
       }
     }
 
+    // Same replace pattern for drill_skills (delete-then-insert). The
+    // picker holds the canonical state; we don't try to diff additions/
+    // removals against initial.skills — full replace is simpler and the
+    // table has 0–N rows per drill so the cost is negligible.
+    const { error: skillsDelErr } = await supabase
+      .from("drill_skills")
+      .delete()
+      .eq("drill_id", drillId);
+    if (skillsDelErr) {
+      setError(skillsDelErr.message);
+      setSubmitting(false);
+      return;
+    }
+    if (pickedSkills.size > 0) {
+      const rows = Array.from(pickedSkills.entries()).map(
+        ([skill_id, weight]) => ({ drill_id: drillId, skill_id, weight }),
+      );
+      const { error: skillsInsErr } = await supabase
+        .from("drill_skills")
+        .insert(rows);
+      if (skillsInsErr) {
+        setError(skillsInsErr.message);
+        setSubmitting(false);
+        return;
+      }
+    }
+
     router.refresh();
     if (isEditing) {
       router.push(`/drills/${drillId}`);
@@ -576,6 +625,18 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
 
               <Section
                 num="03"
+                label="Skill tags"
+                hint="Which player skills does this drill develop? These power the team skill profile, the player dashboard, and recommended-drill suggestions. Pick at least one primary."
+              >
+                <SkillPicker
+                  skills={skills}
+                  value={pickedSkills}
+                  onChange={setPickedSkills}
+                />
+              </Section>
+
+              <Section
+                num="04"
                 label="Benchmarks"
                 hint="Pick the metrics coaches will capture during practice. One drill can capture multiple types per rep."
               >
@@ -615,7 +676,7 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
               </Section>
 
               <Section
-                num="04"
+                num="05"
                 label="Setup diagram"
                 hint="Drag cones onto the field. Movement segments auto-fill the setup instructions below."
               >
@@ -674,7 +735,7 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
               </Section>
 
               <Section
-                num="05"
+                num="06"
                 label="Drill notes"
                 hint="Coaching cues, common mistakes, or anything you want to remember about running this drill. Each line is its own note."
               >
@@ -689,7 +750,7 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
               </Section>
 
               <Section
-                num="06"
+                num="07"
                 label="Block timing & equipment"
                 hint="Defaults the planner uses when this drill gets added to a practice. Cones come from the diagram above; add anything extra below."
               >
@@ -733,7 +794,7 @@ export default function DrillForm({ team, user, categories, initial, sidebarWork
               </Section>
 
               <Section
-                num="07"
+                num="08"
                 label="Visibility"
                 hint="Drafts stay hidden from the practice planner. Pinned drills surface on the team dashboard."
               >

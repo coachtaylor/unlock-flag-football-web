@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { categoryToSlug } from "@/components/uff-web/drills/atoms";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { loadAllSkills } from "@/lib/drills/skills-data";
 import DrillForm from "../DrillForm";
 
 export const dynamic = "force-dynamic";
@@ -31,19 +32,21 @@ export default async function NewDrillPage() {
   if (!membership) redirect("/onboarding/scope");
   const teamId = membership.team_id as string;
 
-  const [{ data: team }, { data: categories }] = await Promise.all([
-    supabase
-      .from("teams")
-      .select("id, team_name, team_color, league_id")
-      .eq("id", teamId)
-      .maybeSingle(),
-    supabase
-      .from("drill_categories")
-      .select("id, category_name, category_type, display_order")
-      .or(`team_id.is.null,team_id.eq.${teamId}`)
-      .order("display_order", { ascending: true })
-      .order("category_name", { ascending: true }),
-  ]);
+  const [{ data: team }, { data: categories }, skillsCatalog] =
+    await Promise.all([
+      supabase
+        .from("teams")
+        .select("id, team_name, team_color, league_id")
+        .eq("id", teamId)
+        .maybeSingle(),
+      supabase
+        .from("drill_categories")
+        .select("id, category_name, category_type, display_order")
+        .or(`team_id.is.null,team_id.eq.${teamId}`)
+        .order("display_order", { ascending: true })
+        .order("category_name", { ascending: true }),
+      loadAllSkills(supabase),
+    ]);
 
   if (!team) redirect("/dashboard");
 
@@ -81,6 +84,7 @@ export default async function NewDrillPage() {
       }}
       user={{ firstName, lastName, initials }}
       categories={cats}
+      skills={skillsCatalog.skills}
       sidebarWorkspaces={sidebarWorkspaces}
     />
   );
