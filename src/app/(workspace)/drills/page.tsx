@@ -271,9 +271,14 @@ export default async function DrillsPage() {
           userInitials={initials}
           showSearch={false}
           actions={
-            <Link href="/drills/new" className="wbtn primary">
-              <Icon.plus size={13} /> New drill
-            </Link>
+            <>
+              <Link href="/drills/library" className="wbtn">
+                <Icon.search size={13} /> Browse library
+              </Link>
+              <Link href="/drills/new" className="wbtn primary">
+                <Icon.plus size={13} /> New drill
+              </Link>
+            </>
           }
         />
 
