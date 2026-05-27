@@ -90,3 +90,25 @@ export function isAnyDefense(
 ): boolean {
   return (positions ?? []).some((p) => SIDE_BY_ID[p] === "defense");
 }
+
+// Per-position accent colors. Mirrors mobile's POSITION_COLOR
+// (constants/positions.ts). Used by BreakdownPulseCard to color each
+// position's sparkline line + legend dot distinctly. Deliberately
+// avoids the offense/defense side colors (lime / red) so position
+// tags never collide with side coloring.
+export const POSITION_COLOR: Record<string, string> = {
+  QB: "#FF6A1A",      // orange
+  WR: "#2DD4BF",      // teal
+  RB: "#FFB347",      // gold
+  C: "#7DDFD2",       // cyan
+  CB: "#6EA8FF",      // blue
+  S: "#B89BFF",       // violet
+  LB: "#FF6A8B",      // pink
+  DE: "#6BCF7F",      // green
+  Rusher: "#E879F9",  // fuchsia
+};
+
+export function positionColor(id: string | null | undefined): string {
+  if (!id) return "#7A7A82"; // text-mute fallback
+  return POSITION_COLOR[id] ?? "#7A7A82";
+}

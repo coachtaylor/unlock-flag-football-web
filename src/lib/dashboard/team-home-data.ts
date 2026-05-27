@@ -46,6 +46,8 @@ export type BreakdownPulseRow = {
   current: number | null;
   previous: number | null;
   delta: number | null;
+  series: number[]; // 8 weekly points, oldest → newest. Empty positions
+                    // still get a zero-filled series for layout stability.
 };
 
 export type BreakdownPulse = {
@@ -554,6 +556,7 @@ export async function loadTeamDashboard(
           current: agg.current,
           previous: agg.previous,
           delta: agg.delta,
+          series: agg.series,
         };
       });
       return {

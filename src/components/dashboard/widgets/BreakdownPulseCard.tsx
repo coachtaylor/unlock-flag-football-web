@@ -1,12 +1,18 @@
-// One slot, one card, multiple position rows. Branch 7.5c.
+// One slot, one card, multi-position sparkline + legend. Branch 7.5c.
 //
-// A breakdown pulse fans out a single (drill, type) slot into rows for
-// each position the captain selected. Lets a single dashboard slot
-// answer "how is each position doing on this drill?" instead of burning
-// 3-4 slots on per-position pins.
+// A breakdown pulse fans out a single (drill, type) slot into multiple
+// position-scoped sub-rows. Card layout:
+//   - Header: drill name + type chip + "BY POSITION" chip
+//   - Body:   one multi-line sparkline (per-position color)
+//   - Legend: one row per position — colored dot, code, value, delta
+//
+// Replaces the bar-fill variant: sparkline shows trend (8-week window),
+// legend shows current value + delta. Picks the type-aware Y normalization
+// up from the source data so all positions render on the same Y scale.
 
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
+import { positionColor } from "@/lib/positions";
 import type { BreakdownPulse, BreakdownPulseRow } from "@/lib/dashboard/team-home-data";
 
 function fmtVal(v: number | null, type: BreakdownPulse["benchmarkType"]): string {
@@ -33,7 +39,6 @@ function fmtDelta(
   const formatted =
     type === "timed" ? abs.toFixed(2) : abs.toFixed(type === "rated" ? 1 : 0);
   const sign = row.delta < 0 ? "−" : "+";
-  // For lower-is-better (timed), negative delta is good.
   const inverse = type === "timed" || type === "drops";
   const good = inverse ? row.delta < 0 : row.delta > 0;
   return {
@@ -42,34 +47,117 @@ function fmtDelta(
   };
 }
 
-// Normalize a value to a 0..1 fill ratio for the row bar. Reference
-// scale depends on benchmark type — for pct it's a literal percentage,
-// for rated it's /5, for timed we use the max value in this breakdown
-// as the reference so the highest bar fills the row.
-function fillRatio(
-  current: number | null,
-  type: BreakdownPulse["benchmarkType"],
-  maxInBreakdown: number
-): number {
-  if (current == null) return 0;
-  if (type === "pct") return Math.max(0, Math.min(1, current / 100));
-  if (type === "rated") return Math.max(0, Math.min(1, current / 5));
-  // timed: lower is better, so invert relative to the slowest in the set
-  if (type === "timed") {
-    if (maxInBreakdown <= 0) return 0;
-    return Math.max(0.06, Math.min(1, 1 - current / (maxInBreakdown * 1.1)));
+type SparklineProps = {
+  rows: BreakdownPulseRow[];
+  width: number;
+  height: number;
+  inverse: boolean; // lower-is-better → invert the Y mapping
+};
+
+// Render N polylines on a shared SVG. Each position gets POSITION_COLOR
+// for stroke. All series share one Y domain so values are comparable.
+function MultiSparkline({ rows, width, height, inverse }: SparklineProps) {
+  // Collect all sample values across all rows to pick a shared Y range.
+  // Empty positions (no samples logged ever) contribute a flat zero
+  // series so the others still render correctly.
+  const allValues = rows.flatMap((r) => r.series.filter((v) => v > 0));
+  if (allValues.length === 0) {
+    return (
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ display: "block" }}
+      >
+        <line
+          x1={0}
+          y1={height - 1}
+          x2={width}
+          y2={height - 1}
+          stroke="var(--uff-line-soft)"
+          strokeDasharray="2 3"
+        />
+        <text
+          x={width / 2}
+          y={height / 2 + 4}
+          textAnchor="middle"
+          fontSize={10}
+          fill="var(--uff-text-mute)"
+          fontFamily="var(--font-mono)"
+          letterSpacing="0.10em"
+        >
+          NO DATA YET
+        </text>
+      </svg>
+    );
   }
-  // reps / flags / drops: scale against the row max so the leader fills
-  if (maxInBreakdown <= 0) return 0;
-  return Math.max(0.06, Math.min(1, current / maxInBreakdown));
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const span = Math.max(0.0001, max - min);
+
+  // Find longest series length so x mapping uses a stable denominator.
+  const n = Math.max(...rows.map((r) => r.series.length), 1);
+  const pad = 4;
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  const xAt = (i: number) => pad + (innerW * i) / Math.max(1, n - 1);
+  const yAt = (v: number) => {
+    const norm = (v - min) / span;
+    return inverse ? pad + norm * innerH : pad + innerH - norm * innerH;
+  };
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ display: "block" }}
+    >
+      {/* Baseline grid hint */}
+      <line
+        x1={0}
+        y1={height - 1}
+        x2={width}
+        y2={height - 1}
+        stroke="var(--uff-line-soft)"
+        strokeDasharray="2 4"
+        opacity={0.5}
+      />
+      {rows.map((row) => {
+        // Skip series with no data at all so we don't draw a flat line at 0.
+        const hasData = row.series.some((v) => v > 0);
+        if (!hasData) return null;
+        const stroke = positionColor(row.position);
+        const d = row.series
+          .map(
+            (v, i) =>
+              `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`
+          )
+          .join(" ");
+        // Highlight current value with a slightly larger dot.
+        const lastIdx = row.series.length - 1;
+        const cx = xAt(lastIdx);
+        const cy = yAt(row.series[lastIdx]);
+        return (
+          <g key={row.position}>
+            <path
+              d={d}
+              stroke={stroke}
+              strokeWidth={1.8}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.95}
+            />
+            <circle cx={cx} cy={cy} r={2.6} fill={stroke} />
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse }) {
-  const measured = pulse.rows.filter((r) => r.current != null);
-  const maxValue = measured.length
-    ? Math.max(...measured.map((r) => r.current ?? 0))
-    : 0;
-
   return (
     <div
       className="w-card td-stat-cell"
@@ -150,17 +238,20 @@ export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse })
         <Icon.pin size={13} />
       </div>
 
-      {/* Rows */}
+      {/* Sparkline */}
+      <MultiSparkline rows={pulse.rows} width={260} height={64} inverse={pulse.inverse} />
+
+      {/* Legend rows */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: 6,
+          gap: 4,
           marginTop: 2,
         }}
       >
         {pulse.rows.map((row) => {
-          const fill = fillRatio(row.current, pulse.benchmarkType, maxValue);
+          const color = positionColor(row.position);
           const delta = fmtDelta(row, pulse.benchmarkType, pulse.unit);
           const noData = row.current == null;
           return (
@@ -168,12 +259,23 @@ export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse })
               key={row.position}
               style={{
                 display: "grid",
-                gridTemplateColumns: "40px 1fr 60px 44px",
+                gridTemplateColumns: "14px 40px 1fr 60px",
                 gap: 8,
                 alignItems: "center",
                 fontSize: 11.5,
               }}
             >
+              <span
+                aria-hidden
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: noData ? "var(--uff-line)" : color,
+                  display: "inline-block",
+                  opacity: noData ? 0.5 : 1,
+                }}
+              />
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
@@ -185,31 +287,11 @@ export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse })
               >
                 {row.position}
               </span>
-              <div
-                style={{
-                  height: 6,
-                  background: "rgba(255,255,255,0.05)",
-                  borderRadius: 3,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${fill * 100}%`,
-                    height: "100%",
-                    background: pulse.color,
-                    opacity: noData ? 0 : 0.85,
-                    borderRadius: 3,
-                    transition: "width 240ms ease",
-                  }}
-                />
-              </div>
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: 12,
                   fontWeight: 700,
-                  textAlign: "right",
                   color: noData ? "var(--uff-text-mute)" : "var(--uff-text)",
                   letterSpacing: "-0.01em",
                 }}
@@ -231,7 +313,7 @@ export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse })
                     ? delta.good
                       ? "var(--uff-lime)"
                       : "var(--uff-red)"
-                    : "transparent",
+                    : "var(--uff-text-mute)",
                 }}
               >
                 {delta?.text ?? "—"}
