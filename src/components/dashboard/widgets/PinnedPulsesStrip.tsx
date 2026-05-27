@@ -1,7 +1,11 @@
-// Build 7 marquee widget: 4 pinned drills shown as KPI cards with a
-// current value, delta vs prior window, and an 8-week sparkline. Pin
-// state lives in `team_drills.is_dashboard_pinned`; toggle via the
-// PinButton on drill detail (Build 4).
+// Build 7 marquee widget: up to 4 pinned pulses shown as KPI cards with a
+// current value, delta vs prior window, and an 8-week sparkline.
+//
+// Branch 2 (Build 7.5b): pulses are now backed by `team_dashboard_pins`,
+// one row per (drill, benchmark_type, position) slice. A single drill
+// can appear multiple times in the strip with different type/position
+// scopes. Each card surfaces a TYPE kicker line and a POSITION chip so
+// the scope is unambiguous.
 
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
@@ -56,7 +60,7 @@ function EmptyPulse() {
         Empty pulse slot
       </span>
       <span style={{ fontSize: 12, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
-        Pin a drill from its detail page to track it here.
+        Pin a (drill, type) pulse from any drill&apos;s detail page.
       </span>
       <Link href="/drills" className="wbtn ghost" style={{ height: 30, alignSelf: "flex-start" }}>
         Browse drills <Icon.chevR size={12} />
@@ -83,29 +87,74 @@ export default function PinnedPulsesStrip({
     >
       {slots.map((p, i) =>
         p ? (
-          <div className="w-card td-stat-cell" key={p.drillId} style={{ padding: 18 }}>
+          <div className="w-card td-stat-cell" key={p.pinId} style={{ padding: 18 }}>
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 marginBottom: 8,
+                gap: 8,
               }}
             >
-              <Link
-                href={`/drills/${p.drillId}`}
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--uff-text-mute)",
-                  textDecoration: "none",
-                  maxWidth: "70%",
-                }}
-              >
-                {p.drillName}
-              </Link>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Link
+                  href={`/drills/${p.drillId}`}
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "var(--uff-text-mute)",
+                    textDecoration: "none",
+                    display: "block",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {p.drillName}
+                </Link>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.10em",
+                      textTransform: "uppercase",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      background: "rgba(255,106,26,0.14)",
+                      color: "var(--uff-orange)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {p.benchmarkType}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.10em",
+                      textTransform: "uppercase",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      background: "rgba(255,255,255,0.04)",
+                      color: "var(--uff-text-dim)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {p.position ?? "ALL"}
+                  </span>
+                </div>
+              </div>
               <Icon.pin size={13} />
             </div>
             <div

@@ -21,9 +21,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /* ─────────────────── types ─────────────────── */
 
 export type PinnedPulse = {
+  pinId: string;
   drillId: string;
   drillName: string;
   benchmarkType: "timed" | "rated" | "reps" | "pct" | "flags" | "drops";
+  // null = team-wide; otherwise a position code from src/lib/positions.ts
+  position: string | null;
   current: number | null;
   previous: number | null;
   delta: number | null;
@@ -257,7 +260,7 @@ export async function loadTeamDashboard(
     .slice(0, 10);
 
   const [
-    pinnedDrillsRes,
+    pinsRes,
     benchmarksRes,
     playersRes,
     practicesUpcomingRes,
@@ -270,14 +273,18 @@ export async function loadTeamDashboard(
     drillCatLinksRes,
     currentPlayerRes,
   ] = await Promise.all([
+    // team_dashboard_pins: one row per (drill, benchmark_type, position)
+    // slice. Backed by migration 63. Replaces the prior boolean
+    // team_drills.is_dashboard_pinned which only allowed one pin per drill
+    // and silently dropped multi-type drills' non-primary types.
     supabase
-      .from("team_drills")
+      .from("team_dashboard_pins")
       .select(
-        "id, drill_name, benchmark_types, benchmark_type, category_id, is_dashboard_pinned, dashboard_pinned_at"
+        "id, drill_id, benchmark_type, position, sort_order, pinned_at, team_drills(id, drill_name, category_id)"
       )
       .eq("team_id", teamId)
-      .eq("is_dashboard_pinned", true)
-      .order("dashboard_pinned_at", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .order("pinned_at", { ascending: true })
       .limit(4),
 
     supabase
@@ -368,7 +375,7 @@ export async function loadTeamDashboard(
     created_at?: string;
   };
 
-  const pinnedDrills = pinnedDrillsRes.data ?? [];
+  const pinsRaw = pinsRes.data ?? [];
   const benchmarks = benchmarksRes.data ?? [];
   const players = (playersRes.data ?? []) as Player[];
   const upcomingPractice = (practicesUpcomingRes.data ?? [])[0] as PracticeRow | undefined;
@@ -395,16 +402,80 @@ export async function loadTeamDashboard(
 
   /* ── Pinned Pulses ── */
 
-  const pulses: PinnedPulse[] = pinnedDrills.map((drill) => {
-    const benchType =
-      ((drill.benchmark_types as string[] | null)?.[0] as PinnedPulse["benchmarkType"] | undefined) ??
-      (drill.benchmark_type as PinnedPulse["benchmarkType"] | undefined) ??
-      "rated";
+  // Normalize the embedded team_drills join (Supabase types it as object | array).
+  type PinRow = {
+    id: string;
+    drill_id: string;
+    benchmark_type: string;
+    position: string | null;
+    sort_order: number;
+    pinned_at: string | null;
+    team_drills:
+      | { id: string; drill_name: string; category_id: string | null }
+      | { id: string; drill_name: string; category_id: string | null }[]
+      | null;
+  };
+  const pins = (pinsRaw as PinRow[]).map((p) => {
+    const join = Array.isArray(p.team_drills) ? p.team_drills[0] : p.team_drills;
+    return { ...p, drill: join ?? null };
+  });
+
+  // Deduped list of pinned drills (one entry per drill_id, even when the
+  // drill appears in multiple pin slices). Used by Movers + Needs
+  // Attention + Activity widgets that care about "is this drill pinned"
+  // at the drill level, not the (drill, type, position) level.
+  const pinnedDrillByDrillId = new Map<
+    string,
+    { id: string; drill_name: string; benchmark_types: string[] }
+  >();
+  for (const pin of pins) {
+    if (!pin.drill) continue;
+    const existing = pinnedDrillByDrillId.get(pin.drill.id);
+    if (existing) {
+      if (!existing.benchmark_types.includes(pin.benchmark_type)) {
+        existing.benchmark_types.push(pin.benchmark_type);
+      }
+    } else {
+      pinnedDrillByDrillId.set(pin.drill.id, {
+        id: pin.drill.id,
+        drill_name: pin.drill.drill_name,
+        benchmark_types: [pin.benchmark_type],
+      });
+    }
+  }
+  const pinnedDrills = Array.from(pinnedDrillByDrillId.values());
+
+  // Build a player-id set for the pin's position scope:
+  //   - position = null → all active players (team-wide)
+  //   - position = 'QB' → active players whose positions[] includes 'QB'
+  //     (uses `any` semantics, not primary — captains exploring a drill's
+  //     QB pulse should see every player who can step in at QB, not only
+  //     QB-primary)
+  function playerIdsForPosition(position: string | null): Set<string> {
+    if (!position) {
+      return new Set(activePlayers.map((p) => p.id));
+    }
+    return new Set(
+      activePlayers
+        .filter((pl) => (pl.positions ?? []).includes(position))
+        .map((pl) => pl.id)
+    );
+  }
+
+  const pulses: PinnedPulse[] = pins.map((pin) => {
+    const benchType = pin.benchmark_type as PinnedPulse["benchmarkType"];
+    const drillName = pin.drill?.drill_name ?? "Drill";
+    const eligible = playerIdsForPosition(pin.position);
 
     const drillBenchmarks = benchmarks.filter((b) => {
-      if (b.drill_id !== drill.id) return false;
-      if (playerScope && b.player_id !== playerScope) return false;
-      return true;
+      if (b.drill_id !== pin.drill_id) return false;
+      if (b.benchmark_type !== benchType) return false;
+      if (playerScope) {
+        // Captain View Toggle ("?view=player") forces a single-player slice
+        // and overrides the pin's own position scope.
+        return b.player_id === playerScope;
+      }
+      return eligible.has(b.player_id);
     });
 
     // Build 8 weekly buckets (Mon → Sun, last 8 weeks)
@@ -436,9 +507,11 @@ export async function loadTeamDashboard(
     const delta = current != null && previous != null ? current - previous : null;
 
     return {
-      drillId: drill.id,
-      drillName: drill.drill_name,
+      pinId: pin.id,
+      drillId: pin.drill_id,
+      drillName,
       benchmarkType: benchType,
+      position: pin.position,
       current,
       previous,
       delta,
@@ -453,7 +526,7 @@ export async function loadTeamDashboard(
           : benchType === "pct"
           ? "#6EA8FF"
           : "#B89BFF",
-      pinnedAt: drill.dashboard_pinned_at,
+      pinnedAt: pin.pinned_at,
     };
   });
 

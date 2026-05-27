@@ -96,22 +96,45 @@ export default async function DrillDetailPage({ params }: Props) {
   }
   const teamId = drill.team_id as string;
 
-  const [{ data: team }, { data: junction }, { count: memberCount }] =
-    await Promise.all([
-      supabase
-        .from("teams")
-        .select("id, team_name, team_color, league_id")
-        .eq("id", teamId)
-        .maybeSingle(),
-      supabase
-        .from("team_drill_categories")
-        .select("category_id")
-        .eq("drill_id", id),
-      supabase
-        .from("team_members")
-        .select("*", { count: "exact", head: true })
-        .eq("team_id", teamId),
-    ]);
+  const [
+    { data: team },
+    { data: junction },
+    { count: memberCount },
+    { data: pinsForDrill },
+    { count: totalTeamPins },
+    { data: rosterRows },
+  ] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, team_name, team_color, league_id")
+      .eq("id", teamId)
+      .maybeSingle(),
+    supabase
+      .from("team_drill_categories")
+      .select("category_id")
+      .eq("drill_id", id),
+    supabase
+      .from("team_members")
+      .select("*", { count: "exact", head: true })
+      .eq("team_id", teamId),
+    // Pins on THIS drill (any type / position).
+    supabase
+      .from("team_dashboard_pins")
+      .select("id, benchmark_type, position")
+      .eq("drill_id", id)
+      .eq("team_id", teamId),
+    // Team-wide pin count for the popover's slot counter.
+    supabase
+      .from("team_dashboard_pins")
+      .select("id", { count: "exact", head: true })
+      .eq("team_id", teamId),
+    // Active positions actually on the roster — drives the position dropdown.
+    supabase
+      .from("team_players")
+      .select("positions")
+      .eq("team_id", teamId)
+      .eq("status", "active"),
+  ]);
 
   if (!team) redirect("/dashboard");
 
@@ -243,7 +266,30 @@ export default async function DrillDetailPage({ params }: Props) {
   const description = (drill.description as string | null) ?? "";
   const sourceUrl = (drill.source_url as string | null) ?? "";
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : "";
-  const pinned = !!drill.is_dashboard_pinned;
+  // Pin state (Branch 2): backed by team_dashboard_pins. A drill is
+  // "pinned" if any slice exists for it. Multi-type drills get richer
+  // metadata for the PinButton popover.
+  const currentPins = (
+    (pinsForDrill ?? []) as {
+      id: string;
+      benchmark_type: string;
+      position: string | null;
+    }[]
+  ).map((p) => ({
+    id: p.id,
+    benchmarkType: p.benchmark_type,
+    position: p.position,
+  }));
+  const pinned = currentPins.length > 0;
+
+  // Active positions on the team, intersected with the canonical list +
+  // sorted to match POSITION_IDS order so the dropdown reads consistently.
+  const rosterPositionsSet = new Set<string>();
+  for (const r of (rosterRows ?? []) as { positions: string[] | null }[]) {
+    for (const p of r.positions ?? []) rosterPositionsSet.add(p);
+  }
+  const { POSITION_IDS } = await import("@/lib/positions");
+  const positionOptions = POSITION_IDS.filter((p) => rosterPositionsSet.has(p));
 
   const firstName = (profile?.first_name as string | null) ?? "";
   const lastName = (profile?.last_name as string | null) ?? "";
@@ -290,7 +336,10 @@ export default async function DrillDetailPage({ params }: Props) {
               <PinButton
                 drillId={drill.id as string}
                 teamId={team.id as string}
-                pinned={pinned}
+                benchmarkTypes={types}
+                currentPins={currentPins}
+                positionOptions={positionOptions}
+                totalTeamPins={totalTeamPins ?? 0}
               />
               <Link href={`/drills/${drill.id}/edit`} className="wbtn">
                 Edit drill
