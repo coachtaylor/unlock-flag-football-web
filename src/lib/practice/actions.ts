@@ -78,6 +78,11 @@ export async function savePlan(payload: SavePlanPayload): Promise<{ ok: true } |
   return { ok: true };
 }
 
+// NOTE: This helper intentionally does NOT call revalidatePath. It can be
+// invoked from a server component render (e.g. /practice/new) where calling
+// revalidatePath would throw under Next 16's stricter "no revalidation
+// during render" rule. Each user-triggered wrapper below (newPlanAndRedirect,
+// duplicatePlan, deletePlan, savePlan) handles its own revalidation.
 export async function createPlanDraft(teamId: string): Promise<string> {
   const supabase = await createClient();
   const {
@@ -99,7 +104,6 @@ export async function createPlanDraft(teamId: string): Promise<string> {
     .select("id")
     .single();
   if (error || !data) throw new Error(error?.message ?? "Failed to create plan");
-  revalidatePath("/practice");
   return data.id as string;
 }
 
@@ -107,6 +111,7 @@ export async function newPlanAndRedirect(formData: FormData) {
   const teamId = String(formData.get("teamId") ?? "");
   if (!teamId) throw new Error("Missing teamId");
   const id = await createPlanDraft(teamId);
+  revalidatePath("/practice");
   redirect(`/practice/${id}/edit`);
 }
 
