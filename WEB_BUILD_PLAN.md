@@ -661,7 +661,19 @@ None of these widgets exist on web today; all of them exist on mobile and the da
 
 ---
 
-## Build 8 — Charts and player insights ⏳
+## Build 8 — Charts and player insights ✅
+
+### Shipped (2026-05-26)
+- New `src/components/app/charts/` directory: `chartTheme.ts` (axis/grid/tooltip tokens shared across all Recharts surfaces), `BenchmarkProgressChart.tsx` (per-drill Recharts LineChart with axes, tooltip, PR-aware custom dots, dashed PB reference line, inverted Y-axis for lower-is-better types), `LockedBenchmarkChart.tsx` (locked-insight card matching chart dimensions).
+- `(workspace)/dashboard/team/[teamId]/roster/[playerId]/PlayerHistory.tsx` rewired to render `BenchmarkProgressChart` per (drill, type), with a "Locked insights" tail section below the measured drills.
+- Player detail page query extended to fetch `team_drills.benchmark_types[]` so we can compute supported-but-unmeasured (drill, type) pairs for the locked tail. Grouping rekeyed by `drill_id` for stable identity.
+- `BenchmarkTrendsCard.tsx` (Build 7) refactored onto the shared `chartTheme` so dashboard and player charts stay in lockstep.
+- Chart components handle all six benchmark types (timed / rated / reps / pct / flags / drops) — types without data today show `LockedBenchmarkChart` so Build 6's capture work has visual real-estate ready.
+- Branch: `build-8-charts` off `build-7-dashboard-widgets` tip (after a follow-up commit on build-7 for sidebar polish). Single commit. Not merged to main.
+
+### Notes / known divergences from the plan
+- `Spark.tsx` (PinnedPulsesStrip), `CategoryDonut`, and `CadenceHeatmap` from Build 7 stay hand-rolled. The plan said "optional dashboard polish if any pulse/widget would benefit from a more sophisticated chart" — those three are two SVG paths and zero JS, swapping for Recharts would bloat the bundle for no visible gain. The polish that DID happen: extracting the shared `chartTheme` and refactoring `BenchmarkTrendsCard` onto it.
+- Required scope path: `src/app/(app)/roster/[id]/page.tsx`. Actual landing site: `src/app/(workspace)/dashboard/team/[teamId]/roster/[playerId]/page.tsx` (the workspace path is where users actually navigate from the team dashboard; legacy `(app)/roster` is deferred to Build 9 polish).
 
 ### Goal
 Add real charts to the player detail page now that the dashboard widget pass is done and the desktop layout can support them.
