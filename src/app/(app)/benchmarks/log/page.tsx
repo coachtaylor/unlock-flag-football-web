@@ -1,8 +1,38 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import BenchmarkLogClient from "./BenchmarkLogClient";
+import type { BenchKind } from "@/components/uff-web/drills/atoms";
+import BenchmarkLogClient, {
+  type BenchConfigEntry,
+} from "./BenchmarkLogClient";
 
 type SearchParams = Promise<{ drill?: string; players?: string }>;
+
+const VALID_KINDS: ReadonlySet<string> = new Set([
+  "timed",
+  "rated",
+  "reps",
+  "pct",
+  "flags",
+  "drops",
+]);
+
+function coalesceTypes(
+  benchmarkTypes: string[] | null,
+  benchmarkType: string | null,
+): BenchKind[] {
+  const out: BenchKind[] = [];
+  const seen = new Set<string>();
+  for (const t of benchmarkTypes ?? []) {
+    if (t && VALID_KINDS.has(t) && !seen.has(t)) {
+      seen.add(t);
+      out.push(t as BenchKind);
+    }
+  }
+  if (out.length === 0 && benchmarkType && VALID_KINDS.has(benchmarkType)) {
+    out.push(benchmarkType as BenchKind);
+  }
+  return out;
+}
 
 export default async function BenchmarkLogPage({
   searchParams,
@@ -33,17 +63,20 @@ export default async function BenchmarkLogPage({
 
   const { data: drill } = await supabase
     .from("team_drills")
-    .select("id, team_id, drill_name, benchmark_type")
+    .select("id, team_id, drill_name, benchmark_type, benchmark_types, benchmark_config")
     .eq("id", drillId)
     .maybeSingle();
 
-  if (
-    !drill ||
-    drill.team_id !== teamId ||
-    !drill.benchmark_type
-  ) {
-    redirect("/benchmarks");
-  }
+  if (!drill || drill.team_id !== teamId) redirect("/benchmarks");
+
+  const types = coalesceTypes(
+    drill.benchmark_types as string[] | null,
+    drill.benchmark_type as string | null,
+  );
+  if (types.length === 0) redirect("/benchmarks");
+
+  const config =
+    (drill.benchmark_config as Partial<Record<BenchKind, BenchConfigEntry>> | null) ?? {};
 
   const { data: players } = await supabase
     .from("team_players")
@@ -75,7 +108,8 @@ export default async function BenchmarkLogPage({
       drill={{
         id: drill.id as string,
         name: drill.drill_name as string,
-        benchmarkType: drill.benchmark_type as "timed" | "rated",
+        types,
+        config,
       }}
       players={orderedPlayers}
     />

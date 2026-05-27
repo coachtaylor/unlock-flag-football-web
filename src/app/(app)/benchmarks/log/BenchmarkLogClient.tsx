@@ -1,13 +1,35 @@
 "use client";
 
+// Multi-type benchmark capture. A drill can declare any combination of
+// six types (timed / rated / reps / pct / flags / drops). For each player
+// we render every supported type as its own widget on the same screen
+// (per spec §6 risk mitigation: "per-set capture all-types-on-one-screen
+// rather than sequencing them"). Save inserts one benchmark_results row
+// per (player, type) for the current assessment date.
+
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  BENCH_BY_ID,
+  type BenchKind,
+} from "@/components/uff-web/drills/atoms";
+
+// `target` is captured at drill-design time and shown on the widget as
+// a hint. `better` overrides the type-default (drops defaults lower; pct
+// can be either depending on what's being measured).
+export type BenchConfigEntry = {
+  target?: string;
+  better?: "lower" | "higher";
+};
+
+type BenchConfig = Partial<Record<BenchKind, BenchConfigEntry>>;
 
 type Drill = {
   id: string;
   name: string;
-  benchmarkType: "timed" | "rated";
+  types: BenchKind[];
+  config: BenchConfig;
 };
 
 type Player = {
@@ -16,9 +38,24 @@ type Player = {
   positions: string[];
 };
 
-type PlayerResult = {
+// One PerTypeValue lives per (player, type). The wire format depends on
+// the type — only the fields the type uses are populated; the rest are
+// ignored. Strings are used for numeric inputs so partial entry ("3.")
+// doesn't get clobbered into 3.
+type PerTypeValue = {
+  // timed → seconds (numeric string)
   timeSeconds: string;
+  // rated → 1-5
   rating: number | null;
+  // reps / flags / drops → single count
+  count: string;
+  // pct → made / attempts
+  made: string;
+  attempts: string;
+};
+
+type PlayerResult = {
+  perType: Record<BenchKind, PerTypeValue>;
   tags: Set<string>;
   notes: string;
 };
@@ -48,13 +85,20 @@ const RATING_ANCHORS: Record<number, string> = {
   5: "Reliable under pressure",
 };
 
-function emptyResult(): PlayerResult {
+function emptyPerType(): PerTypeValue {
   return {
     timeSeconds: "",
     rating: null,
-    tags: new Set(),
-    notes: "",
+    count: "",
+    made: "",
+    attempts: "",
   };
+}
+
+function emptyResult(types: BenchKind[]): PlayerResult {
+  const perType = {} as Record<BenchKind, PerTypeValue>;
+  for (const t of types) perType[t] = emptyPerType();
+  return { perType, tags: new Set(), notes: "" };
 }
 
 function todayString() {
@@ -65,6 +109,281 @@ function todayString() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Resolve the lower-is-better flag for a given type. `drops` defaults
+// inverse; `timed` is captured separately on the row (the column is
+// numeric, not inverted), so for column purposes only drops + opted-in
+// flags/pct rows store inverse=true.
+function effectiveInverse(type: BenchKind, cfg?: BenchConfigEntry): boolean {
+  if (cfg?.better === "lower") return true;
+  if (cfg?.better === "higher") return false;
+  return type === "drops";
+}
+
+// ── Widgets ────────────────────────────────────────────────────────────
+
+function NumberField({
+  label,
+  unit,
+  value,
+  onChange,
+  placeholder = "0",
+  step = "1",
+  inputMode = "numeric",
+  target,
+}: {
+  label: string;
+  unit: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  step?: string;
+  inputMode?: "numeric" | "decimal";
+  target?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p
+          className="label-micro"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          {label}{" "}
+          <span style={{ color: "var(--color-text-muted)" }}>({unit})</span>
+        </p>
+        {target ? (
+          <p
+            className="text-caption"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Target {target}
+            {unit !== "/5" ? unit : ""}
+          </p>
+        ) : null}
+      </div>
+      <input
+        type="number"
+        inputMode={inputMode}
+        step={step}
+        min="0"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full mt-sm rounded-lg text-heading font-medium tabular-nums text-center"
+        style={{
+          backgroundColor: "var(--color-surface-raised)",
+          color: "var(--color-text-primary)",
+          border: "1px solid var(--color-border-default)",
+          padding: "14px 12px",
+          outline: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+function RatingButtons({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div>
+      <p
+        className="label-micro"
+        style={{ color: "var(--color-text-secondary)" }}
+      >
+        Rating
+      </p>
+      <div className="flex items-center justify-between gap-sm mt-sm">
+        {[1, 2, 3, 4, 5].map((r) => {
+          const selected = value === r;
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onChange(r)}
+              aria-pressed={selected}
+              className="text-heading font-medium tabular-nums transition-all"
+              style={{
+                flex: 1,
+                height: "48px",
+                borderRadius: "9999px",
+                backgroundColor: selected
+                  ? "var(--color-orange-500)"
+                  : "var(--color-surface-raised)",
+                color: selected ? "#FFFFFF" : "var(--color-text-secondary)",
+                border: selected
+                  ? "1px solid var(--color-orange-500)"
+                  : "1px solid var(--color-border-subtle)",
+              }}
+            >
+              {r}
+            </button>
+          );
+        })}
+      </div>
+      <p
+        className="text-caption mt-sm text-center"
+        style={{
+          color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
+          minHeight: "18px",
+        }}
+      >
+        {value ? RATING_ANCHORS[value] : "Tap a rating to see the anchor"}
+      </p>
+    </div>
+  );
+}
+
+function PctField({
+  made,
+  attempts,
+  onChange,
+}: {
+  made: string;
+  attempts: string;
+  onChange: (patch: { made?: string; attempts?: string }) => void;
+}) {
+  return (
+    <div>
+      <p
+        className="label-micro"
+        style={{ color: "var(--color-text-secondary)" }}
+      >
+        Made ÷ Attempts
+      </p>
+      <div className="flex items-center gap-sm mt-sm">
+        <input
+          type="number"
+          inputMode="numeric"
+          min="0"
+          placeholder="Made"
+          value={made}
+          onChange={(e) => onChange({ made: e.target.value })}
+          aria-label="Made"
+          className="rounded-lg text-heading font-medium tabular-nums text-center"
+          style={{
+            flex: 1,
+            backgroundColor: "var(--color-surface-raised)",
+            color: "var(--color-text-primary)",
+            border: "1px solid var(--color-border-default)",
+            padding: "14px 12px",
+            outline: "none",
+          }}
+        />
+        <span
+          className="text-heading"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          /
+        </span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min="0"
+          placeholder="Attempts"
+          value={attempts}
+          onChange={(e) => onChange({ attempts: e.target.value })}
+          aria-label="Attempts"
+          className="rounded-lg text-heading font-medium tabular-nums text-center"
+          style={{
+            flex: 1,
+            backgroundColor: "var(--color-surface-raised)",
+            color: "var(--color-text-primary)",
+            border: "1px solid var(--color-border-default)",
+            padding: "14px 12px",
+            outline: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Per-type card wrapper ──────────────────────────────────────────────
+
+function TypeCard({
+  kind,
+  config,
+  value,
+  onChange,
+}: {
+  kind: BenchKind;
+  config?: BenchConfigEntry;
+  value: PerTypeValue;
+  onChange: (patch: Partial<PerTypeValue>) => void;
+}) {
+  const meta = BENCH_BY_ID[kind];
+  const target = config?.target;
+
+  return (
+    <div
+      className="rounded-lg"
+      style={{
+        backgroundColor: "var(--color-surface-base)",
+        border: "1px solid var(--color-border-subtle)",
+        padding: "16px",
+      }}
+    >
+      <div className="flex items-center justify-between mb-md">
+        <span
+          className="label-micro rounded-pill"
+          style={{
+            padding: "2px 10px",
+            backgroundColor: meta.tint,
+            color: meta.accent,
+            border: `1px solid ${meta.border}`,
+          }}
+        >
+          {meta.label}
+        </span>
+        <span
+          className="text-caption"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          {meta.better === "lower" ? "Lower is better" : "Higher is better"}
+        </span>
+      </div>
+
+      {kind === "timed" ? (
+        <NumberField
+          label="Time"
+          unit="s"
+          value={value.timeSeconds}
+          onChange={(v) => onChange({ timeSeconds: v })}
+          placeholder="0.00"
+          step="0.01"
+          inputMode="decimal"
+          target={target}
+        />
+      ) : kind === "rated" ? (
+        <RatingButtons
+          value={value.rating}
+          onChange={(r) => onChange({ rating: r })}
+        />
+      ) : kind === "pct" ? (
+        <PctField
+          made={value.made}
+          attempts={value.attempts}
+          onChange={(p) => onChange(p)}
+        />
+      ) : (
+        <NumberField
+          label={meta.label}
+          unit={meta.unit}
+          value={value.count}
+          onChange={(v) => onChange({ count: v })}
+          target={target}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Main client ────────────────────────────────────────────────────────
+
 export default function BenchmarkLogClient({
   teamId,
   userId,
@@ -74,7 +393,7 @@ export default function BenchmarkLogClient({
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<PlayerResult[]>(() =>
-    players.map(() => emptyResult())
+    players.map(() => emptyResult(drill.types))
   );
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [showNotes, setShowNotes] = useState(false);
@@ -85,7 +404,22 @@ export default function BenchmarkLogClient({
   const currentResult = results[index];
   const isLast = index === players.length - 1;
 
-  function updateCurrent(patch: Partial<PlayerResult>) {
+  const assessmentDate = useMemo(todayString, []);
+
+  function updatePerType(kind: BenchKind, patch: Partial<PerTypeValue>) {
+    setResults((prev) => {
+      const next = [...prev];
+      const r = { ...next[index] };
+      r.perType = {
+        ...r.perType,
+        [kind]: { ...r.perType[kind], ...patch },
+      };
+      next[index] = r;
+      return next;
+    });
+  }
+
+  function updateShared(patch: Partial<Pick<PlayerResult, "tags" | "notes">>) {
     setResults((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], ...patch };
@@ -97,77 +431,124 @@ export default function BenchmarkLogClient({
     const next = new Set(currentResult.tags);
     if (next.has(tag)) next.delete(tag);
     else next.add(tag);
-    updateCurrent({ tags: next });
+    updateShared({ tags: next });
+  }
+
+  // Per-type validation + payload builder. Returns one row per type with
+  // the right column populated, or an error string if any required type
+  // is missing input.
+  function buildPayloads(): { rows: Record<string, unknown>[] } | { errorType: string } {
+    const rows: Record<string, unknown>[] = [];
+    const sharedTags = Array.from(currentResult.tags);
+    const sharedNotes = currentResult.notes.trim() || null;
+
+    for (const kind of drill.types) {
+      const v = currentResult.perType[kind];
+      const cfg = drill.config[kind];
+      const inverse = effectiveInverse(kind, cfg);
+
+      const base: Record<string, unknown> = {
+        team_id: teamId,
+        drill_id: drill.id,
+        player_id: currentPlayer.id,
+        assessed_by: userId,
+        assessment_date: assessmentDate,
+        tags: sharedTags,
+        notes: sharedNotes,
+        benchmark_type: kind,
+        set_number: 1,
+        inverse,
+        captured_on: "desktop",
+        time_seconds: null,
+        rating: null,
+        made_count: null,
+        attempts_count: null,
+      };
+
+      if (kind === "timed") {
+        const trimmed = v.timeSeconds.trim();
+        if (!trimmed) return { errorType: "Time" };
+        const parsed = Number(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0) return { errorType: "Time" };
+        base.time_seconds = parsed;
+      } else if (kind === "rated") {
+        if (!v.rating) return { errorType: "Rating" };
+        base.rating = v.rating;
+      } else if (kind === "pct") {
+        const m = Number(v.made.trim());
+        const a = Number(v.attempts.trim());
+        if (
+          !v.made.trim() ||
+          !v.attempts.trim() ||
+          !Number.isFinite(m) ||
+          !Number.isFinite(a) ||
+          m < 0 ||
+          a <= 0 ||
+          m > a
+        ) {
+          return { errorType: "Made ÷ Attempts" };
+        }
+        base.made_count = Math.floor(m);
+        base.attempts_count = Math.floor(a);
+      } else {
+        // reps / flags / drops — single integer count
+        const trimmed = v.count.trim();
+        if (!trimmed) return { errorType: BENCH_BY_ID[kind].label };
+        const parsed = Number(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0)
+          return { errorType: BENCH_BY_ID[kind].label };
+        base.made_count = Math.floor(parsed);
+      }
+
+      rows.push(base);
+    }
+
+    return { rows };
   }
 
   async function saveCurrent(): Promise<boolean> {
     setError(null);
-
-    const payload: Record<string, unknown> = {
-      team_id: teamId,
-      drill_id: drill.id,
-      player_id: currentPlayer.id,
-      assessed_by: userId,
-      assessment_date: todayString(),
-      tags: Array.from(currentResult.tags),
-      notes: currentResult.notes.trim() || null,
-      time_seconds: null,
-      rating: null,
-    };
-
-    if (drill.benchmarkType === "timed") {
-      const trimmed = currentResult.timeSeconds.trim();
-      if (!trimmed) {
-        setError("Enter a time before continuing.");
-        return false;
-      }
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        setError("Time must be a positive number.");
-        return false;
-      }
-      payload.time_seconds = parsed;
-    } else {
-      if (!currentResult.rating) {
-        setError("Pick a rating before continuing.");
-        return false;
-      }
-      payload.rating = currentResult.rating;
+    const result = buildPayloads();
+    if ("errorType" in result) {
+      setError(`Enter a value for ${result.errorType} before continuing.`);
+      return false;
     }
 
     setSubmitting(true);
 
+    // Re-runs (player came back via Previous): wipe today's rows for this
+    // (player, drill, assessor) and re-insert. Simpler than per-row upsert
+    // and matches the existing single-type behavior.
     if (savedIds.has(currentPlayer.id)) {
-      // Update the existing row (they came back via Previous and are advancing again)
-      const { error: updateErr } = await supabase
+      const { error: delErr } = await supabase
         .from("benchmark_results")
-        .update(payload)
+        .delete()
         .eq("team_id", teamId)
         .eq("drill_id", drill.id)
         .eq("player_id", currentPlayer.id)
-        .eq("assessment_date", payload.assessment_date as string)
-        .eq("assessed_by", userId);
-      if (updateErr) {
-        setError(updateErr.message);
+        .eq("assessed_by", userId)
+        .eq("assessment_date", assessmentDate);
+      if (delErr) {
+        setError(delErr.message);
         setSubmitting(false);
         return false;
       }
-    } else {
-      const { error: insertErr } = await supabase
-        .from("benchmark_results")
-        .insert(payload);
-      if (insertErr) {
-        setError(insertErr.message);
-        setSubmitting(false);
-        return false;
-      }
-      setSavedIds((prev) => {
-        const next = new Set(prev);
-        next.add(currentPlayer.id);
-        return next;
-      });
     }
 
+    const { error: insertErr } = await supabase
+      .from("benchmark_results")
+      .insert(result.rows);
+    if (insertErr) {
+      setError(insertErr.message);
+      setSubmitting(false);
+      return false;
+    }
+
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      next.add(currentPlayer.id);
+      return next;
+    });
     setSubmitting(false);
     return true;
   }
@@ -193,7 +574,7 @@ export default function BenchmarkLogClient({
   }
 
   return (
-    <div className="pt-3xl pb-2xl">
+    <div className="pt-3xl pb-2xl" style={{ maxWidth: 640, margin: "0 auto" }}>
       <p
         className="text-caption"
         style={{ color: "var(--color-text-secondary)" }}
@@ -226,89 +607,21 @@ export default function BenchmarkLogClient({
         </div>
       )}
 
-      {/* Result input */}
-      <div className="mt-3xl">
-        {drill.benchmarkType === "timed" ? (
-          <div>
-            <p
-              className="label-micro"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Time (seconds)
-            </p>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={currentResult.timeSeconds}
-              onChange={(e) => updateCurrent({ timeSeconds: e.target.value })}
-              className="w-full mt-md rounded-lg text-display font-medium tabular-nums text-center"
-              style={{
-                backgroundColor: "var(--color-surface-raised)",
-                color: "var(--color-text-primary)",
-                border: "1px solid var(--color-border-default)",
-                padding: "20px 16px",
-                outline: "none",
-              }}
-            />
-          </div>
-        ) : (
-          <div>
-            <p
-              className="label-micro"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Rating
-            </p>
-            <div className="flex items-center justify-between gap-sm mt-md">
-              {[1, 2, 3, 4, 5].map((r) => {
-                const selected = currentResult.rating === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => updateCurrent({ rating: r })}
-                    aria-pressed={selected}
-                    className="text-heading font-medium tabular-nums transition-all"
-                    style={{
-                      flex: 1,
-                      height: "56px",
-                      borderRadius: "9999px",
-                      backgroundColor: selected
-                        ? "var(--color-orange-500)"
-                        : "var(--color-surface-raised)",
-                      color: selected ? "#FFFFFF" : "var(--color-text-secondary)",
-                      border: selected
-                        ? "1px solid var(--color-orange-500)"
-                        : "1px solid var(--color-border-subtle)",
-                    }}
-                  >
-                    {r}
-                  </button>
-                );
-              })}
-            </div>
-            <p
-              className="text-caption mt-md text-center"
-              style={{
-                color: currentResult.rating
-                  ? "var(--color-text-primary)"
-                  : "var(--color-text-muted)",
-                minHeight: "20px",
-              }}
-            >
-              {currentResult.rating
-                ? RATING_ANCHORS[currentResult.rating]
-                : "Tap a rating to see the anchor"}
-            </p>
-          </div>
-        )}
+      {/* Per-type widgets stacked, one card per type */}
+      <div className="mt-2xl flex flex-col gap-md">
+        {drill.types.map((kind) => (
+          <TypeCard
+            key={kind}
+            kind={kind}
+            config={drill.config[kind]}
+            value={currentResult.perType[kind]}
+            onChange={(patch) => updatePerType(kind, patch)}
+          />
+        ))}
       </div>
 
       {/* Tags */}
-      <div className="mt-3xl">
+      <div className="mt-2xl">
         <p
           className="label-micro"
           style={{ color: "var(--color-text-secondary)" }}
@@ -356,7 +669,7 @@ export default function BenchmarkLogClient({
             </p>
             <textarea
               value={currentResult.notes}
-              onChange={(e) => updateCurrent({ notes: e.target.value })}
+              onChange={(e) => updateShared({ notes: e.target.value })}
               placeholder="Additional notes..."
               rows={3}
               className="w-full mt-md rounded-lg text-body"
