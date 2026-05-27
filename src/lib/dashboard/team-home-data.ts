@@ -20,11 +20,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /* ─────────────────── types ─────────────────── */
 
+export type PulseBenchmarkType = "timed" | "rated" | "reps" | "pct" | "flags" | "drops";
+
 export type PinnedPulse = {
+  kind: "single";
   pinId: string;
   drillId: string;
   drillName: string;
-  benchmarkType: "timed" | "rated" | "reps" | "pct" | "flags" | "drops";
+  benchmarkType: PulseBenchmarkType;
   // null = team-wide; otherwise a position code from src/lib/positions.ts
   position: string | null;
   current: number | null;
@@ -37,6 +40,28 @@ export type PinnedPulse = {
   color: string;
   pinnedAt: string | null;
 };
+
+export type BreakdownPulseRow = {
+  position: string;
+  current: number | null;
+  previous: number | null;
+  delta: number | null;
+};
+
+export type BreakdownPulse = {
+  kind: "breakdown";
+  pinId: string;
+  drillId: string;
+  drillName: string;
+  benchmarkType: PulseBenchmarkType;
+  unit: string;
+  inverse: boolean;
+  color: string;
+  pinnedAt: string | null;
+  rows: BreakdownPulseRow[];
+};
+
+export type PulseSlot = PinnedPulse | BreakdownPulse;
 
 export type DrillMixEntry = {
   key: string;
@@ -123,7 +148,7 @@ export type HeroStats = {
 export type TeamDashboardData = {
   hero: HeroStats;
   nextPractice: NextPractice | null;
-  pulses: PinnedPulse[];
+  pulses: PulseSlot[];
   trendSeries: { drillId: string; label: string; color: string; data: { week: string; value: number }[] }[];
   movers: Mover[];
   drillMix: { entries: DrillMixEntry[]; total: number; underweight: string | null };
@@ -202,7 +227,7 @@ function avg(nums: number[]) {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-function pulseUnit(t: PinnedPulse["benchmarkType"]) {
+function pulseUnit(t: PulseBenchmarkType) {
   switch (t) {
     case "timed":
       return "s";
@@ -215,14 +240,14 @@ function pulseUnit(t: PinnedPulse["benchmarkType"]) {
   }
 }
 
-function isInverse(t: PinnedPulse["benchmarkType"]) {
+function isInverse(t: PulseBenchmarkType) {
   // timed + drops: lower is better
   return t === "timed" || t === "drops";
 }
 
 function valueFromBenchmark(
   row: { time_seconds: number | null; rating: number | null; made_count: number | null; attempts_count: number | null },
-  t: PinnedPulse["benchmarkType"]
+  t: PulseBenchmarkType
 ): number | null {
   switch (t) {
     case "timed":
@@ -274,13 +299,12 @@ export async function loadTeamDashboard(
     currentPlayerRes,
   ] = await Promise.all([
     // team_dashboard_pins: one row per (drill, benchmark_type, position)
-    // slice. Backed by migration 63. Replaces the prior boolean
-    // team_drills.is_dashboard_pinned which only allowed one pin per drill
-    // and silently dropped multi-type drills' non-primary types.
+    // slice OR breakdown pin (one row, fans out into N positions on the
+    // dashboard card). Backed by migrations 63 + 65.
     supabase
       .from("team_dashboard_pins")
       .select(
-        "id, drill_id, benchmark_type, position, sort_order, pinned_at, team_drills(id, drill_name, category_id)"
+        "id, drill_id, benchmark_type, position, breakdown_positions, sort_order, pinned_at, team_drills(id, drill_name, category_id)"
       )
       .eq("team_id", teamId)
       .order("sort_order", { ascending: true })
@@ -408,6 +432,7 @@ export async function loadTeamDashboard(
     drill_id: string;
     benchmark_type: string;
     position: string | null;
+    breakdown_positions: string[] | null;
     sort_order: number;
     pinned_at: string | null;
     team_drills:
@@ -462,27 +487,27 @@ export async function loadTeamDashboard(
     );
   }
 
-  const pulses: PinnedPulse[] = pins.map((pin) => {
-    const benchType = pin.benchmark_type as PinnedPulse["benchmarkType"];
-    const drillName = pin.drill?.drill_name ?? "Drill";
-    const eligible = playerIdsForPosition(pin.position);
-
-    const drillBenchmarks = benchmarks.filter((b) => {
-      if (b.drill_id !== pin.drill_id) return false;
-      if (b.benchmark_type !== benchType) return false;
+  // Aggregate one slice (drill, type, eligible-player-set) into current /
+  // previous / 8-week series. Shared by single-scope pulses AND breakdown
+  // sub-rows so the windowing stays consistent.
+  function aggregateSlice(
+    drillId: string,
+    type: PulseBenchmarkType,
+    eligible: Set<string>
+  ): { current: number | null; previous: number | null; delta: number | null; series: number[] } {
+    const rows = benchmarks.filter((b) => {
+      if (b.drill_id !== drillId) return false;
+      if (b.benchmark_type !== type) return false;
       if (playerScope) {
-        // Captain View Toggle ("?view=player") forces a single-player slice
-        // and overrides the pin's own position scope.
         return b.player_id === playerScope;
       }
       return eligible.has(b.player_id);
     });
 
-    // Build 8 weekly buckets (Mon → Sun, last 8 weeks)
     const weeks: number[][] = Array.from({ length: 8 }, () => []);
     const baseMonday = startOfWeek(now);
-    for (const b of drillBenchmarks) {
-      const v = valueFromBenchmark(b, benchType);
+    for (const b of rows) {
+      const v = valueFromBenchmark(b, type);
       if (v == null) continue;
       const wIdx =
         7 -
@@ -493,54 +518,95 @@ export async function loadTeamDashboard(
       if (wIdx >= 0 && wIdx < 8) weeks[wIdx].push(v);
     }
     const series = weeks.map((w) => avg(w) ?? 0);
-    // Fill gaps by carrying the previous value forward (zeros mid-stream
-    // would tank the sparkline visually).
     for (let i = 1; i < series.length; i++) {
       if (!weeks[i].length && weeks[i - 1].length) series[i] = series[i - 1];
     }
     for (let i = series.length - 2; i >= 0; i--) {
       if (!weeks[i].length && weeks[i + 1].length) series[i] = series[i + 1];
     }
-
     const current = avg(weeks.slice(-2).flat());
     const previous = avg(weeks.slice(-6, -2).flat());
     const delta = current != null && previous != null ? current - previous : null;
+    return { current, previous, delta, series };
+  }
 
+  function pulseColor(t: PulseBenchmarkType): string {
+    if (t === "timed") return "#FF6A1A";
+    if (t === "rated") return "#C2FF3D";
+    if (t === "pct") return "#6EA8FF";
+    return "#B89BFF";
+  }
+
+  const pulses: PulseSlot[] = pins.map((pin): PulseSlot => {
+    const benchType = pin.benchmark_type as PulseBenchmarkType;
+    const drillName = pin.drill?.drill_name ?? "Drill";
+    const color = pulseColor(benchType);
+    const inverse = isInverse(benchType);
+    const unit = pulseUnit(benchType);
+
+    // Branch: breakdown vs single-scope.
+    if (pin.breakdown_positions && pin.breakdown_positions.length > 0) {
+      const rows: BreakdownPulseRow[] = pin.breakdown_positions.map((pos) => {
+        const eligible = playerIdsForPosition(pos);
+        const agg = aggregateSlice(pin.drill_id, benchType, eligible);
+        return {
+          position: pos,
+          current: agg.current,
+          previous: agg.previous,
+          delta: agg.delta,
+        };
+      });
+      return {
+        kind: "breakdown",
+        pinId: pin.id,
+        drillId: pin.drill_id,
+        drillName,
+        benchmarkType: benchType,
+        unit,
+        inverse,
+        color,
+        pinnedAt: pin.pinned_at,
+        rows,
+      };
+    }
+
+    const eligible = playerIdsForPosition(pin.position);
+    const agg = aggregateSlice(pin.drill_id, benchType, eligible);
     return {
+      kind: "single",
       pinId: pin.id,
       drillId: pin.drill_id,
       drillName,
       benchmarkType: benchType,
       position: pin.position,
-      current,
-      previous,
-      delta,
-      inverse: isInverse(benchType),
-      unit: pulseUnit(benchType),
-      series,
-      color:
-        benchType === "timed"
-          ? "#FF6A1A"
-          : benchType === "rated"
-          ? "#C2FF3D"
-          : benchType === "pct"
-          ? "#6EA8FF"
-          : "#B89BFF",
+      current: agg.current,
+      previous: agg.previous,
+      delta: agg.delta,
+      inverse,
+      unit,
+      series: agg.series,
+      color,
       pinnedAt: pin.pinned_at,
     };
   });
 
   /* ── Benchmark Trends (top 2 pinned drills, 5-week weekly averages) ── */
 
-  const trendSeries = pulses.slice(0, 2).map((p) => {
-    const weekLabels = ["W1", "W2", "W3", "W4", "W5"];
-    return {
-      drillId: p.drillId,
-      label: p.drillName,
-      color: p.color,
-      data: p.series.slice(-5).map((v, i) => ({ week: weekLabels[i] ?? `W${i + 1}`, value: v })),
-    };
-  });
+  // BenchmarkTrendsCard only renders single-scope pulses (a breakdown
+  // doesn't have a single time series; it's an N-row snapshot). Skip
+  // breakdown pulses here — they're still shown on the strip.
+  const trendSeries = pulses
+    .filter((p): p is PinnedPulse => p.kind === "single")
+    .slice(0, 2)
+    .map((p) => {
+      const weekLabels = ["W1", "W2", "W3", "W4", "W5"];
+      return {
+        drillId: p.drillId,
+        label: p.drillName,
+        color: p.color,
+        data: p.series.slice(-5).map((v, i) => ({ week: weekLabels[i] ?? `W${i + 1}`, value: v })),
+      };
+    });
 
   /* ── Movers (players with biggest improvement on any drill) ── */
 
@@ -973,11 +1039,19 @@ export async function loadTeamDashboard(
     benchmarked: activePlayers.filter((p) => benchmarkedPlayerIds.has(p.id)).length,
     total: activePlayers.length,
   };
-  // Squad delta: improvement on the top pinned drill (first → last week avg)
+  // Squad delta: improvement on the top single-scope pinned pulse
+  // (breakdown pulses don't have a single current/previous — they're
+  // N rows). Skip them for the hero stat.
   let squadDelta: number | null = null;
-  if (pulses[0] && pulses[0].current != null && pulses[0].previous != null && pulses[0].previous !== 0) {
-    const raw = (pulses[0].current - pulses[0].previous) / pulses[0].previous;
-    squadDelta = (pulses[0].inverse ? -raw : raw) * 100;
+  const topSingle = pulses.find((p): p is PinnedPulse => p.kind === "single");
+  if (
+    topSingle &&
+    topSingle.current != null &&
+    topSingle.previous != null &&
+    topSingle.previous !== 0
+  ) {
+    const raw = (topSingle.current - topSingle.previous) / topSingle.previous;
+    squadDelta = (topSingle.inverse ? -raw : raw) * 100;
   }
   const hero: HeroStats = {
     squadDelta,

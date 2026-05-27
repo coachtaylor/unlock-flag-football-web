@@ -117,10 +117,10 @@ export default async function DrillDetailPage({ params }: Props) {
       .from("team_members")
       .select("*", { count: "exact", head: true })
       .eq("team_id", teamId),
-    // Pins on THIS drill (any type / position).
+    // Pins on THIS drill (any type / position / breakdown).
     supabase
       .from("team_dashboard_pins")
-      .select("id, benchmark_type, position")
+      .select("id, benchmark_type, position, breakdown_positions")
       .eq("drill_id", id)
       .eq("team_id", teamId),
     // Team-wide pin count for the popover's slot counter.
@@ -274,11 +274,13 @@ export default async function DrillDetailPage({ params }: Props) {
       id: string;
       benchmark_type: string;
       position: string | null;
+      breakdown_positions: string[] | null;
     }[]
   ).map((p) => ({
     id: p.id,
     benchmarkType: p.benchmark_type,
     position: p.position,
+    breakdownPositions: p.breakdown_positions,
   }));
   const pinned = currentPins.length > 0;
 

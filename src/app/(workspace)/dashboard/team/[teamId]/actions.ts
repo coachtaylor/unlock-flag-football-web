@@ -68,6 +68,49 @@ export async function addPin(args: {
   };
 }
 
+/** Pin a "by-position" breakdown slice. One card on the dashboard, one
+ *  row per position in `positions`. Counts as one slot regardless of N. */
+export async function addBreakdownPin(args: {
+  drillId: string;
+  teamId: string;
+  benchmarkType: string;
+  positions: string[];
+}): Promise<AddPinResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "not_authenticated" };
+
+  if (!args.positions.length) {
+    return { ok: false, error: "breakdown_requires_positions" };
+  }
+
+  const { data, error } = await supabase.rpc("pin_dashboard_breakdown_slice", {
+    p_drill_id: args.drillId,
+    p_benchmark_type: args.benchmarkType,
+    p_positions: args.positions,
+  });
+
+  if (error) {
+    const msg = error.message ?? "unknown";
+    if (msg.includes("pin_cap_reached")) return { ok: false, error: "pin_cap_reached" };
+    if (msg.includes("drill_not_found")) return { ok: false, error: "drill_not_found" };
+    if (msg.includes("breakdown_requires_positions"))
+      return { ok: false, error: "breakdown_requires_positions" };
+    return { ok: false, error: msg };
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  revalidatePath(`/dashboard/team/${args.teamId}`);
+  revalidatePath(`/drills/${args.drillId}`);
+  return {
+    ok: true,
+    pinId: row?.pin_id ?? "",
+    pinnedCount: row?.pinned_count ?? 0,
+  };
+}
+
 /** Delete one pin row by id. RLS limits to the user's team(s). */
 export async function removePin(args: {
   pinId: string;

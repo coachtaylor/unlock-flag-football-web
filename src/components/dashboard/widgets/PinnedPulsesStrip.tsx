@@ -10,7 +10,8 @@
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
 import Spark from "./Spark";
-import type { PinnedPulse } from "@/lib/dashboard/team-home-data";
+import type { PinnedPulse, PulseSlot } from "@/lib/dashboard/team-home-data";
+import BreakdownPulseCard from "./BreakdownPulseCard";
 
 function fmtVal(p: PinnedPulse) {
   if (p.current == null) return "—";
@@ -72,9 +73,9 @@ function EmptyPulse() {
 export default function PinnedPulsesStrip({
   pulses,
 }: {
-  pulses: PinnedPulse[];
+  pulses: PulseSlot[];
 }) {
-  const slots: (PinnedPulse | null)[] = [...pulses];
+  const slots: (PulseSlot | null)[] = [...pulses];
   while (slots.length < 4) slots.push(null);
 
   return (
@@ -85,9 +86,20 @@ export default function PinnedPulsesStrip({
         gap: 16,
       }}
     >
-      {slots.map((p, i) =>
-        p ? (
-          <div className="w-card td-stat-cell" key={p.pinId} style={{ padding: 18 }}>
+      {slots.map((p, i) => {
+        if (!p) return <EmptyPulse key={`empty-${i}`} />;
+        if (p.kind === "breakdown") {
+          return <BreakdownPulseCard key={p.pinId} pulse={p} />;
+        }
+        return <SinglePulseCard key={p.pinId} pulse={p} />;
+      })}
+    </div>
+  );
+}
+
+function SinglePulseCard({ pulse: p }: { pulse: PinnedPulse }) {
+  return (
+    <div className="w-card td-stat-cell" style={{ padding: 18 }}>
             <div
               style={{
                 display: "flex",
@@ -196,11 +208,6 @@ export default function PinnedPulsesStrip({
               </div>
               <Spark data={p.series} color={p.color} w={88} h={36} />
             </div>
-          </div>
-        ) : (
-          <EmptyPulse key={`empty-${i}`} />
-        )
-      )}
     </div>
   );
 }

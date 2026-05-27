@@ -20,6 +20,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   addPin,
+  addBreakdownPin,
   removePin,
   togglePinDrill,
 } from "@/app/(workspace)/dashboard/team/[teamId]/actions";
@@ -29,6 +30,7 @@ export type PinSlice = {
   id: string;
   benchmarkType: string;
   position: string | null;
+  breakdownPositions: string[] | null;
 };
 
 type Props = {
@@ -193,63 +195,82 @@ export default function PinButton({
               </div>
             )}
 
-            {currentPins.map((pin) => (
-              <PinRow
-                key={pin.id}
-                pin={pin}
-                positionOptions={positionOptions}
-                pending={pending}
-                onRemove={() =>
-                  start(async () => {
-                    setError(null);
-                    const r = await removePin({
-                      pinId: pin.id,
-                      teamId,
-                      drillId,
-                    });
-                    if (!r.ok) setError(r.error);
-                    refresh();
-                  })
-                }
-                onChangePosition={(nextPos) =>
-                  start(async () => {
-                    setError(null);
-                    // Atomic swap: remove old, add new. If the add fails
-                    // (cap reached on another captain's pin), the remove
-                    // already landed — re-pin the original to roll back.
-                    const r1 = await removePin({
-                      pinId: pin.id,
-                      teamId,
-                      drillId,
-                    });
-                    if (!r1.ok) {
-                      setError(r1.error);
+            {currentPins.map((pin) =>
+              pin.breakdownPositions && pin.breakdownPositions.length > 0 ? (
+                <BreakdownPinRow
+                  key={pin.id}
+                  pin={pin}
+                  pending={pending}
+                  onRemove={() =>
+                    start(async () => {
+                      setError(null);
+                      const r = await removePin({
+                        pinId: pin.id,
+                        teamId,
+                        drillId,
+                      });
+                      if (!r.ok) setError(r.error);
                       refresh();
-                      return;
-                    }
-                    const r2 = await addPin({
-                      drillId,
-                      teamId,
-                      benchmarkType: pin.benchmarkType,
-                      position: nextPos,
-                    });
-                    if (!r2.ok) {
-                      setError(r2.error);
-                      // Best-effort rollback
-                      await addPin({
+                    })
+                  }
+                />
+              ) : (
+                <PinRow
+                  key={pin.id}
+                  pin={pin}
+                  positionOptions={positionOptions}
+                  pending={pending}
+                  onRemove={() =>
+                    start(async () => {
+                      setError(null);
+                      const r = await removePin({
+                        pinId: pin.id,
+                        teamId,
+                        drillId,
+                      });
+                      if (!r.ok) setError(r.error);
+                      refresh();
+                    })
+                  }
+                  onChangePosition={(nextPos) =>
+                    start(async () => {
+                      setError(null);
+                      // Atomic swap: remove old, add new. If the add fails
+                      // (cap reached on another captain's pin), the remove
+                      // already landed — re-pin the original to roll back.
+                      const r1 = await removePin({
+                        pinId: pin.id,
+                        teamId,
+                        drillId,
+                      });
+                      if (!r1.ok) {
+                        setError(r1.error);
+                        refresh();
+                        return;
+                      }
+                      const r2 = await addPin({
                         drillId,
                         teamId,
                         benchmarkType: pin.benchmarkType,
-                        position: pin.position,
+                        position: nextPos,
                       });
-                    }
-                    refresh();
-                  })
-                }
-              />
-            ))}
+                      if (!r2.ok) {
+                        setError(r2.error);
+                        await addPin({
+                          drillId,
+                          teamId,
+                          benchmarkType: pin.benchmarkType,
+                          position: pin.position,
+                        });
+                      }
+                      refresh();
+                    })
+                  }
+                />
+              )
+            )}
 
-            {/* Add-slice form */}
+            {/* Add a single (type, position) slice */}
             <AddSliceForm
               benchmarkTypes={benchmarkTypes}
               positionOptions={positionOptions}
@@ -274,6 +295,36 @@ export default function PinButton({
                 })
               }
             />
+
+            {/* Add a breakdown card (one slot, N position rows) */}
+            {positionOptions.length >= 2 && (
+              <AddBreakdownForm
+                benchmarkTypes={benchmarkTypes}
+                positionOptions={positionOptions}
+                disabled={pending || atCap}
+                onAdd={(type, positions) =>
+                  start(async () => {
+                    setError(null);
+                    const r = await addBreakdownPin({
+                      drillId,
+                      teamId,
+                      benchmarkType: type,
+                      positions,
+                    });
+                    if (!r.ok) {
+                      setError(
+                        r.error === "pin_cap_reached"
+                          ? `Dashboard is full (${slotCap} slots).`
+                          : r.error === "breakdown_requires_positions"
+                          ? "Pick at least one position."
+                          : r.error
+                      );
+                    }
+                    refresh();
+                  })
+                }
+              />
+            )}
 
             {/* Footer */}
             <div
@@ -401,6 +452,234 @@ function PinRow({
       >
         ×
       </button>
+    </div>
+  );
+}
+
+function BreakdownPinRow({
+  pin,
+  pending,
+  onRemove,
+}: {
+  pin: PinSlice;
+  pending: boolean;
+  onRemove: () => void;
+}) {
+  const positions = pin.breakdownPositions ?? [];
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 8px",
+        background: "rgba(255,106,26,0.05)",
+        border: "1px solid rgba(255,106,26,0.25)",
+        borderRadius: 8,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.10em",
+          textTransform: "uppercase",
+          padding: "2px 7px",
+          borderRadius: 4,
+          background: "rgba(255,106,26,0.14)",
+          color: "var(--uff-orange)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        {pin.benchmarkType}
+      </span>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--uff-text-mute)",
+          }}
+        >
+          Breakdown
+        </span>
+        <span
+          style={{
+            fontSize: 11.5,
+            color: "var(--uff-text-dim)",
+            fontFamily: "var(--font-mono)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {positions.join(" · ")}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={pending}
+        aria-label="Remove breakdown pin"
+        title="Remove breakdown pin"
+        style={{
+          height: 28,
+          width: 28,
+          padding: 0,
+          borderRadius: 6,
+          border: "1px solid var(--uff-line)",
+          background: "rgba(255,255,255,0.02)",
+          color: "var(--uff-text-mute)",
+          cursor: "pointer",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 14,
+          lineHeight: 1,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function AddBreakdownForm({
+  benchmarkTypes,
+  positionOptions,
+  disabled,
+  onAdd,
+}: {
+  benchmarkTypes: string[];
+  positionOptions: string[];
+  disabled: boolean;
+  onAdd: (type: string, positions: string[]) => void;
+}) {
+  const [type, setType] = useState(benchmarkTypes[0] ?? "");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggle(pos: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(pos)) next.delete(pos);
+      else next.add(pos);
+      return next;
+    });
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        padding: "8px 8px",
+        background: "transparent",
+        border: "1px dashed var(--uff-line)",
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 9.5,
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "var(--uff-text-mute)",
+          marginBottom: 2,
+        }}
+      >
+        Pin a breakdown card
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          disabled={disabled}
+          style={{
+            height: 28,
+            padding: "0 6px",
+            background: "var(--uff-surface)",
+            border: "1px solid var(--uff-line)",
+            borderRadius: 6,
+            color: "var(--uff-text)",
+            fontSize: 12,
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {benchmarkTypes.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            if (!type || selected.size === 0) return;
+            onAdd(type, Array.from(selected));
+            setSelected(new Set());
+          }}
+          disabled={disabled || !type || selected.size === 0}
+          className="wbtn primary"
+          style={{
+            height: 28,
+            padding: "0 10px",
+            fontSize: 11.5,
+            marginLeft: "auto",
+          }}
+        >
+          + Pin breakdown
+        </button>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 4,
+        }}
+      >
+        {positionOptions.map((pos) => {
+          const on = selected.has(pos);
+          return (
+            <button
+              key={pos}
+              type="button"
+              onClick={() => toggle(pos)}
+              disabled={disabled}
+              aria-pressed={on}
+              style={{
+                height: 24,
+                padding: "0 8px",
+                borderRadius: 4,
+                border: on
+                  ? "1px solid var(--uff-orange)"
+                  : "1px solid var(--uff-line)",
+                background: on
+                  ? "rgba(255,106,26,0.18)"
+                  : "rgba(255,255,255,0.02)",
+                color: on ? "var(--uff-orange)" : "var(--uff-text-dim)",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                fontFamily: "var(--font-mono)",
+                cursor: "pointer",
+              }}
+            >
+              {pos}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
