@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccessibleTeams } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { playerColorForIndex } from "@/components/uff/team-colors";
+import { primarySide } from "@/lib/positions";
 import { Icon } from "@/components/uff/icons";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
@@ -56,13 +57,15 @@ export default async function PracticeListPage() {
     fetchPlanSummaries(supabase, teamId),
     supabase
       .from("team_players")
-      .select("id, player_name, color_index")
+      .select("id, player_name, color_index, positions")
       .eq("team_id", teamId)
       .eq("status", "active"),
   ]);
 
-  // Map confirmed attendees per plan → list of avatar items.
+  // Map confirmed attendees per plan → list of avatar items, plus a
+  // position breakdown (QB / Offense / Defense) of the same set.
   let rosterByPlan: Record<string, { initials: string; color: string }[]> = {};
+  let breakdownByPlan: Record<string, { qb: number; off: number; def: number }> = {};
   if (plans.length > 0) {
     const planIds = plans.map((p) => p.id);
     const { data: attendees } = await supabase
@@ -71,11 +74,15 @@ export default async function PracticeListPage() {
       .in("practice_plan_id", planIds)
       .eq("rsvp", true);
 
-    const playerById = new Map<string, { initials: string; color: string }>();
+    const playerById = new Map<
+      string,
+      { initials: string; color: string; positions: string[] }
+    >();
     for (const p of players ?? []) {
       playerById.set(p.id as string, {
         initials: initialsFor((p.player_name as string) ?? "?"),
         color: playerColorForIndex((p.color_index as number) ?? 0),
+        positions: (p.positions as string[] | null) ?? [],
       });
     }
     for (const a of attendees ?? []) {
@@ -83,8 +90,15 @@ export default async function PracticeListPage() {
       if (!player) continue;
       const k = a.practice_plan_id as string;
       const arr = rosterByPlan[k] ?? [];
-      arr.push(player);
+      arr.push({ initials: player.initials, color: player.color });
       rosterByPlan[k] = arr;
+
+      const bd = breakdownByPlan[k] ?? { qb: 0, off: 0, def: 0 };
+      const side = primarySide(player.positions);
+      if (side === "offense") bd.off += 1;
+      else if (side === "defense") bd.def += 1;
+      if (player.positions.includes("QB")) bd.qb += 1;
+      breakdownByPlan[k] = bd;
     }
   }
 
@@ -165,6 +179,7 @@ export default async function PracticeListPage() {
             plans={plans}
             rosterSize={(players ?? []).length}
             rosterByPlan={rosterByPlan}
+            breakdownByPlan={breakdownByPlan}
             stats={{
               practices: lastN,
               totalCompleted: completedPlans.length,

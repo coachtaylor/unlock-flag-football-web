@@ -35,6 +35,7 @@ function EditIcon({ size = 12 }: { size?: number }) {
 }
 
 type ConfirmedAvatar = { initials: string; color: string };
+type RsvpBreakdown = { qb: number; off: number; def: number };
 
 export type ListProps = {
   teamId: string;
@@ -42,6 +43,7 @@ export type ListProps = {
   plans: PlanSummary[];
   rosterSize: number;
   rosterByPlan: Record<string, ConfirmedAvatar[]>;
+  breakdownByPlan: Record<string, RsvpBreakdown>;
   stats: {
     practices: number;
     totalCompleted: number;
@@ -57,6 +59,7 @@ export default function PracticeListClient({
   plans,
   rosterSize,
   rosterByPlan,
+  breakdownByPlan,
   stats,
 }: ListProps) {
   const router = useRouter();
@@ -101,6 +104,7 @@ export default function PracticeListClient({
             <FeaturedPlanCard
               plan={next}
               avatars={rosterByPlan[next.id] ?? []}
+              breakdown={breakdownByPlan[next.id] ?? { qb: 0, off: 0, def: 0 }}
               rosterSize={rosterSize}
               isPending={isPending}
               onDuplicate={() => {
@@ -117,7 +121,13 @@ export default function PracticeListClient({
             <SectionLabel label="This week" count={thisWeek.length} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {thisWeek.map((p) => (
-                <PlanSummaryCard key={p.id} plan={p} />
+                <PlanSummaryCard
+                  key={p.id}
+                  plan={p}
+                  avatars={rosterByPlan[p.id] ?? []}
+                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                  rosterSize={rosterSize}
+                />
               ))}
             </div>
           </div>
@@ -128,7 +138,14 @@ export default function PracticeListClient({
             <SectionLabel label="Recent" count={completed.length} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {completed.map((p) => (
-                <PlanSummaryCard key={p.id} plan={p} completed />
+                <PlanSummaryCard
+                  key={p.id}
+                  plan={p}
+                  completed
+                  avatars={rosterByPlan[p.id] ?? []}
+                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                  rosterSize={rosterSize}
+                />
               ))}
             </div>
           </div>
@@ -310,12 +327,14 @@ function RelativeWhen({ iso }: { iso: string }) {
 function FeaturedPlanCard({
   plan,
   avatars,
+  breakdown,
   rosterSize,
   isPending,
   onDuplicate,
 }: {
   plan: PlanSummary;
   avatars: ConfirmedAvatar[];
+  breakdown: RsvpBreakdown;
   rosterSize: number;
   isPending: boolean;
   onDuplicate: () => void;
@@ -384,16 +403,63 @@ function FeaturedPlanCard({
               <PIcon.copy size={12} />
             </button>
           </div>
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: "-0.01em",
-              color: "var(--uff-text)",
-              lineHeight: 1.2,
-            }}
-          >
-            {plan.title}
+          {/* Title row: title fills, attendance inline on a single line —
+              [avatars] 8/9 · QB 1 · OFF 5 · DEF 3. Right-padded to clear
+              the edit/duplicate icon column above. Vertically centered so
+              the avatar baseline lines up with the title cap-height. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                color: "var(--uff-text)",
+                lineHeight: 1.2,
+              }}
+            >
+              {plan.title}
+            </div>
+            {(avatars.length > 0 || breakdown.qb + breakdown.off + breakdown.def > 0) && (
+              <div
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 14,
+                  // Clear the edit/duplicate icon column above (2× 26px
+                  // buttons + 8px gap ≈ 60px) plus breathing room, so the
+                  // attendance row sits visibly left of those icons.
+                  paddingRight: 84,
+                }}
+              >
+                {avatars.length > 0 && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <AvatarStack items={avatars} size={28} max={avatars.length} />
+                    <span
+                      className="mono"
+                      style={{
+                        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "var(--uff-text)",
+                      }}
+                    >
+                      {plan.rsvp_in}
+                      <span style={{ color: "var(--uff-text-mute)", fontWeight: 500 }}>
+                        /{rosterSize}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {avatars.length > 0 &&
+                  breakdown.qb + breakdown.off + breakdown.def > 0 && (
+                    <span style={{ color: "var(--uff-line)", fontSize: 12 }}>·</span>
+                  )}
+                <RsvpBreakdownChips breakdown={breakdown} />
+              </div>
+            )}
           </div>
           <div
             style={{
@@ -419,33 +485,36 @@ function FeaturedPlanCard({
             <span>
               {plan.drill_count}d · {plan.block_count}b
             </span>
-            {plan.rsvp_in > 0 && (
-              <>
-                <span style={{ color: "var(--uff-line)" }}>·</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                  <PIcon.people size={11} /> {plan.rsvp_in}/{rosterSize}
-                </span>
-              </>
-            )}
           </div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
-        {avatars.length > 0 && <AvatarStack items={avatars} size={20} max={5} />}
-        {/* Mix bar + tiny legend below it. Bar fills the rest of the row;
-            the entire card is the click target, so no separate CTA needed. */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
-          <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
-        </div>
+      {/* Bottom row: mix bar + legend only. Attendance moved up into the
+          title row to balance the card and free vertical space. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+        <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={6} />
+        <MixBarLegend blocks={plan.blocks} breakMinutes={plan.break_minutes} />
       </div>
     </div>
   );
 }
 
 // ── Plan summary card (This week + Recent rows) ────────────────────────
-function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: boolean }) {
+function PlanSummaryCard({
+  plan,
+  completed,
+  avatars,
+  breakdown,
+  rosterSize,
+}: {
+  plan: PlanSummary;
+  completed?: boolean;
+  avatars: ConfirmedAvatar[];
+  breakdown: RsvpBreakdown;
+  rosterSize: number;
+}) {
+  const hasAttendance =
+    avatars.length > 0 || breakdown.qb + breakdown.off + breakdown.def > 0;
   return (
     <Link
       href={`/practice/${plan.id}`}
@@ -515,26 +584,137 @@ function PlanSummaryCard({ plan, completed }: { plan: PlanSummary; completed?: b
             <span>
               {plan.drill_count}d · {plan.block_count}b
             </span>
-            {completed && plan.rsvp_in > 0 && (
-              <>
-                <span style={{ color: "var(--uff-line)" }}>·</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                  <PIcon.people size={11} /> {plan.rsvp_in}
-                </span>
-              </>
-            )}
           </div>
-          {/* Mix bar — extends to fill whatever space is left after the meta
-              text. The row's gap keeps a small breathing room from the right
-              edge. */}
+          {/* Mix bar — fills the space between the stats (left) and the
+              attendance (right). When attendance isn't present, marginLeft
+              auto still pushes it right of the stats. */}
           {plan.blocks.length > 0 && (
-            <div style={{ flex: 1, minWidth: 60, marginLeft: "auto" }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 60,
+                marginLeft: hasAttendance ? 0 : "auto",
+              }}
+            >
               <SummaryMixBar blocks={plan.blocks} breakMinutes={plan.break_minutes} height={5} />
+            </div>
+          )}
+          {/* Compact attendance — small avatar stack + count + breakdown
+              chips, right-aligned so the same RSVP story shows up on every
+              card, not just the hero. */}
+          {hasAttendance && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                flexShrink: 0,
+              }}
+            >
+              {avatars.length > 0 && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <AvatarStack items={avatars} size={18} max={5} />
+                  <span
+                    className="mono"
+                    style={{
+                      fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: "var(--uff-text)",
+                    }}
+                  >
+                    {plan.rsvp_in}
+                    <span style={{ color: "var(--uff-text-mute)", fontWeight: 500 }}>
+                      /{rosterSize}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {avatars.length > 0 &&
+                breakdown.qb + breakdown.off + breakdown.def > 0 && (
+                  <span style={{ color: "var(--uff-line)" }}>·</span>
+                )}
+              <RsvpBreakdownChips breakdown={breakdown} compact />
             </div>
           )}
         </div>
       </div>
     </Link>
+  );
+}
+
+// Position breakdown for confirmed RSVPs. Three tiny chips: QB (orange),
+// Offense (lime), Defense (red-ish). QB is a subset of offense — kept
+// separate because it's the limiting position for any offense rep, so the
+// captain needs to see it at a glance. `compact` shrinks for use on the
+// summary cards where the meta row is dense.
+function RsvpBreakdownChips({
+  breakdown,
+  compact,
+}: {
+  breakdown: RsvpBreakdown;
+  compact?: boolean;
+}) {
+  const items: { label: string; count: number; color: string }[] = [
+    { label: "QB", count: breakdown.qb, color: "#FF6A1A" },
+    { label: "OFF", count: breakdown.off, color: "#A6E36A" },
+    { label: "DEF", count: breakdown.def, color: "#FF6A8B" },
+  ];
+  const total = items.reduce((a, i) => a + i.count, 0);
+  if (total === 0) return null;
+  const dot = compact ? 5 : 6;
+  const labelSize = compact ? 10.5 : 12;
+  const countSize = compact ? 11.5 : 13;
+  const itemGap = compact ? 4 : 6;
+  const rowGap = compact ? 8 : 12;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: rowGap,
+        flexWrap: "wrap",
+        lineHeight: 1,
+      }}
+    >
+      {items.map((i) => (
+        <span
+          key={i.label}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: itemGap,
+            fontSize: labelSize,
+            color: "var(--uff-text-dim)",
+            letterSpacing: ".02em",
+          }}
+        >
+          <span
+            style={{
+              width: dot,
+              height: dot,
+              borderRadius: "50%",
+              background: i.color,
+              opacity: i.count > 0 ? 1 : 0.35,
+            }}
+          />
+          <span style={{ fontWeight: 700, letterSpacing: ".12em", color: "var(--uff-text-mute)" }}>
+            {i.label}
+          </span>
+          <span
+            className="mono"
+            style={{
+              fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+              fontSize: countSize,
+              fontWeight: 700,
+              color: i.count > 0 ? "var(--uff-text)" : "var(--uff-text-mute)",
+            }}
+          >
+            {i.count}
+          </span>
+        </span>
+      ))}
+    </div>
   );
 }
 
