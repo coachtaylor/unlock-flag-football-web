@@ -21,6 +21,7 @@ import {
   durLabel,
 } from "@/components/practice/atoms";
 import { duplicatePlanAndRedirect, newPlanAndRedirect } from "@/lib/practice/actions";
+import { PastDueChip, isPlanPastDue } from "@/components/practice/PastDueBanner";
 
 // Pencil icon used by the hero card's edit affordance. PIcon doesn't ship
 // an edit glyph yet, so inline a minimal one here rather than touching the
@@ -374,6 +375,7 @@ function FeaturedPlanCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <PracticeStatusPill status={plan.status} mini />
+            {isPlanPastDue(plan.practice_date, plan.status) && <PastDueChip />}
             <span style={{ flex: 1 }} />
             <Link
               href={`/practice/${plan.id}/edit`}
@@ -548,6 +550,7 @@ function PlanSummaryCard({
           >
             {plan.title}
           </div>
+          {isPlanPastDue(plan.practice_date, plan.status) && <PastDueChip />}
           <PracticeStatusPill status={plan.status} mini />
         </div>
         <div

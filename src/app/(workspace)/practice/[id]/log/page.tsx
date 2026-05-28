@@ -46,6 +46,14 @@ export default async function PostPracticeLogPage({
   const accessibleTeams = await getAccessibleTeams(supabase, user.id);
   if (!accessibleTeams.some((t) => t.id === plan.team_id)) notFound();
 
+  // Drafts can't be logged — they're unfinished plans, and logging
+  // would persist a "completed" status against an un-finalized roster
+  // of blocks/drills. Bounce back to the detail page with a notice the
+  // page surfaces inline.
+  if (plan.status === "draft") {
+    redirect(`/practice/${id}?blocked=draft`);
+  }
+
   const [
     { data: team },
     { data: players },

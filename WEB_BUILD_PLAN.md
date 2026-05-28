@@ -551,6 +551,12 @@ Bring the remaining authenticated pages to desktop feature parity. Includes the 
 - Practice detail topbar gains a Log practice / Edit log link (label flips based on `plan.status`).
 - Type-checked + `next build` clean.
 
+**Follow-up commit on the same branch (2026-05-27): past-due guardrails + draft block.**
+- `PastDueBanner.tsx`: inline banner above the practice detail hero whenever `practice_date < today` AND `status !== 'completed'`. Three status-specific variants (draft / scheduled / live) with copy from `/ux-copy` skill. Primary CTA + secondary CTA each variant. Optional draft-blocked notice shown when the user got redirected here from `/log`.
+- Practice detail topbar: "Log practice" button is replaced with a disabled span ("Finalize the plan to enable logging.") when `status === 'draft'`. Other statuses keep the previous behaviour (label flips to "Edit log" on completed).
+- `/practice/[id]/log` server gate: if `plan.status === 'draft'`, redirect to `/practice/[id]?blocked=draft`. The detail page surfaces the inline notice.
+- Practice list cards (`FeaturedPlanCard` + `PlanSummaryCard`): small `PastDueChip` rendered alongside the status pill when `isPlanPastDue()` is true. Same orange-tinted token as the banner so the signal reads as one.
+
 ### Still missing from the original spec
 - ❌ **Injury modal refactor** — `is_injured` + `injury_note` are captured today (via `PlayerForm`), but the spec calls for a branded modal on player detail rather than the toggle inside the edit form. Tracked as item #4 in the resolve-outstanding queue.
 - ❌ **Observations feed on player detail** — the log now writes `player_notes`, but `/dashboard/team/[teamId]/roster/[playerId]` doesn't surface them yet. Tracked as item #3.
