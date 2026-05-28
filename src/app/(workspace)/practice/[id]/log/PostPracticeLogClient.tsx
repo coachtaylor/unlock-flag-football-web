@@ -216,7 +216,7 @@ export default function PostPracticeLogClient({
                 fontSize: 22,
                 fontWeight: 700,
                 letterSpacing: "-0.02em",
-                color: "var(--uff-text)",
+                color: "var(--uff-orange)",
               }}
             >
               {planTitle || "Untitled practice"}
@@ -271,7 +271,7 @@ export default function PostPracticeLogClient({
                             style={{
                               fontSize: 14,
                               fontWeight: 600,
-                              color: "var(--uff-orange)",
+                              color: "var(--uff-text)",
                               lineHeight: 1.3,
                             }}
                           >
