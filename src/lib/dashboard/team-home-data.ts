@@ -161,6 +161,7 @@ export type TeamDashboardData = {
   mostRunDrills: MostRunDrill[];
   isCurrentUserCaptain: boolean;
   currentUserPlayerId: string | null;
+  needsReviewCount: number;
 };
 
 /* ─────────────── category palette ─────────────── */
@@ -316,7 +317,7 @@ export async function loadTeamDashboard(
     supabase
       .from("benchmark_results")
       .select(
-        "id, drill_id, player_id, assessment_date, time_seconds, rating, made_count, attempts_count, benchmark_type, created_at"
+        "id, drill_id, player_id, assessment_date, time_seconds, rating, made_count, attempts_count, benchmark_type, created_at, needs_review"
       )
       .eq("team_id", teamId)
       .gte("assessment_date", eightWeeksAgo)
@@ -1066,6 +1067,15 @@ export async function loadTeamDashboard(
     rosterLocked,
   };
 
+  // Needs-review queue size (Build 11). Capped to the last 30 days so
+  // the badge doesn't grow unbounded if captains forget to clear it.
+  const thirtyDaysAgoStr = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 30)
+    .toISOString()
+    .slice(0, 10);
+  const needsReviewCount = benchmarks.filter(
+    (b) => b.needs_review === true && b.assessment_date >= thirtyDaysAgoStr,
+  ).length;
+
   return {
     hero,
     nextPractice,
@@ -1080,6 +1090,7 @@ export async function loadTeamDashboard(
     mostRunDrills,
     isCurrentUserCaptain: currentPlayer?.is_captain === true,
     currentUserPlayerId: currentPlayer?.id ?? null,
+    needsReviewCount,
   };
 }
 

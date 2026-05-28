@@ -14,6 +14,7 @@ import {
   BENCH_BY_ID,
   type BenchKind,
 } from "@/components/uff-web/drills/atoms";
+import type { DrillSkillWeight, SkillGroup } from "@/lib/types/skills";
 
 // `target` is captured at drill-design time and shown on the widget as
 // a hint. `better` overrides the type-default (drops defaults lower; pct
@@ -58,6 +59,19 @@ type PlayerResult = {
   perType: Record<BenchKind, PerTypeValue>;
   tags: Set<string>;
   notes: string;
+  needsReview: boolean;
+};
+
+// One skill's worth of chips. Tags carry their id but we store the label
+// on benchmark_results.tags[] (the column is text[] — keeps history
+// readable without a join).
+export type SkillTagGroup = {
+  skillId: string;
+  skillName: string;
+  skillGroup: SkillGroup;
+  weight: DrillSkillWeight;
+  displayOrder: number;
+  tags: { id: string; label: string }[];
 };
 
 type Props = {
@@ -65,9 +79,16 @@ type Props = {
   userId: string;
   drill: Drill;
   players: Player[];
+  // Skill-tag chips, grouped by skill. Empty when the drill has no
+  // drill_skills rows yet — we fall back to a small generic set so
+  // captains still have something to tag.
+  skillTagGroups: SkillTagGroup[];
 };
 
-const QUICK_TAGS = [
+// Used only when the drill has no skill tags wired up. Once a captain
+// tags the drill (or clones it from the preset library) the skill-aware
+// chip groups take over.
+const FALLBACK_TAGS = [
   "Good hands",
   "Quick feet",
   "Needs footwork help",
@@ -76,6 +97,14 @@ const QUICK_TAGS = [
   "Strong arm",
   "Good vision",
 ];
+
+const SKILL_GROUP_ACCENT: Record<SkillGroup, string> = {
+  athletic: "#C2FF3D",
+  offense: "#FF6A1A",
+  qb: "#7DDFD2",
+  defense: "#FF4D4D",
+  iq: "#B89BFF",
+};
 
 const RATING_ANCHORS: Record<number, string> = {
   1: "Can't execute",
@@ -98,7 +127,7 @@ function emptyPerType(): PerTypeValue {
 function emptyResult(types: BenchKind[]): PlayerResult {
   const perType = {} as Record<BenchKind, PerTypeValue>;
   for (const t of types) perType[t] = emptyPerType();
-  return { perType, tags: new Set(), notes: "" };
+  return { perType, tags: new Set(), notes: "", needsReview: false };
 }
 
 function todayString() {
@@ -389,6 +418,7 @@ export default function BenchmarkLogClient({
   userId,
   drill,
   players,
+  skillTagGroups,
 }: Props) {
   const router = useRouter();
   const [index, setIndex] = useState(0);
@@ -458,7 +488,9 @@ export default function BenchmarkLogClient({
         benchmark_type: kind,
         set_number: 1,
         inverse,
+        entry_mode: "benchmark",
         captured_on: "desktop",
+        needs_review: currentResult.needsReview,
         time_seconds: null,
         rating: null,
         made_count: null,
@@ -620,41 +652,162 @@ export default function BenchmarkLogClient({
         ))}
       </div>
 
-      {/* Tags */}
+      {/* Skill-tag chips (grouped by skill — primary skills first) */}
       <div className="mt-2xl">
-        <p
-          className="label-micro"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Quick tags
-        </p>
-        <div className="flex flex-wrap gap-sm mt-md">
-          {QUICK_TAGS.map((tag) => {
-            const selected = currentResult.tags.has(tag);
-            return (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleTag(tag)}
-                aria-pressed={selected}
-                className="rounded-pill text-caption font-medium transition-all"
-                style={{
-                  padding: "10px 14px",
-                  minHeight: "44px",
-                  backgroundColor: selected
-                    ? "#5C3308"
-                    : "rgba(255,255,255,0.04)",
-                  color: selected ? "#F0B870" : "rgba(255,255,255,0.45)",
-                  border: selected
-                    ? "1px solid #D48A30"
-                    : "1px solid rgba(255,255,255,0.08)",
-                }}
+        {skillTagGroups.length === 0 ? (
+          <>
+            <div className="flex items-baseline justify-between">
+              <p
+                className="label-micro"
+                style={{ color: "var(--color-text-secondary)" }}
               >
-                {tag}
-              </button>
-            );
-          })}
-        </div>
+                Quick tags
+              </p>
+              <p
+                className="text-caption"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                No skills tagged on this drill yet
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-sm mt-md">
+              {FALLBACK_TAGS.map((tag) => {
+                const selected = currentResult.tags.has(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    aria-pressed={selected}
+                    className="rounded-pill text-caption font-medium transition-all"
+                    style={{
+                      padding: "10px 14px",
+                      minHeight: "44px",
+                      backgroundColor: selected
+                        ? "#5C3308"
+                        : "rgba(255,255,255,0.04)",
+                      color: selected ? "#F0B870" : "rgba(255,255,255,0.45)",
+                      border: selected
+                        ? "1px solid #D48A30"
+                        : "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-lg">
+            {skillTagGroups.map((group) => {
+              const accent = SKILL_GROUP_ACCENT[group.skillGroup];
+              const isPrimary = group.weight === 1.0;
+              return (
+                <div key={group.skillId}>
+                  <div className="flex items-center gap-sm">
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 9999,
+                        backgroundColor: accent,
+                        opacity: isPrimary ? 1 : 0.5,
+                      }}
+                    />
+                    <p
+                      className="label-micro"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      {group.skillName}
+                    </p>
+                    {isPrimary && (
+                      <span
+                        className="label-micro"
+                        style={{
+                          color: accent,
+                          opacity: 0.85,
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        ★ Primary
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-sm mt-sm">
+                    {group.tags.map((tag) => {
+                      const selected = currentResult.tags.has(tag.label);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.label)}
+                          aria-pressed={selected}
+                          className="rounded-pill text-caption font-medium transition-all"
+                          style={{
+                            padding: "10px 14px",
+                            minHeight: "44px",
+                            backgroundColor: selected
+                              ? "#5C3308"
+                              : "rgba(255,255,255,0.04)",
+                            color: selected ? "#F0B870" : "rgba(255,255,255,0.55)",
+                            border: selected
+                              ? "1px solid #D48A30"
+                              : "1px solid rgba(255,255,255,0.08)",
+                          }}
+                        >
+                          {tag.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Mark-for-review — captain comes back to expand this later */}
+      <div className="mt-xl">
+        <label
+          className="flex items-start gap-sm"
+          style={{ cursor: "pointer", minHeight: "44px" }}
+        >
+          <input
+            type="checkbox"
+            checked={currentResult.needsReview}
+            onChange={(e) =>
+              setResults((prev) => {
+                const next = [...prev];
+                next[index] = { ...next[index], needsReview: e.target.checked };
+                return next;
+              })
+            }
+            style={{
+              marginTop: 4,
+              width: 18,
+              height: 18,
+              accentColor: "var(--color-orange-500)",
+              cursor: "pointer",
+            }}
+          />
+          <div>
+            <p
+              className="text-caption font-medium"
+              style={{ color: "var(--color-text-primary)" }}
+            >
+              Mark for review
+            </p>
+            <p
+              className="text-caption"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Flag this entry to revisit on the dashboard
+            </p>
+          </div>
+        </label>
       </div>
 
       {/* Notes */}

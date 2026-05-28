@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { BenchKind } from "@/components/uff-web/drills/atoms";
+import type { DrillSkillWeight, SkillGroup } from "@/lib/types/skills";
 import BenchmarkLogClient, {
   type BenchConfigEntry,
+  type SkillTagGroup,
 } from "./BenchmarkLogClient";
 
 type SearchParams = Promise<{ drill?: string; players?: string }>;
@@ -78,6 +80,68 @@ export default async function BenchmarkLogPage({
   const config =
     (drill.benchmark_config as Partial<Record<BenchKind, BenchConfigEntry>> | null) ?? {};
 
+  // Skill tags grouped by skill — surfaces the chip library tied to the
+  // drill's drill_skills rows. Build 11 replaces the hardcoded QUICK_TAGS
+  // list. We sort skills primary-first so primary-tagged skills lead.
+  const { data: drillSkillRows } = await supabase
+    .from("drill_skills")
+    .select("skill_id, weight, skills(id, slug, skill_name, skill_group, display_order)")
+    .eq("drill_id", drill.id);
+
+  type DrillSkillRow = {
+    skill_id: string;
+    weight: number;
+    skills:
+      | {
+          id: string;
+          slug: string;
+          skill_name: string;
+          skill_group: string;
+          display_order: number;
+        }
+      | null;
+  };
+
+  const skillRows = ((drillSkillRows as DrillSkillRow[] | null) ?? []).filter(
+    (r) => r.skills != null,
+  );
+  const skillIds = skillRows.map((r) => r.skill_id);
+
+  const skillTagsBySkill = new Map<string, { id: string; label: string }[]>();
+  if (skillIds.length > 0) {
+    const { data: tagRows } = await supabase
+      .from("skill_tags")
+      .select("id, skill_id, label, display_order, is_active")
+      .in("skill_id", skillIds)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true });
+    for (const row of (tagRows ?? []) as Array<{
+      id: string;
+      skill_id: string;
+      label: string;
+    }>) {
+      const list = skillTagsBySkill.get(row.skill_id) ?? [];
+      list.push({ id: row.id, label: row.label });
+      skillTagsBySkill.set(row.skill_id, list);
+    }
+  }
+
+  const skillTagGroups: SkillTagGroup[] = skillRows
+    .map((r) => ({
+      skillId: r.skill_id,
+      skillName: r.skills!.skill_name,
+      skillGroup: r.skills!.skill_group as SkillGroup,
+      weight: (r.weight === 1 ? 1.0 : 0.5) as DrillSkillWeight,
+      displayOrder: r.skills!.display_order,
+      tags: skillTagsBySkill.get(r.skill_id) ?? [],
+    }))
+    .filter((g) => g.tags.length > 0)
+    .sort((a, b) => {
+      // primary (weight 1.0) first, then by skill display_order
+      if (a.weight !== b.weight) return b.weight - a.weight;
+      return a.displayOrder - b.displayOrder;
+    });
+
   const { data: players } = await supabase
     .from("team_players")
     .select("id, player_name, positions")
@@ -112,6 +176,7 @@ export default async function BenchmarkLogPage({
         config,
       }}
       players={orderedPlayers}
+      skillTagGroups={skillTagGroups}
     />
   );
 }

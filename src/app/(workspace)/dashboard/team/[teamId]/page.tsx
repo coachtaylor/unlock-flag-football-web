@@ -231,7 +231,11 @@ export default async function TeamDashboardPage({
 
           {/* Activity + Most-run drills */}
           <div className="td-row td-row-trends">
-            <RecentActivityCard rows={data.activity} />
+            <RecentActivityCard
+              rows={data.activity}
+              teamId={teamId}
+              needsReviewCount={data.needsReviewCount}
+            />
             <MostRunDrillsCard rows={data.mostRunDrills} />
           </div>
 
