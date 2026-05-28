@@ -271,7 +271,7 @@ export default function PostPracticeLogClient({
                             style={{
                               fontSize: 14,
                               fontWeight: 600,
-                              color: "var(--uff-text)",
+                              color: "var(--uff-orange)",
                               lineHeight: 1.3,
                             }}
                           >
@@ -667,7 +667,7 @@ function SectionCard({
   return (
     <div className="w-card" style={{ padding: 20 }}>
       <div className="sect-head" style={{ marginBottom: 14 }}>
-        <div className="title">
+        <div className="title" style={{ color: "var(--uff-orange)" }}>
           <span
             className="mono"
             style={{
