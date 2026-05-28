@@ -38,6 +38,29 @@ type BenchmarkRow = {
   team_drills: DrillJoin | DrillJoin[] | null;
 };
 
+type PracticeJoin = {
+  id: string;
+  title: string | null;
+  practice_date: string | null;
+};
+
+type ObservationRow = {
+  id: string;
+  note_text: string;
+  created_at: string;
+  practice_plan_id: string | null;
+  practice_plans: PracticeJoin | PracticeJoin[] | null;
+};
+
+type Observation = {
+  id: string;
+  noteText: string;
+  practiceId: string | null;
+  practiceTitle: string | null;
+  practiceDate: string | null;
+  createdAt: string;
+};
+
 function initialsFor(name: string) {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? "";
@@ -176,22 +199,34 @@ export default async function PlayerDetailPage({
   }
   if (!canView) notFound();
 
-  const [{ data: player }, { data: benchesRaw }] = await Promise.all([
-    supabase
-      .from("team_players")
-      .select(
-        "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at"
-      )
-      .eq("id", playerId)
-      .maybeSingle(),
-    supabase
-      .from("benchmark_results")
-      .select(
-        "id, assessment_date, created_at, time_seconds, rating, made_count, attempts_count, benchmark_type, drill_id, team_drills(id, drill_name, benchmark_type, benchmark_types)"
-      )
-      .eq("player_id", playerId)
-      .order("assessment_date", { ascending: true }),
-  ]);
+  const [{ data: player }, { data: benchesRaw }, { data: observationsRaw }] =
+    await Promise.all([
+      supabase
+        .from("team_players")
+        .select(
+          "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at"
+        )
+        .eq("id", playerId)
+        .maybeSingle(),
+      supabase
+        .from("benchmark_results")
+        .select(
+          "id, assessment_date, created_at, time_seconds, rating, made_count, attempts_count, benchmark_type, drill_id, team_drills(id, drill_name, benchmark_type, benchmark_types)"
+        )
+        .eq("player_id", playerId)
+        .order("assessment_date", { ascending: true }),
+      // Observations feed (Build 6.5b). Pulls every player_notes row
+      // written for this player, joined to its practice for date + title
+      // + linkability. practice_plan_id is nullable on the table — those
+      // rows (if any) render with a "—" date and no link.
+      supabase
+        .from("player_notes")
+        .select(
+          "id, note_text, created_at, practice_plan_id, practice_plans(id, title, practice_date)"
+        )
+        .eq("player_id", playerId)
+        .order("created_at", { ascending: false }),
+    ]);
 
   if (!player || player.team_id !== teamId) notFound();
 
@@ -279,6 +314,24 @@ export default async function PlayerDetailPage({
     }
   }
   locked.sort((a, b) => a.drillName.localeCompare(b.drillName));
+
+  // Observations feed (Build 6.5b). Each player_notes row hydrates with
+  // its practice join so the card can deep-link to the practice it was
+  // captured on. Already ordered DESC by created_at from the query.
+  const observations: Observation[] = (
+    (observationsRaw ?? []) as ObservationRow[]
+  ).map((o) => {
+    const join = o.practice_plans;
+    const practice = Array.isArray(join) ? join[0] : join;
+    return {
+      id: o.id,
+      noteText: o.note_text,
+      practiceId: practice?.id ?? o.practice_plan_id ?? null,
+      practiceTitle: practice?.title ?? null,
+      practiceDate: practice?.practice_date ?? null,
+      createdAt: o.created_at,
+    };
+  });
 
   const benchmarkCount = benches.length;
   // Personal bests across all drills (samples that beat all prior in that drill).
@@ -560,6 +613,8 @@ export default async function PlayerDetailPage({
                 </p>
               </div>
             )}
+
+            <ObservationsCard observations={observations} />
           </div>
 
           {/* History column */}
@@ -705,5 +760,157 @@ function Badge({
     >
       {children}
     </span>
+  );
+}
+
+// Chronological player_notes feed (Build 6.5b). Each row links back to
+// the practice the note was captured on. Empty state explains where
+// observations come from so a brand-new player isn't a dead card.
+function ObservationsCard({ observations }: { observations: Observation[] }) {
+  const empty = observations.length === 0;
+  return (
+    <div className="w-card" style={{ padding: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--uff-text-mute)",
+          }}
+        >
+          Observations
+        </div>
+        {!empty && (
+          <span
+            style={{
+              fontFamily: "var(--font-mono, monospace)",
+              fontSize: 11,
+              color: "var(--uff-text-mute)",
+            }}
+          >
+            {observations.length}
+          </span>
+        )}
+      </div>
+
+      {empty ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12.5,
+            color: "var(--uff-text-mute)",
+            lineHeight: 1.5,
+          }}
+        >
+          No observations yet. Captains can write per-player notes from
+          the post-practice log — they&apos;ll show up here.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {observations.map((o) => (
+            <ObservationRow key={o.id} obs={o} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ObservationRow({ obs }: { obs: Observation }) {
+  const dateLabel = obs.practiceDate
+    ? new Date(obs.practiceDate).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "2-digit",
+      })
+    : new Date(obs.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "2-digit",
+      });
+  const title = obs.practiceTitle || "Practice";
+  const href = obs.practiceId ? `/practice/${obs.practiceId}` : null;
+
+  return (
+    <div
+      style={{
+        padding: "8px 10px",
+        background: "var(--uff-bg-1)",
+        border: "1px solid var(--uff-line-soft, rgba(255,255,255,0.04))",
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
+        {href ? (
+          <Link
+            href={href}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--uff-orange)",
+              textDecoration: "none",
+              letterSpacing: "0.02em",
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {title}
+          </Link>
+        ) : (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--uff-text)",
+              opacity: 0.7,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {title}
+          </span>
+        )}
+        <span
+          style={{
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 10.5,
+            color: "var(--uff-text-mute)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {dateLabel}
+        </span>
+      </div>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 13,
+          color: "var(--uff-text)",
+          opacity: 0.88,
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {obs.noteText}
+      </p>
+    </div>
   );
 }
