@@ -204,7 +204,7 @@ export default function PostPracticeLogClient({
               style={{
                 fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
                 fontSize: 10.5,
-                color: "var(--uff-text-mute)",
+                color: "var(--uff-lime, #c2ff3d)",
                 letterSpacing: ".06em",
                 marginBottom: 6,
               }}
@@ -224,8 +224,9 @@ export default function PostPracticeLogClient({
             <p
               style={{
                 marginTop: 8,
-                fontSize: 13,
-                color: "var(--uff-text-dim)",
+                fontSize: 14,
+                color: "var(--uff-text)",
+                opacity: 0.85,
                 lineHeight: 1.5,
               }}
             >
@@ -672,7 +673,7 @@ function SectionCard({
             style={{
               fontFamily: "var(--font-mono, monospace)",
               fontSize: 11,
-              color: "var(--uff-text-mute)",
+              color: "var(--uff-lime, #c2ff3d)",
               letterSpacing: ".08em",
               marginRight: 8,
             }}
@@ -688,8 +689,9 @@ function SectionCard({
               textTransform: "none",
               fontFamily: "inherit",
               letterSpacing: 0,
-              color: "var(--uff-text-mute)",
-              fontSize: 12,
+              color: "var(--uff-text)",
+              opacity: 0.78,
+              fontSize: 12.5,
               maxWidth: 360,
               textAlign: "right",
             }}
