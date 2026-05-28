@@ -667,12 +667,21 @@ function SectionCard({
   return (
     <div className="w-card" style={{ padding: 20 }}>
       <div className="sect-head" style={{ marginBottom: 14 }}>
-        <div className="title" style={{ color: "var(--uff-orange)" }}>
+        <div
+          className="title"
+          style={{
+            color: "var(--uff-orange)",
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: ".12em",
+            textTransform: "uppercase",
+            display: "inline-flex",
+            alignItems: "center",
+          }}
+        >
           <span
-            className="mono"
             style={{
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: 11,
               color: "var(--uff-lime, #c2ff3d)",
               letterSpacing: ".08em",
               marginRight: 8,
