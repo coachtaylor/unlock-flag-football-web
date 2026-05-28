@@ -531,7 +531,30 @@ Bring the remaining authenticated pages to desktop feature parity. Includes the 
 
 ---
 
-## Build 6.5 — Injury tracking + observations feed + post-practice log ⏳
+## Build 6.5 — Injury tracking + observations feed + post-practice log 🔶
+
+### Shipped — post-practice log (2026-05-27, branch `build-6.5a-post-practice-log`)
+- New route `/practice/[id]/log` (server + `PostPracticeLogClient`) on the UFF dark palette + TeamSidebar shell.
+- Four numbered sections matching mobile's 2026-05-19 rebuild:
+  - **01 Drills** — flat list of every non-water-break drill across blocks (block accent stripe + block name as eyebrow). Per-row Done / Skipped toggles (mutually exclusive) + expand-to-write `log_note` button. Fresh logs default every drill to Done; re-edits hydrate from the saved `drills_completed[]` / `drills_skipped[]` arrays.
+  - **02 Observations** — picker + free-text input that adds one `(player_id, note_text)` row per Add. Saved rows list below with remove. Re-edits load all prior `player_notes` for this plan.
+  - **03 Notes** — three textareas: `team_performance_notes`, `highlights`, `areas_to_improve`.
+  - **04 Wrap-up** — `attendance_count` number (defaults to count of RSVP=true) + `energy_level` 1–10 button row with copy ("Flat / Steady / Sharp / Locked in" based on the value).
+- Side rail summary card: counts of done / skipped / unmarked drills + observations + attendance + energy, with "At a glance" → "Editing log" eyebrow when re-opening.
+- `savePracticeLog` server action in `src/lib/practice/log-actions.ts`:
+  1. Upserts (lookup + insert/update) the `practice_logs` row keyed on `practice_plan_id`.
+  2. Replace-by-plan_id of `player_notes` (delete then insert non-empty rows).
+  3. Per-row patch of each `practice_plan_drills.log_note`.
+  4. Transitions `practice_plans.status = 'completed'`.
+  Revalidates `/practice`, `/practice/[id]`, `/practice/[id]/log`.
+- `PlanDrill` extended with `log_note: string | null`; `fetchPlanFull` selects it; `EditorClient` initialiser updated so adding a drill from the library doesn't break the new type.
+- Practice detail topbar gains a Log practice / Edit log link (label flips based on `plan.status`).
+- Type-checked + `next build` clean.
+
+### Still missing from the original spec
+- ❌ **Injury modal refactor** — `is_injured` + `injury_note` are captured today (via `PlayerForm`), but the spec calls for a branded modal on player detail rather than the toggle inside the edit form. Tracked as item #4 in the resolve-outstanding queue.
+- ❌ **Observations feed on player detail** — the log now writes `player_notes`, but `/dashboard/team/[teamId]/roster/[playerId]` doesn't surface them yet. Tracked as item #3.
+- ❌ **DrillNoteHistorySheet** web equivalent on drill detail — `log_note` is persisted per drill row but there's no sheet listing the history. Defer to a follow-up.
 
 ### Goal
 Three smaller mobile-parity gaps that all relate to capturing rich coaching data, grouped into one build because none warrants its own.

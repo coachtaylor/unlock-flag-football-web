@@ -276,6 +276,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                   benchmark_types: drill.benchmark_types,
                   category_name: drill.category_name,
                   description: drill.description,
+                  log_note: null,
                 },
               ],
             },

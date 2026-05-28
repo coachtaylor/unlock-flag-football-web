@@ -123,6 +123,13 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
                   <PIcon.copy size={13} /> Duplicate
                 </button>
               </form>
+              <Link
+                href={`/practice/${plan.id}/log`}
+                className="wbtn"
+                title={plan.status === "completed" ? "Edit the post-practice log" : "Log what happened at this practice"}
+              >
+                {plan.status === "completed" ? "Edit log" : "Log practice"}
+              </Link>
               <Link href={`/practice/${plan.id}/edit`} className="wbtn primary">
                 Edit plan
               </Link>
