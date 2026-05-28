@@ -202,8 +202,9 @@ export function isPlanPastDue(
   return practiceDate < today;
 }
 
-// Inline chip used alongside the status pill on list cards. Same accent
-// as the banner so the visual language reads as one signal.
+// Inline chip used alongside the status pill on list cards. Red signal
+// for "needs action now" — no border, just the red-tinted background
+// so it reads as a tag rather than competing with the status pill.
 export function PastDueChip() {
   return (
     <span
@@ -212,10 +213,9 @@ export function PastDueChip() {
         alignItems: "center",
         gap: 4,
         padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(255,106,26,0.12)",
-        color: "var(--uff-orange)",
-        border: "1px solid rgba(255,106,26,0.32)",
+        borderRadius: 4,
+        background: "rgba(255,77,77,0.14)",
+        color: "var(--uff-red, #ff4d4d)",
         fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
         fontSize: 9.5,
         fontWeight: 700,
