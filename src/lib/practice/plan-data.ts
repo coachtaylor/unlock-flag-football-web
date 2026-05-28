@@ -22,6 +22,10 @@ export type PlanDrill = {
   benchmark_types: string[];
   category_name: string | null;
   description: string | null;
+  // Captured during the post-practice log (Build 6.5a). Persisted on the
+  // plan_drill row itself so it travels with the drill row and shows up
+  // in DrillNoteHistorySheet without a separate table.
+  log_note: string | null;
 };
 
 export type PlanBlock = {
@@ -216,7 +220,7 @@ export async function fetchPlanFull(
     supabase
       .from("practice_plan_drills")
       .select(
-        "id, plan_block_id, drill_id, drill_order, duration_minutes, reps_count, notes, parallel_group, is_water_break",
+        "id, plan_block_id, drill_id, drill_order, duration_minutes, reps_count, notes, parallel_group, is_water_break, log_note",
       )
       .eq("practice_plan_id", planId)
       .order("drill_order", { ascending: true }),
@@ -283,6 +287,7 @@ export async function fetchPlanFull(
       benchmark_types: meta?.benchmark_types ?? [],
       category_name: meta?.category_name ?? null,
       description: meta?.description ?? null,
+      log_note: (d.log_note as string | null) ?? null,
     };
   });
 

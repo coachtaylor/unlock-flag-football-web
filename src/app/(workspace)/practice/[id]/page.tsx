@@ -19,6 +19,7 @@ import {
 } from "@/components/practice/atoms";
 import { BlockReadCard, BreakReadRow } from "@/components/practice/BlockReadCard";
 import ManageAttendanceCard, { type RsvpPlayer } from "@/components/practice/ManageAttendanceCard";
+import PastDueBanner, { isPlanPastDue } from "@/components/practice/PastDueBanner";
 import { blockColor } from "@/lib/practice/block-colors";
 import { duplicatePlanAndRedirect } from "@/lib/practice/actions";
 
@@ -29,8 +30,15 @@ function initialsFor(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
 
-export default async function PracticeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PracticeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ blocked?: string }>;
+}) {
   const { id } = await params;
+  const { blocked } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -123,6 +131,28 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
                   <PIcon.copy size={13} /> Duplicate
                 </button>
               </form>
+              {plan.status === "draft" ? (
+                <span
+                  className="wbtn"
+                  title="Finalize the plan to enable logging."
+                  aria-disabled
+                  style={{
+                    opacity: 0.45,
+                    cursor: "not-allowed",
+                    pointerEvents: "none",
+                  }}
+                >
+                  Log practice
+                </span>
+              ) : (
+                <Link
+                  href={`/practice/${plan.id}/log`}
+                  className="wbtn"
+                  title={plan.status === "completed" ? "Edit the post-practice log" : "Log what happened at this practice"}
+                >
+                  {plan.status === "completed" ? "Edit log" : "Log practice"}
+                </Link>
+              )}
               <Link href={`/practice/${plan.id}/edit`} className="wbtn primary">
                 Edit plan
               </Link>
@@ -140,6 +170,13 @@ export default async function PracticeDetailPage({ params }: { params: Promise<{
             }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <PastDueBanner
+                status={plan.status}
+                planId={plan.id}
+                isPastDue={isPlanPastDue(plan.practice_date, plan.status)}
+                showDraftBlockedNotice={blocked === "draft"}
+              />
+
               {/* Plan hero */}
               <div className="w-card hero" style={{ padding: "22px 24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>

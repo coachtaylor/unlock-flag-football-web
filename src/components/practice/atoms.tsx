@@ -163,9 +163,9 @@ const STATUS_STYLE: Record<PlanStatus, { bg: string; fg: string; dot: string; la
     label: "Draft",
   },
   scheduled: {
-    bg: "rgba(255,106,26,0.10)",
-    fg: "var(--uff-orange)",
-    dot: "var(--uff-orange)",
+    bg: "rgba(194,255,61,0.10)",
+    fg: "var(--uff-lime, #c2ff3d)",
+    dot: "var(--uff-lime, #c2ff3d)",
     label: "Scheduled",
   },
   live: {
