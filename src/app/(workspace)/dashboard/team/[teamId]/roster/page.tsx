@@ -107,7 +107,7 @@ export default async function TeamRosterPage({
   const { data: players } = await supabase
     .from("team_players")
     .select(
-      "id, player_name, positions, jersey_number, status, is_captain, is_injured, color_index, notes"
+      "id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes"
     )
     .eq("team_id", teamId)
     .order("player_name", { ascending: true });
@@ -151,6 +151,7 @@ export default async function TeamRosterPage({
       status: p.status as "active" | "inactive",
       isCaptain: (p.is_captain as boolean) ?? false,
       isInjured: (p.is_injured as boolean) ?? false,
+      injuryNote: (p.injury_note as string | null) ?? null,
       colorIndex: (p.color_index as number) ?? 0,
       lastBench,
     };
