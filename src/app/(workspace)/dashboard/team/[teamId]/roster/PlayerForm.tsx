@@ -22,8 +22,6 @@ export type PlayerFormInitial = {
   jerseyNumber: string;
   notes: string;
   isCaptain: boolean;
-  isInjured: boolean;
-  injuryNote: string;
 };
 
 type Props = {
@@ -41,8 +39,6 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
   const [jerseyNumber, setJerseyNumber] = useState(initial?.jerseyNumber ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [isCaptain, setIsCaptain] = useState(initial?.isCaptain ?? false);
-  const [isInjured, setIsInjured] = useState(initial?.isInjured ?? false);
-  const [injuryNote, setInjuryNote] = useState(initial?.injuryNote ?? "");
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +67,11 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     }
     setSubmitting(true);
 
+    // NOTE: is_injured + injury_note are intentionally NOT in this
+    // payload. Injury status is captured via the InjuryModal on the
+    // player detail page (Build 6.5c). Including the fields here would
+    // overwrite the modal's writes whenever the captain edits any other
+    // field. See MOBILE_APP_REFERENCE §6.5.
     const payload = {
       team_id: teamId,
       player_name: playerName.trim(),
@@ -78,8 +79,6 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
       jersey_number: jerseyNumber.trim() || null,
       notes: notes.trim() || null,
       is_captain: isCaptain,
-      is_injured: isInjured,
-      injury_note: isInjured ? injuryNote.trim() || null : null,
     };
 
     if (isEditing && initial) {
@@ -253,28 +252,6 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
             label="Captain"
             description="Captains can plan practices and log benchmarks."
           />
-        </Section>
-
-        <Section title="Status">
-          <ToggleRow
-            checked={isInjured}
-            onChange={setIsInjured}
-            label="Injured"
-            description="Flag this player so the roster surfaces it."
-            accent="var(--uff-red)"
-          />
-          {isInjured && (
-            <Field label="Injury note" htmlFor="injuryNote">
-              <textarea
-                id="injuryNote"
-                value={injuryNote}
-                onChange={(e) => setInjuryNote(e.target.value)}
-                placeholder="e.g., Hamstring strain, day-to-day"
-                rows={2}
-                style={{ ...inputStyle, height: "auto", padding: 10, resize: "vertical" }}
-              />
-            </Field>
-          )}
         </Section>
 
         <Section title="Notes" subtitle="Optional, private to your team.">
