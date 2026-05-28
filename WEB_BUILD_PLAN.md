@@ -1,6 +1,6 @@
 # Unlock Flag Football — Web Build Plan
 
-Last updated: 2026-05-27 (Retro-audit: Builds 4 + 5.5 marked ✅ from commits f53d222 + abb991f. Build 5 marked 🔶 — visual redesign shipped, desktop mouse/keyboard polish did not. Build 6 marked 🔶 — roster shipped in 68ea841, benchmark capture widgets + practice editor side-by-side + dnd-kit reorder did not. Build 6.5 marked 🔶 — injury tracking surfaced, observations feed + post-practice log did not. Earlier on 2026-05-27: Skill taxonomy epic added — Builds 9 → 14 inserted between Build 8 and the polish/prod-prep phases; old Build 9 / 10 renumbered to 15 / 16. Builds 9 + 10 shipped this date.)
+Last updated: 2026-05-27 (Retro-audit + resolve-outstanding sweep. Build 4 ✅ — drill side from `f53d222`, multi-type capture from branch `build-6a-multi-type-capture` `b5ab936`. Build 5.5 ✅ from `abb991f`. Build 5 stays 🔶 — visual redesign shipped, desktop mouse/keyboard polish skipped per user decision 2026-05-27. Build 6 stays 🔶 — roster + multi-type capture shipped; benchmark hub responsive + practice editor side-by-side + `@dnd-kit` reorder skipped per user decision 2026-05-27; practice list desktop table reclassified done-by-substitution (the Build 5.5 card view is more information-dense). Build 6.5 ✅ — post-practice log (`39596e2`) + past-due guardrails (`aca14ef`) + observations feed (`ae28c93`) + injury modal (`159d789`) all shipped across branches `build-6.5a/b/c`. Earlier on 2026-05-27: Skill taxonomy epic added — Builds 9 → 14 inserted between Build 8 and the polish/prod-prep phases; old Build 9 / 10 renumbered to 15 / 16. Builds 9 + 10 shipped this date.)
 Owner: Taylor
 Companion docs: `WEB_PRD.md`, `WEB_SYSTEM_DESIGN.md`, `MOBILE_APP_REFERENCE.md` (canonical feature parity reference for the mobile app)
 
@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-05-27: 1, 2, 2.5, 3, 4, 5.5, 7, 8, 9, 10 ✅ · 5, 6, 6.5 🔶 · 11, 12, 13, 14, 15, 16 ⏳.
+Build status as of 2026-05-27: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 11, 12, 13, 14, 15, 16 ⏳.
 
 ---
 
@@ -299,17 +299,14 @@ Make the dashboard feel native on desktop. Currently it's a single-column phone 
 
 ## Build 4 — Drills list + detail responsive upgrade + multi-type benchmarks ✅
 
-### Shipped (2026-05-25)
-- Drills moved from `(app)/drills/` → `(workspace)/drills/` (now lives under `src/app/(workspace)/drills/`).
-- Drills list (`DrillsLibraryClient.tsx`) responsive: cards stack on mobile, sortable desktop table at ≥900px with columns (name / category / benchmark types / status / updated). Filter rail collapses to a top row on mobile, sticky left rail on desktop. `/` keyboard shortcut focuses search.
-- Drill detail (`(workspace)/drills/[id]/page.tsx`) rebuilt with a two-column layout at desktop.
-- Drill form (`DrillForm.tsx`) replaced the single `"Timed" | "Rated"` select with a Y/N "Use for benchmarks?" gate + multi-select chip grid covering all six types (`timed`, `rated`, `reps`, `pct`, `flags`, `drops`) — defined in `src/components/uff-web/drills/atoms.tsx` as `BenchKind`. Persists to `team_drills.benchmark_types text[]` with per-type `benchmark_config` jsonb.
-- Drill cards + table rows surface active benchmark types as chip badges. `is_dashboard_pinned` added to the form.
-- Branch: `build-4-…` work landed as part of commit `f53d222` ("Build 4 + Build 5 — Drills workspace move + diagram redesign + Build 3 team dashboard refactor"). Merged to main.
+### Shipped — drill side (2026-05-25) + capture side (2026-05-27)
+- **Drill side** (commit `f53d222`, bundled with Build 5 + Build 3 follow-up): drills moved from `(app)/drills/` to `(workspace)/drills/`. Sortable desktop table at ≥900px, card stack on mobile, sticky filter rail, `/` keyboard shortcut focuses search. Drill detail two-col on desktop. DrillForm replaced single-select with Y/N benchmark gate + multi-select chip grid covering all six `BenchKind` values (`timed`, `rated`, `reps`, `pct`, `flags`, `drops`); persists to `team_drills.benchmark_types text[]` + per-type `benchmark_config jsonb`. Drill cards + table rows surface active types as chip badges.
+- **Capture side** (branch `build-6a-multi-type-capture` commit `b5ab936`): `(app)/benchmarks/page.tsx` + `BenchmarksHubClient.tsx` read `benchmark_types[]` with legacy single-column fallback; drill cards surface every active type as a coloured chip. `(app)/benchmarks/log/page.tsx` resolves `benchmark_types[]` + `benchmark_config` and passes both to the client. `BenchmarkLogClient.tsx` rewritten around a per-type-card stack ("all types on one screen per player" per spec §6 risk note). Widgets: `NumberField` (timed / reps / flags / drops), `RatingButtons` (rated 1–5 with anchored labels), `PctField` (made ÷ attempts with cross-validation). Per-type targets from `benchmark_config` render as right-aligned hints. Save inserts one `benchmark_results` row per (player, type) per day with `set_number=1`, `captured_on='desktop'`, `inverse` per row via `effectiveInverse()` that mirrors mobile. Previous-then-Next re-saves wipe today's rows + re-insert.
 
 ### Notes / known divergences from the plan
-- Bundled with Build 5 (diagram redesign) and a Build 3 follow-up into a single commit on the `build-3-team-dashboard` branch. The plan called for separate Build 4 / Build 5 commits.
-- Legacy `(app)/drills/*` files were deleted (not redirect-bridged) — old bookmarks 404. Memory entry `session_2026_05_25_web_build4_drill_form.md` (now consolidated) captured the design.
+- Drill side bundled with Build 5 + a Build 3 follow-up into the single `f53d222` commit (plan called for separate commits).
+- Capture-side UI is functional but the Hub's visual layout is still single-column (no side-by-side selectors at desktop) — see Build 6's "skipped" section.
+- Legacy `(app)/drills/*` files were deleted (not redirect-bridged) — old bookmarks 404.
 
 ### Goal
 Drills is one of the highest-value desktop surfaces (captains building libraries from videos they found online). Make it feel like a real desktop tool, AND bring the drill form up to mobile parity on benchmark types (currently web only supports `timed | rated`; mobile supports six types).
@@ -366,24 +363,24 @@ Multi-category tagging via `team_drill_categories` junction is already working o
 
 ## Build 5 — Diagram editor desktop polish 🔶
 
-### Shipped (2026-05-25)
-The visual + data-model redesign portion of this build shipped in commit `f53d222` (the bundled Build 4 + Build 5 commit). What landed:
+### Shipped (2026-05-25) — visual redesign only
+The visual + data-model redesign portion of this build shipped in commit `f53d222` (the bundled Build 4 + Build 5 commit):
 - Dark-theme field canvas (`#0F1115` background, white yard lines, depth-based field with line-of-scrimmage at draggable `losY`).
 - Traffic-cone cone shape (replacing the old flat dots), with `Cone.kind="player"` + `Cone.color` for player cones.
 - Per-route color + chevron arrow direction (routes follow their assigned player on drag).
-- `DiagramData.losY` is drag-able and toggleable.
+- `DiagramData.losY` drag-able and toggleable.
 - `DiagramEditor.tsx` + `DiagramRenderer.tsx` rewrites; setup-instruction generator preserved.
 - Pointer-event handlers (work for mouse + touch alike).
 
-### Still missing from the original spec
-The desktop *interaction* polish never shipped:
-- ❌ Right-click context menu on cones / segments
-- ❌ Global undo/redo stack (only a per-route `handleUndoLastWaypoint` button exists)
-- ❌ Keyboard shortcuts: Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Delete, Escape
-- ❌ Selected-segment edit handles
-- ❌ Shift+click multi-select
+### Skipped (2026-05-27 — user decision)
+The desktop *interaction* polish was scoped out of the 2026-05-27 resolve-outstanding sweep:
+- Right-click context menu on cones / segments
+- Global undo/redo stack (only a per-route `handleUndoLastWaypoint` button exists)
+- Keyboard shortcuts: Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Delete, Escape
+- Selected-segment edit handles
+- Shift+click multi-select
 
-The "In scope" bullets below should be read as the remaining work, not the whole build.
+Re-open with a new build number when this becomes blocking. The "In scope" bullets below are the remaining work, not the whole build.
 
 ### Goal
 The diagram editor was designed touch-first. On desktop, mouse interactions need to feel natural. This is the single biggest desktop UX upgrade in the project.
@@ -433,24 +430,22 @@ The diagram editor was designed touch-first. On desktop, mouse interactions need
 
 ## Build 5.5 — Practice block model (data + planner rewrite) ✅
 
-### Shipped (2026-05-26)
+### Shipped (2026-05-26, commit `abb991f`)
 - Web practice planner rewritten around the mobile block model: blocks → drills with parallel groups, between-block water breaks, RSVP attendees. Atomic saves via the existing `replace_practice_plan_blocks(plan_id, blocks_payload, breaks_payload)` RPC.
 - New routes under `(workspace)/practice/*` on the UFF dark palette. Legacy `(app)/practice/*` tree deleted.
   - `/practice` — list with stats strip, "Up next" featured hero card with block-mix bar + colored legend + RSVP avatar strip, "This week" + "Recent" sections.
-  - `/practice/[id]` — read view: hero with status + budget bar, interleaved blocks↔water breaks, parallel groups bracketed with shared slot length, side rail with RSVP roll-up + at-a-glance plan facts.
-  - `/practice/[id]/edit` + `/practice/new` — editor with plan-details card + time-budget strip + block cards (editable name, target stepper, inline drill rows with library note + cues + duration/reps steppers + reorder/parallel/delete) + insert-water-break rails + add-block + add-from-library affordances. Side rail with RSVP + plan totals.
-- Three sheets: block library (right rail, picks from `team_practice_blocks` or blank), drill picker (right rail, search `team_drills`), attendance (wide modal, In/Out/No-reply toggle per roster row + bulk Mark all in).
-- New `lib/practice/block-colors.ts` — 4 named defaults (warmup / offense / defense / scrimmage / cooldown) + 8-color hash fallback. Same name → same color across plans and mobile/web.
+  - `/practice/[id]` — read view: hero with status + budget bar, interleaved blocks↔water breaks, parallel groups bracketed, side rail with RSVP roll-up + at-a-glance plan facts.
+  - `/practice/[id]/edit` + `/practice/new` — editor with plan-details card + time-budget strip + block cards + insert-water-break rails + add-block + add-from-library affordances.
+- Three sheets: block library, drill picker, attendance (In/Out/No-reply toggle per roster row + bulk Mark all in).
+- New `lib/practice/block-colors.ts` — 4 named defaults (warmup / offense / defense / scrimmage / cooldown) + 8-color hash fallback.
 - `PracticeStatusPill` lifecycle: draft → scheduled → live → completed.
-- Parallel = "longest wins": counts ONCE toward the block's minute target; slot length = MAX duration across the group. Surfaced in budget bar, block totals, plan totals, list mix bars.
-- Duplicate carries blocks + drills + breaks + parallel pairings, but NOT attendees (per spec §5.5 acceptance criteria).
-- Branch `build-5.5-practice-blocks` (commit `abb991f`), merged to main. Followed by ~20 polish commits on the `build-7-dashboard-widgets` branch (orphan water-break fix, mix-bar legend, density tightening, end-time field, inline attendance management, etc.) — also on main.
-- Memory entry `session_2026_05_26_web_build5.5_and_practice_polish.md` (now consolidated) captured the patterns.
+- Parallel = "longest wins": counts ONCE toward the block's minute target; slot length = MAX duration across the group.
+- Duplicate carries blocks + drills + breaks + parallel pairings, but NOT attendees (per spec §5.5).
+- Followed by ~20 polish commits on `build-7-dashboard-widgets`: orphan water-break fix, mix-bar legend, density tightening, end-time field, inline attendance management, etc.
 
 ### Notes / known divergences from the plan
-- Drag-to-reorder explicitly deferred to Build 6 (uses chevron up/down for parity with mobile, per spec).
-- `(workspace)/practice/*` lives at the top level, not under `/dashboard/team/[teamId]/practice` — moves to per-team URL scoping during Build 8/9 polish (matches the `(workspace)/drills` pattern).
-- Migrations 42 + 43 + 44 (referenced in mobile session notes) were already applied to Supabase from the mobile work — web only had to consume them.
+- Drag-to-reorder explicitly deferred to Build 6 (uses chevron up/down for parity with mobile, per spec) — and now skipped per 2026-05-27 user decision.
+- `(workspace)/practice/*` lives at the top level, not under `/dashboard/team/[teamId]/practice` — moves to per-team URL scoping during Build 15 polish.
 
 ### Goal
 Bring the web practice planner up to the mobile *data shape*. The current web `PracticePlanForm.tsx` treats a practice as a flat list of `{drillId, durationMinutes}` rows. Mobile (per `MOBILE_APP_REFERENCE.md` §6.6) treats a practice as **blocks → drills**, with between-block water breaks and parallel-group drills. None of that exists on web. Build 6's responsive desktop polish is impossible until the block model is in.
@@ -521,29 +516,22 @@ Schema migrations are already applied (mobile session 2026-05-22). Web just need
 ## Build 6 — Roster + Benchmarks + Practice responsive upgrades + multi-type benchmark capture 🔶
 
 ### Shipped — roster (2026-05-25) + multi-type capture (2026-05-27)
-Commit `68ea841` ("Build 6 — Team roster + player detail redesign (web)") landed the roster + player-detail half of the spec. Branch `build-6a-multi-type-capture` (2026-05-27) added multi-type benchmark capture (the second-largest piece). Practice editor side-by-side + dnd-kit reorder + practice list table view + benchmark hub responsive remain unshipped.
-
-- **Roster list** moved to `(workspace)/dashboard/team/[teamId]/roster/`. Desktop table (avatar + Captain/Injured pips + positions + jersey + status pill + last benchmark + actions) that collapses to stacked cards under 900px. Search + Status filter chips (All / Active / Inactive / Injured) + Position filter. Pre-fetches each player's most recent benchmark in one query — no per-row roundtrips.
-- **Player detail** at `(workspace)/dashboard/team/[teamId]/roster/[playerId]/` — 2-col grid (hero column + history column) that stacks under 1024px. Hero card: avatar from `color_index` via `playerColorForIndex()`, badges (Captain / Active|Inactive / Injured / joined month), injury-note callout, 4-tile mini-stat grid (benchmarks / drills / PBs / position). Quick actions + Notes cards below. History column: time-range chips (30d / 90d / Season) and one `HistoryCard` per (drill, benchmark_type) pair with a sparkline, last-value + delta-vs-first + PB + sessions count.
-- **PlayerForm** rebuilt on UFF tokens with section-card layout per `feedback_form_layout_convention`. Surfaces `is_captain`, `is_injured`, and `injury_note` for the first time.
-- New `playerColorForIndex` helper + 20-swatch `PLAYER_COLORS` palette in `team-colors.ts`.
+- **Roster list** moved to `(workspace)/dashboard/team/[teamId]/roster/` (commit `68ea841`). Desktop table (avatar + Captain/Injured pips + positions + jersey + status pill + last benchmark + actions) that collapses to stacked cards under 900px. Search + Status filter chips + Position filter. Pre-fetches each player's most recent benchmark in one query.
+- **Player detail** at `(workspace)/dashboard/team/[teamId]/roster/[playerId]/` (commit `68ea841`) — 2-col grid (hero column + history column) that stacks under 1024px. Hero card: avatar from `color_index` via `playerColorForIndex()`, badges (Captain / Active|Inactive / Injured / joined month), injury-note callout, 4-tile mini-stat grid. Quick actions + Notes cards below. History column: time-range chips + per (drill, benchmark_type) `HistoryCard` with sparkline + delta + PB.
+- **PlayerForm** rebuilt on UFF tokens with section-card layout. Now slimmer post-Build 6.5c — injury controls moved to the modal.
+- `playerColorForIndex` helper + 20-swatch `PLAYER_COLORS` palette in `team-colors.ts`.
 - `.chip` / `.chip.on` global classes for filter + range chips.
-- Legacy `(app)/roster/*` pages converted to redirect bridges so old bookmarks land on the workspace route.
+- Legacy `(app)/roster/*` pages converted to redirect bridges.
+- **Multi-type benchmark capture** (branch `build-6a-multi-type-capture` commit `b5ab936`) — see Build 4's "Shipped — capture side" section. `BenchmarksHubClient.tsx` + `BenchmarkLogClient.tsx` now handle all six `BenchKind` values with per-type widgets, all-types-on-one-screen UX. One `benchmark_results` row per (player, type) per day with `captured_on='desktop'`.
 
-**Multi-type benchmark capture (2026-05-27, branch `build-6a-multi-type-capture`):**
-- `(app)/benchmarks/page.tsx` + `BenchmarksHubClient.tsx` updated to read `team_drills.benchmark_types text[]` (with legacy single-column fallback). Drill cards now surface every active type as a coloured chip instead of a single pill.
-- `(app)/benchmarks/log/page.tsx` resolves the drill's `benchmark_types[]` + `benchmark_config jsonb` and passes both to the client.
-- `(app)/benchmarks/log/BenchmarkLogClient.tsx` rewritten around a per-type-card stack ("all types on one screen per player" — per spec §6 risk mitigation, not sequenced). Widgets: `NumberField` (timed/reps/flags/drops), `RatingButtons` (rated, 1–5 with anchors), `PctField` (made ÷ attempts). Per-type targets from `benchmark_config` render as right-aligned hints. `effectiveInverse()` mirrors mobile (`drops` defaults true; `better: "lower"` config overrides).
-- Save inserts one `benchmark_results` row per (player, type) for the day, with `set_number=1`, `captured_on='desktop'`, and `benchmark_type` / `inverse` per row. Re-saves via Previous wipe today's rows for that (player, drill, assessor) and re-insert.
-- Type-checked + `next build` clean.
+### Skipped (2026-05-27 — user decision)
+The remaining responsive + drag-reorder work was scoped out of the resolve-outstanding sweep:
+- **Benchmark hub responsive desktop layout** — the hub supports all 6 types but still renders as a single stacked column. Side-by-side drill + player selectors at desktop is out.
+- **Practice editor desktop side-by-side panes** (left = block + drill library, center = plan structure, right = block/drill detail editor) — out.
+- **Drag-to-reorder via `@dnd-kit/core`** — package not installed; editor stays on chevron up/down reorder. Out.
 
-### Still missing from the original spec
-- ❌ **Benchmark hub responsive desktop layout** — the hub now supports all 6 types but still renders as a single stacked column. Side-by-side drill + player selectors at desktop is item #6 in the resolve-outstanding queue.
-- ❌ **Practice list desktop table view** — `(workspace)/practice/PracticeListClient.tsx` (Build 5.5) is card-based, not the sortable table the spec called for. **(Reclassified as done-by-substitution per 2026-05-27 audit decision; card view + mix-bar is more information-dense than a table.)**
-- ❌ **Practice editor desktop side-by-side panes** (left = block + drill library, center = plan structure, right = block/drill detail editor).
-- ❌ **Drag-to-reorder via `@dnd-kit/core`** — package not installed. Editor still uses chevron up/down reorder.
-- ❌ **Player-progress sparkline chart** on player detail — landed later in Build 8 (Recharts, `BenchmarkProgressChart`).
-- ❌ **Post-practice log shell** (deferred to Build 6.5 per the spec; also still missing — see below).
+### Reclassified as done-by-substitution (2026-05-27)
+- **Practice list desktop table view** — the Build 5.5 card view (mix bar + RSVP avatars + status pill + past-due chip) is more information-dense than a sortable table. Plan calls for the table; we ship the card view. Re-open with a new build if a table specifically becomes a requirement.
 
 ### Goal
 Bring the remaining authenticated pages to desktop feature parity. Includes the multi-type benchmark capture widgets that Build 4 set up the drill side for.
@@ -606,19 +594,48 @@ Bring the remaining authenticated pages to desktop feature parity. Includes the 
 
 ---
 
-## Build 6.5 — Injury tracking + observations feed + post-practice log 🔶
+## Build 6.5 — Injury tracking + observations feed + post-practice log ✅
 
-### Shipped (2026-05-25 → 2026-05-26) — injury tracking only
-- `team_players.is_injured` + `injury_note` surfaced on the web app for the first time.
-- Player detail hero (`(workspace)/dashboard/team/[teamId]/roster/[playerId]/page.tsx`) renders an "Injured" badge + injury-note callout when set. Status filter on the roster list also exposes an "Injured" chip. Shipped in commit `68ea841` alongside Build 6's roster work.
-- Attendance UI on the practice detail page surfaces injured players (commit `fd0c490`, "Surface injured players in the attendance UI"). Also covers the `ManageAttendanceCard` inline edit experience.
-- Roster list cards/rows show a small Injured pip next to the player name.
+### Shipped — across four branches (2026-05-25 → 2026-05-27)
 
-### Still missing from the original spec
-- ❌ **Branded "Mark injured / Mark healthy" modal on player detail** — current implementation puts the toggle + note inside `PlayerForm.tsx` (the edit page) rather than as a dedicated modal triggered from the detail page. Functionally equivalent for data capture but diverges from the mobile pattern and the spec's explicit instruction ("do NOT add injury controls to PlayerForm — injury lives on detail only").
-- ❌ **Player observations feed** — no `player_notes` query anywhere in `src/`. No `ObservationsFeed.tsx` component. Player detail has no chronological notes section.
-- ❌ **Post-practice log flow** — no `/practice/[id]/log` route exists on web. Build 5.5 deleted the old `(app)/practice/[id]/log/` stub and didn't replace it under `(workspace)`. `PostPracticeLogClient.tsx` was never created. Practice plans never transition to `completed` from the web — only via mobile.
-- ❌ **Per-drill `log_note` write path + `DrillNoteHistorySheet` web equivalent.**
+**Injury tracking — initial capture (2026-05-25, commit `68ea841`)**
+Surfaced `team_players.is_injured` + `injury_note` on the web app for the first time. Player detail hero rendered an "Injured" badge + note callout. Roster status filter chip. Practice attendance UI flagged injured players (commit `fd0c490`). Toggle + textarea lived inside PlayerForm — superseded by the modal refactor below.
+
+**Post-practice log (branch `build-6.5a-post-practice-log`, commit `39596e2`)**
+- New route `/practice/[id]/log` (server + `PostPracticeLogClient`) on the UFF dark palette + TeamSidebar shell.
+- Four numbered section cards matching mobile's 2026-05-19 rebuild:
+  - **01 Drills** — flat list of every non-water-break drill across blocks (block accent stripe + block name eyebrow). Per-row Done / Skipped toggles + expand-to-write `log_note`. Fresh logs default all to Done; re-edits hydrate from `drills_completed[]` / `drills_skipped[]`.
+  - **02 Observations** — picker + text input adds `(player_id, note_text)` rows. Re-edits load all prior `player_notes`.
+  - **03 Notes** — `team_performance_notes` / `highlights` / `areas_to_improve` textareas.
+  - **04 Wrap-up** — `attendance_count` (defaults to RSVP=true count) + `energy_level` 1–10 with anchored copy.
+- Side rail "At a glance" / "Editing log" summary card.
+- `savePracticeLog` action: upserts `practice_logs`, replaces `player_notes` by plan, patches per-drill `log_note`, transitions `practice_plans.status = 'completed'`.
+- `PlanDrill` extended with `log_note`; `fetchPlanFull` selects it; `EditorClient` initialiser updated.
+- Practice detail topbar gains "Log practice" / "Edit log" link.
+- Followed by visual polish on the same branch: lime kicker + section numbers, orange section titles + practice title, eyebrow-style section titles, At-a-glance accents (`bfb38ba` → `49007f9`).
+
+**Past-due nudges + draft guardrails (same branch, commit `aca14ef`)**
+- `PastDueBanner` above practice detail hero when `practice_date < today` AND `status !== 'completed'`. Three variants — draft / scheduled / live — with copy generated via `/ux-copy` skill. Primary "fix it" CTA + secondary "move it" CTA.
+- Practice detail topbar "Log practice" link replaced with a disabled span on draft plans (tooltip "Finalize the plan to enable logging.").
+- `/practice/[id]/log` server gate: drafts redirect to `/practice/[id]?blocked=draft` with an inline notice.
+- Practice list cards (featured + summary) render a "PAST DUE" chip alongside the status pill. Subsequent polish commit `39516ec` flipped "Scheduled" pill to lime, "Past due" chip to borderless red.
+
+**Observations feed (branch `build-6.5b-observations-feed`, commit `ae28c93`)**
+- New parallel `player_notes` query in the player-detail loader, joined to `practice_plans` for title + date + linkability.
+- New `ObservationsCard` in the left column under Quick actions / Notes. Mirrors mobile's "Observations" position from MOBILE_APP_REFERENCE §6.5.
+- Each row: practice title (orange link to `/practice/[id]`) + date (mono, muted) on the top line; note body in white@0.88 opacity with `whitespace-pre-wrap` for multi-line notes.
+- Locked-insight empty state explains the source ("Captains can write per-player notes from the post-practice log…").
+
+**Injury modal (branch `build-6.5c-injury-modal`, commit `159d789`)**
+- New `<InjuryModal />` client component (`src/components/roster/InjuryModal.tsx`) — trigger button label flips between "Mark injured" (red tint) / "Mark healthy" (lime tint) based on current state. Modal body has two variants: marking injured (optional note textarea + red CTA) / marking healthy (clear-flag copy + lime CTA). Esc + scrim-click close.
+- `toggleInjury` server action (`src/lib/roster/injury-actions.ts`): team_member or league_admin gate, atomic write of `is_injured` + `injury_note`, force-clears note on healthy, revalidates roster + player detail paths.
+- Player detail mounts the modal directly under the existing injury-note callout in the hero column.
+- `PlayerForm` cleanup: `isInjured` + `injuryNote` removed from `PlayerFormInitial`, state, JSX section, and submit payload. Inline comment notes the move. Edit page slimmed to match.
+
+### Notes / known divergences from the plan
+- Spec said the per-drill `log_note` should feed a `DrillNoteHistorySheet` on the drill detail page. The data is persisted (column populated by `savePracticeLog`); the sheet UI is deferred to a future polish pass.
+- Observation editing / deletion is intentional out-of-scope (write-only feed for MVP). To edit, re-open the post-practice log for that practice and use the Remove button.
+- Run-practice live mode on web stays out of scope (web reads run-state data captured on mobile but doesn't write it).
 
 ### Goal
 Three smaller mobile-parity gaps that all relate to capturing rich coaching data, grouped into one build because none warrants its own.
@@ -796,223 +813,7 @@ Add real charts to the player detail page now that the dashboard widget pass is 
 
 ---
 
-## Build 9 — Skill taxonomy + preset drill library ✅
-
-### Shipped (2026-05-27)
-- Supabase schema in `qb_supabase_full_package/sql/`:
-  - `66_skill_taxonomy_schema.sql` — 5 new tables (`skills`, `skill_tags`, `preset_drills`, `preset_drill_skills`, `drill_skills`), `team_drills.preset_drill_id` clone-lineage column, `benchmark_results` + `entry_mode` / `needs_review` / `captured_on` columns, `clone_preset_drill_to_team()` RPC, `v_player_skill_profile` view, full RLS.
-  - `67_skill_taxonomy_seed.sql` — 25 skills, ~121 chip rows, 51 preset drills, 126 drill→skill mappings. Idempotent (`ON CONFLICT` for skills/tags/drills; delete-then-insert for mappings). Self-asserting `DO $$` at the bottom.
-  - `68_fix_defensive_drill_positions.sql` — corrected `primary_for_positions[]` on 9 drills (3 defensive-triad fixes from empty arrays, 1 add Rusher, 4 add Center, 1 add Safety). Caught during browser testing — the QB filter was over-recommending defensive drills.
-- Web: `/drills/library` route (server page + client filter rail + responsive card grid). Filters by skill group / format / position / hide-already-cloned. Per-card skill chips (primary highlighted with ★, secondaries muted). "+ Add to team" button calls `clone_preset_drill_to_team` RPC and routes to the new drill's edit page. Already-cloned presets show "In library →" instead. Entry point added to the `/drills` top bar.
-- New hand-written type stubs at `src/lib/types/skills.ts` (no auto-generated Supabase types in this project).
-- A separate fix branch `fix-practice-revalidate-during-render` resolved a Next 16 strictness regression in `createPlanDraft` that surfaced during testing (revalidatePath was being called from a server-component render).
-- Branch: `build-9-preset-library` off `build-7-dashboard-widgets`. Merged into main via an integration branch alongside builds 7.5c / 8 / fix.
-- Two memory entries saved: `feedback_get_my_team_ids_set_pattern` (use `IN (SELECT fn())` not `= ANY(fn())` for SETOF functions in RLS policies) and the skill-taxonomy design doc at `docs/SKILL_TAXONOMY_AND_PRESET_DRILLS.md`.
-
-### Goal
-Introduce the assessment skill taxonomy as a first-class primitive — a vocabulary of player skills that drills get tagged against, which the dashboard can use to compute team and player strengths/weaknesses. Ship a cloneable preset drill library so coaches start with 51 pre-tagged drills instead of an empty `team_drills` table.
-
-### In scope
-- Schema migrations 66 / 67 / 68 to live Supabase.
-- `/drills/library` browse-and-clone page.
-- `/drills` "Browse library" entry-point button.
-- `v_player_skill_profile` view (latent — no UI consumer yet).
-
-### Out of scope (deferred to later builds)
-- DrillForm skill picker — Build 10.
-- Benchmark log skill chips + needs_review queue — Build 11.
-- Dashboard skill radar — Build 12.
-- Per-player skill profile card — Build 13.
-- Mobile parity for everything above — Build 14.
-
-### Files touched
-- New (SQL): `qb_supabase_full_package/sql/66_skill_taxonomy_schema.sql`, `67_skill_taxonomy_seed.sql`, `68_fix_defensive_drill_positions.sql`
-- New (web): `src/lib/types/skills.ts`, `src/lib/drills/preset-library-data.ts`, `src/app/(workspace)/drills/library/{page,PresetLibraryClient,actions}.tsx`
-- Modified (web): `src/app/(workspace)/drills/page.tsx` — Browse-library button
-
-### Acceptance criteria
-- 51 preset drills visible at `/drills/library`.
-- Position filter precision (QB excludes flag-pull / pursuit drills).
-- Clicking "+ Add to team" creates a `team_drills` row + `drill_skills` rows and routes to the new drill's edit page.
-- Re-running migration 67 produces no duplicates (idempotent).
-
-### Risks
-- **(Hit + fixed) Defensive drills with empty `primary_for_positions[]` over-recommended for the QB filter.** Fixed via migration 68 + seed-file patch.
-- **(Hit + fixed) `get_my_team_ids()` in RLS policies needed `IN (SELECT …)`, not `= ANY(…)`.** Saved as memory `feedback_get_my_team_ids_set_pattern`.
-
----
-
-## Build 10 — DrillForm skill picker + drill_skills persistence ✅
-
-### Shipped (2026-05-27)
-- New picker component at `src/components/uff-web/drills/SkillPicker.tsx`: grouped chips (athletic / offense / qb / defense / iq) with a three-state cycle per chip — unselected → secondary (weight 0.5) → primary (weight 1.0) → unselected. Legend explains the cycle + shows live primary/secondary counts.
-- `DrillForm.tsx` section structure expanded from 7 → 8 numbered sections. New section "03 Skill tags" inserted between Categories (02) and Benchmarks (now 04); existing sections 03 → 07 renumbered to 04 → 08. Picker state lives in form state; saving runs the same delete-then-insert atomic-pair pattern used for `team_drill_categories` against `drill_skills`.
-- `loadAllSkills(supabase)` + `loadDrillSkills(supabase, ids[])` in `src/lib/drills/skills-data.ts`. New page fetches the catalog server-side; edit page fetches both catalog + current drill's tags and hydrates the picker via `toPickerInitial()`.
-- `duplicateDrill` action extended to copy `drill_skills` rows so duplicates keep their tags.
-- Drill detail page (`/drills/[id]`) renders a new "Skill tags" `DetailSection` at the top of the left column with the same chip visual language as the preset library cards. Empty state nudges the user toward the editor.
-- Branch: `build-10-drill-skill-picker` off `main`. Single commit (`cfcad36`). Not yet merged to main.
-
-### Goal
-Make the skill taxonomy work for hand-built drills, not just cloned presets. Coaches need to tag their own drills with the same skill chips that come pre-populated when cloning from the preset library.
-
-### In scope
-- Reusable `SkillPicker` component.
-- Wire picker into `DrillForm` (new + edit modes).
-- Persist `drill_skills` on save (replace pattern).
-- Render skill chips on the drill detail page (read-only).
-- Carry skill tags through `duplicateDrill`.
-
-### Out of scope
-- Benchmark log skill chips — Build 11.
-- Dashboard / player-profile consumption — Builds 12 / 13.
-- Mobile parity — Build 14.
-- Extracting a shared `<SkillChipReadOnly>` component — defer until there's a third consumer.
-
-### Files touched
-- New: `src/lib/drills/skills-data.ts`, `src/components/uff-web/drills/SkillPicker.tsx`
-- Modified: `src/app/(workspace)/drills/DrillForm.tsx`, `new/page.tsx`, `[id]/edit/page.tsx`, `[id]/actions.ts`, `[id]/page.tsx`
-
-### Acceptance criteria
-- A coach can tag a custom drill with skills via the picker (off → secondary → primary → off cycle).
-- A cloned-from-preset drill opens in edit mode with the preset's tags pre-populated.
-- Saving the form replaces `drill_skills` cleanly (no duplicates, no orphans).
-- Drill detail page shows the tagged skills as chips with an empty state when none.
-- `duplicateDrill` carries skill tags forward.
-
-### Risks
-- **(Pre-merge) Branch not yet merged to main.** Recommended verification before merge: pick a new drill, tag 2 skills (1 primary, 1 secondary), save, reload, confirm chips render correctly on the detail page.
-
----
-
-## Build 11 — Benchmark log skill chips + mobile-capture columns ⏳
-
-### Goal
-Wire the rest of the `benchmark_results` mobile-capture columns and the per-drill skill_tag chip selector into the benchmark logging flow. Today's flow uses a hardcoded `QUICK_TAGS` array and doesn't surface the new `entry_mode` / `needs_review` / `captured_on` columns.
-
-### In scope
-- `BenchmarkLogClient.tsx`: replace the hardcoded `QUICK_TAGS` array with a dynamic query that pulls `skill_tags` for the drill's tagged skills. Group chips by skill in the observation modal.
-- On insert: stamp `entry_mode = 'benchmark'` and `captured_on = 'desktop'` for the web flow.
-- "Mark for review" checkbox on each saved set → sets `needs_review = true`. Captain can come back to expand on desktop.
-- New `needs_review` count badge on `RecentActivityCard` (dashboard) with a drill-down list of flagged entries for the team.
-
-### Out of scope
-- Mid-practice quick-rate sheet on mobile — Build 14.
-- Voice / dictation flows.
-- Pre-built shared `<SkillTagPicker>` — keep chips inline until there's a third consumer.
-
-### Files touched
-- Modified: `src/app/(app)/benchmarks/log/BenchmarkLogClient.tsx`
-- Modified: `src/lib/dashboard/team-home-data.ts` (count `benchmark_results WHERE needs_review = true`)
-- Modified: `src/components/dashboard/widgets/RecentActivityCard.tsx` — badge + filtered drill-down
-- Possibly new: `src/app/(workspace)/dashboard/team/[teamId]/review/page.tsx` — review queue
-
-### Acceptance criteria
-- Logging a player rating surfaces chips tied to the drill's `drill_skills`.
-- Saving stamps the three new columns with the right defaults.
-- "Mark for review" works end-to-end (writes the flag, appears in the dashboard badge, can be cleared from the review queue).
-
-### Risks
-- **Dashboard queue can grow unbounded if captains forget to clear it.** Mitigation: cap badge count to last 30 days.
-- **Per-set vs per-player toggle placement.** Per-set adds clutter; per-player requires scrolling. Recommend per-set with a small unobtrusive checkbox.
-
----
-
-## Build 12 — Team Skill Radar dashboard widget ⏳
-
-### Goal
-First visible consumer of `v_player_skill_profile`. Adds a radar chart spoke per skill group to the team dashboard, showing team-average composite vs. trend over the last 4 weeks. Validates that the assessment engine produces trustworthy aggregates before piling on more widgets.
-
-### In scope
-- New `<TeamSkillRadarCard>` widget consuming `v_player_skill_profile`.
-- Aggregate per skill: team-average composite, count of contributing players, trend delta vs. the prior 4-week window.
-- Locked-insight states per skill spoke when sample size is too thin (<3 contributing players).
-- Attach to the existing dashboard grid in `(workspace)/dashboard/team/[teamId]/page.tsx`.
-
-### Out of scope
-- Position splits — handled by Build 13's player matrix.
-- Click-through to a per-skill detail page (defer to a follow-up).
-- Materialized view — `v_player_skill_profile` stays a regular view for v1; materialize later if perf shows up.
-
-### Files touched
-- New: `src/components/dashboard/widgets/TeamSkillRadarCard.tsx`
-- Modified: `src/lib/dashboard/team-home-data.ts` — radar aggregate
-- Modified: `src/app/(workspace)/dashboard/team/[teamId]/page.tsx` — slot the widget
-
-### Acceptance criteria
-- Radar renders all 5 skill groups (or fewer if no data in a group).
-- Locked-insight state appears when a skill has fewer than 3 contributing players.
-- Refreshes on every dashboard load (no caching for v1).
-
-### Risks
-- **A team with sparse data has a "ghost" radar shaped by 1–2 outliers.** Mitigation: lock spokes that don't meet the sample-size threshold.
-- **Recharts radar default styling may clash with the dashboard tokens.** Use `chartTheme` extracted in Build 8.
-
----
-
-## Build 13 — Player skill profile card on player detail ⏳
-
-### Goal
-Per-player strengths/weaknesses card on the player detail page. Top 3 skills + bottom 3 with composite scores and sample-size badges. The "is Marcus actually good at coverage?" answer that the whole assessment engine exists to provide.
-
-### In scope
-- New `<PlayerSkillProfileCard>` consuming `v_player_skill_profile WHERE player_id = X`.
-- Top 3 strengths / bottom 3 weaknesses with composite + sample-size badges.
-- Anchored 1–5 reference scale for visual context.
-- Attach to the player detail page in `(workspace)/dashboard/team/[teamId]/roster/[playerId]/page.tsx`.
-
-### Out of scope
-- Per-skill drill recommendations (future — match weakness to drill via `drill_skills`).
-- Skill-trend mini-charts (Build 12 covers team trend; player-level trend can come later).
-- Comparison-to-team-avg overlay (future).
-
-### Files touched
-- New: `src/components/dashboard/widgets/PlayerSkillProfileCard.tsx`
-- Modified: `src/app/(workspace)/dashboard/team/[teamId]/roster/[playerId]/page.tsx`
-
-### Acceptance criteria
-- Card appears on every player's detail page once that player has 3+ skill signals.
-- Locked-insight state for players with insufficient data.
-- Sample-size badge on every score so coaches don't trust 1-rating averages.
-
-### Risks
-- **Composite scoring hides sparse data.** Mitigation: sample-size badge is non-negotiable.
-- **Position bias (a DB will score 0 on QB-only skills).** Mitigation: only surface skills relevant to the player's primary position OR skills where they have at least one signal.
-
----
-
-## Build 14 — Mobile parity for skill taxonomy ⏳
-
-### Goal
-Bring everything Builds 9 → 13 ship on web to the React Native mobile app: browse preset library, tag drills with skills, log with skill_tag chips, mid-practice quick-rate sheet (the mobile-only piece that web defers permanently), per-player skill profile.
-
-### In scope
-- Mobile `/drills/library` screen (browse + clone).
-- Mobile DrillForm skill picker (extend the existing 6-section form).
-- Mobile benchmark log: replace `QUICK_NOTES` static chips with `skill_tags` lookup; add `entry_mode` / `needs_review` / `captured_on` stamping.
-- **Mid-practice quick-rate sheet** on the run-practice screen (mobile-only — see `MOBILE_APP_REFERENCE.md` §12 open question 2). Tap a player from the live drill card → 1–5 rating + skill_tag chips + voice-dictated note + "needs more detail later" flag → saves with `entry_mode='practice_quick'`, `captured_on='mobile'`, `needs_review=true` by default.
-- Mobile player detail skill profile card.
-
-### Out of scope
-- New schema work — everything already migrated in Build 9.
-- Whisper / cloud transcription — use the OS keyboard's native dictation.
-
-### Files touched
-- New mobile screens: `app/(tabs)/drills/library.tsx`, mid-practice rate-sheet component
-- Modified mobile: DrillForm, benchmark log screens, player detail
-
-### Acceptance criteria
-- Mobile + web read/write the same data; opening a drill on web after tagging on mobile (or vice versa) shows the same chips.
-- Mid-practice quick-rate sheet captures one player in ≤8 seconds.
-- Logging flow surfaces skill-aware chips instead of a generic free-form list.
-
-### Risks
-- **8-second target is the whole point.** Anything over 12 seconds and captains will stop using it.
-- **Voice-to-text quality varies by phone.** Stick with native OS dictation for v1.
-- **Run-practice screen UI density.** The rate sheet has to coexist with the timer, attendance, and per-drill notes. Use a bottom-sheet pattern so the existing UI doesn't shift.
-
----
-
-## Build 15 — Polish pass ⏳
+## Build 9 — Polish pass ⏳
 
 ### Goal
 A focused pass through the whole app to clean up loose ends, fix small visual bugs introduced during the responsive work, and tighten interactions.
@@ -1049,7 +850,7 @@ A focused pass through the whole app to clean up loose ends, fix small visual bu
 
 ---
 
-## Build 16 — Production prep ⏳
+## Build 10 — Production prep ⏳
 
 ### Goal
 Get the app ready to actually share with users beyond just Taylor.
@@ -1098,14 +899,8 @@ These are vertical slices. After each build, the app is shippable in the sense t
 - After Build 6.5: "Injury tracking, observations feed, and post-practice logging are in. Feature parity with mobile (minus run mode) reached."
 - After Build 7: "Team dashboard is rich — pulses, drill mix, attendance, streaks, captain toggle. Feels like the heart of the app."
 - After Build 8: "Player progress charts ship."
-- After Build 9: "Skill taxonomy + preset library — coaches start with 51 pre-tagged drills instead of an empty library."
-- After Build 10: "Coaches can tag custom drills with skills too. Both data sources feeding the assessment engine."
-- After Build 11: "Logging surfaces skill-aware chips and supports the mobile-quick-capture workflow."
-- After Build 12: "Team Skill Radar on the dashboard — first visible payoff of the assessment engine."
-- After Build 13: "Per-player strength/weakness card — Taylor can see what each player is actually good at."
-- After Build 14: "Mobile parity reached; mid-practice quick-rate captures ratings during the live drill."
-- After Build 15: "Polished, accessible, no rough edges."
-- After Build 16: "Ready to share with the other two teams in the org."
+- After Build 9: "Polished, accessible, no rough edges."
+- After Build 10: "Ready to share with the other two teams in the org."
 
 ## What's NOT in this plan (and where it lives)
 

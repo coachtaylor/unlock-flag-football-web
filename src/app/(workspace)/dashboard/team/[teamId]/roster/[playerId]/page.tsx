@@ -17,6 +17,7 @@ import PlayerHistory, {
   type PlayerHistoryDrill,
   type PlayerHistoryLocked,
 } from "./PlayerHistory";
+import InjuryModal from "@/components/roster/InjuryModal";
 
 type DrillJoin = {
   id?: string;
@@ -523,6 +524,16 @@ export default async function PlayerDetailPage({
                   {injuryNote}
                 </div>
               )}
+
+              <div>
+                <InjuryModal
+                  playerId={playerId}
+                  teamId={teamId}
+                  playerName={playerName}
+                  currentlyInjured={isInjured}
+                  currentNote={injuryNote}
+                />
+              </div>
 
               <div
                 style={{
