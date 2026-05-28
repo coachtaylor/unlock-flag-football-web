@@ -11,6 +11,11 @@ import {
 import DrillForm, { type DrillFormInitial } from "../../DrillForm";
 import type { DiagramData } from "@/types/diagram";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import {
+  loadAllSkills,
+  loadDrillSkills,
+  toPickerInitial,
+} from "@/lib/drills/skills-data";
 
 export const dynamic = "force-dynamic";
 
@@ -55,24 +60,31 @@ export default async function EditDrillPage({ params }: Props) {
   }
   const teamId = drill.team_id as string;
 
-  const [{ data: team }, { data: categories }, { data: junction }] =
-    await Promise.all([
-      supabase
-        .from("teams")
-        .select("id, team_name, team_color, league_id")
-        .eq("id", teamId)
-        .maybeSingle(),
-      supabase
-        .from("drill_categories")
-        .select("id, category_name, category_type, display_order")
-        .or(`team_id.is.null,team_id.eq.${teamId}`)
-        .order("display_order", { ascending: true })
-        .order("category_name", { ascending: true }),
-      supabase
-        .from("team_drill_categories")
-        .select("category_id")
-        .eq("drill_id", id),
-    ]);
+  const [
+    { data: team },
+    { data: categories },
+    { data: junction },
+    skillsCatalog,
+    drillSkillsMap,
+  ] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, team_name, team_color, league_id")
+      .eq("id", teamId)
+      .maybeSingle(),
+    supabase
+      .from("drill_categories")
+      .select("id, category_name, category_type, display_order")
+      .or(`team_id.is.null,team_id.eq.${teamId}`)
+      .order("display_order", { ascending: true })
+      .order("category_name", { ascending: true }),
+    supabase
+      .from("team_drill_categories")
+      .select("category_id")
+      .eq("drill_id", id),
+    loadAllSkills(supabase),
+    loadDrillSkills(supabase, [id]),
+  ]);
 
   if (!team) redirect("/dashboard");
 
@@ -140,6 +152,7 @@ export default async function EditDrillPage({ params }: Props) {
     description: (drill.description as string | null) ?? "",
     sourceUrl: (drill.source_url as string | null) ?? "",
     categoryIds: selectedCategoryIds,
+    skills: toPickerInitial(drillSkillsMap[id] ?? []),
     benchmarkTypes,
     benchmarkConfig,
     defaultDurationMin: (drill.default_duration_min as number | null) ?? 10,
@@ -179,6 +192,7 @@ export default async function EditDrillPage({ params }: Props) {
       }}
       user={{ firstName, lastName, initials }}
       categories={cats}
+      skills={skillsCatalog.skills}
       initial={initial}
       sidebarWorkspaces={sidebarWorkspaces}
     />

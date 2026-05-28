@@ -16,6 +16,8 @@ import {
   BENCH_BY_ID,
   BenchChip,
   CatPillWeb,
+  // Skill-group color map duplicated from PresetCard for the read-only chips
+  // below — extract a shared SkillChip component when there's a third consumer.
   DrillBadge,
   Spark,
   StatusPill,
@@ -135,6 +137,13 @@ export default async function DrillDetailPage({ params }: Props) {
       .eq("team_id", teamId)
       .eq("status", "active"),
   ]);
+
+  // Tagged skills for this drill (build-10). Renders as chips in the
+  // left column. Empty → friendly empty state nudging the user toward
+  // the editor.
+  const { loadDrillSkills } = await import("@/lib/drills/skills-data");
+  const drillSkillsMap = await loadDrillSkills(supabase, [id]);
+  const taggedSkills = drillSkillsMap[id] ?? [];
 
   if (!team) redirect("/dashboard");
 
@@ -399,6 +408,71 @@ export default async function DrillDetailPage({ params }: Props) {
           <div className="drilldetail-grid">
             {/* Left column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <DetailSection
+                label="Skill tags"
+                meta={
+                  taggedSkills.length === 0
+                    ? "No skills tagged"
+                    : `${taggedSkills.filter((s) => s.weight === 1.0).length} primary · ${taggedSkills.filter((s) => s.weight === 0.5).length} secondary`
+                }
+              >
+                {taggedSkills.length === 0 ? (
+                  <EmptyHint>
+                    No skills tagged. Open this drill in the editor to tag
+                    the player skills it develops — they power the team
+                    skill profile and player dashboard.
+                  </EmptyHint>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {taggedSkills.map((s) => {
+                      const color =
+                        s.skill_group === "athletic"
+                          ? "var(--uff-lime)"
+                          : s.skill_group === "offense"
+                            ? "var(--uff-orange)"
+                            : s.skill_group === "qb"
+                              ? "#6EA8FF"
+                              : s.skill_group === "defense"
+                                ? "#B89BFF"
+                                : "#FFB347";
+                      const isPrimary = s.weight === 1.0;
+                      return (
+                        <span
+                          key={s.id}
+                          title={`${s.skill_name} — ${isPrimary ? "primary (1.0)" : "secondary (0.5)"}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "3px 9px",
+                            borderRadius: 5,
+                            fontSize: 11.5,
+                            fontWeight: isPrimary ? 600 : 500,
+                            background: isPrimary
+                              ? `color-mix(in srgb, ${color} 18%, transparent)`
+                              : "rgba(255,255,255,0.02)",
+                            border: isPrimary
+                              ? `1px solid color-mix(in srgb, ${color} 45%, transparent)`
+                              : "1px solid var(--uff-line-soft)",
+                            color: isPrimary
+                              ? "var(--uff-text)"
+                              : "var(--uff-text-mute)",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {isPrimary && (
+                            <span style={{ color, fontSize: 10, lineHeight: 1 }}>
+                              ★
+                            </span>
+                          )}
+                          {s.skill_name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </DetailSection>
+
               <DetailSection
                 label="Setup diagram"
                 meta={

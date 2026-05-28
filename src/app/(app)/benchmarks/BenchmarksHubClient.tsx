@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BENCH_BY_ID, type BenchKind } from "@/components/uff-web/drills/atoms";
 
 type Drill = {
   id: string;
   name: string;
-  benchmarkType: "timed" | "rated";
+  benchmarkTypes: BenchKind[];
 };
 
 type Player = {
@@ -144,17 +145,22 @@ export default function BenchmarksHubClient({
                     >
                       {d.name}
                     </p>
-                    <span
-                      className="label-micro rounded-pill capitalize flex-shrink-0"
-                      style={{
-                        padding: "2px 8px",
-                        backgroundColor: "#5C3308",
-                        color: "#F0B870",
-                        border: "1px solid #D48A30",
-                      }}
-                    >
-                      {d.benchmarkType}
-                    </span>
+                    <div className="flex items-center gap-xs flex-wrap justify-end">
+                      {d.benchmarkTypes.map((t) => (
+                        <span
+                          key={t}
+                          className="label-micro rounded-pill flex-shrink-0"
+                          style={{
+                            padding: "2px 8px",
+                            backgroundColor: "#5C3308",
+                            color: "#F0B870",
+                            border: "1px solid #D48A30",
+                          }}
+                        >
+                          {BENCH_BY_ID[t]?.label ?? t}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </button>
               );
