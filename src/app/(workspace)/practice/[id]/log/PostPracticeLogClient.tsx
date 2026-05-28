@@ -701,8 +701,8 @@ function SectionCard({
               color: "var(--uff-text)",
               opacity: 0.78,
               fontSize: 12.5,
-              maxWidth: 360,
               textAlign: "right",
+              whiteSpace: "nowrap",
             }}
           >
             {subtitle}
@@ -838,8 +838,17 @@ function SideSummary({
   return (
     <div className="w-card subdued" style={{ padding: 16 }}>
       <div className="sect-head" style={{ marginBottom: 12 }}>
-        <div className="title">
-          <span className="tk" />
+        <div
+          className="title"
+          style={{
+            color: "var(--uff-orange)",
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: ".12em",
+            textTransform: "uppercase",
+          }}
+        >
           {alreadyLogged ? "Editing log" : "At a glance"}
         </div>
       </div>
@@ -882,7 +891,7 @@ function StatRow({
       <span
         style={{
           fontSize: 11.5,
-          color: "var(--uff-text-mute)",
+          color: "var(--uff-text)",
           letterSpacing: ".04em",
           textTransform: "uppercase",
         }}
@@ -894,7 +903,7 @@ function StatRow({
           fontFamily: "var(--font-mono, monospace)",
           fontSize: 14,
           fontWeight: 600,
-          color: dim ? "var(--uff-text-mute)" : "var(--uff-text)",
+          color: dim ? "var(--uff-text-mute)" : "var(--uff-orange)",
         }}
       >
         {value}
