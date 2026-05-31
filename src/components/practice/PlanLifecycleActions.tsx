@@ -60,7 +60,7 @@ export default function PlanLifecycleActions({
         </div>
         <DeletePlanModal
           open={deleteOpen}
-          title={title || "Untitled practice"}
+          title={title}
           busy={pending}
           onCancel={() => setDeleteOpen(false)}
           onConfirm={() =>

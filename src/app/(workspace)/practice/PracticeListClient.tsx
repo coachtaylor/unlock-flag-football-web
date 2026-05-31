@@ -398,7 +398,7 @@ export default function PracticeListClient({
 
       <DeletePlanModal
         open={!!deleteTarget}
-        title={deleteTarget?.title || "Untitled practice"}
+        title={deleteTarget?.title}
         busy={isPending}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
