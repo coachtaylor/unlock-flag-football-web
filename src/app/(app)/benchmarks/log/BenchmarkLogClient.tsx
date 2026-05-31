@@ -434,7 +434,7 @@ export default function BenchmarkLogClient({
   const currentResult = results[index];
   const isLast = index === players.length - 1;
 
-  const assessmentDate = useMemo(todayString, []);
+  const assessmentDate = useMemo(() => todayString(), []);
 
   function updatePerType(kind: BenchKind, patch: Partial<PerTypeValue>) {
     setResults((prev) => {
