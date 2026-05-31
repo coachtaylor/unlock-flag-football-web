@@ -7,7 +7,6 @@
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BenchIconRow, type BenchKind } from "@/components/uff-web/drills/atoms";
 import type {
   PresetDrillWithSkills,
   Skill,
@@ -676,9 +675,8 @@ function PresetCard({
             {preset.default_reps ? ` · ${preset.default_reps} reps` : ""}
           </div>
         </div>
-        {preset.benchmark_types.length > 0 && (
-          <BenchIconRow types={preset.benchmark_types} />
-        )}
+        {/* No benchmark badge — benchmark designation is a captain opt-in after
+            cloning (see clone_preset_drill_to_team), not a property of presets. */}
       </div>
 
       {/* Description */}
