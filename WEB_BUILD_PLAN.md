@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-05-27: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 11, 12, 13, 14, 15, 16 ⏳.
+Build status as of 2026-05-27: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 12, 13, 14, 15, 16 ⏳.
 
 ---
 
@@ -901,7 +901,21 @@ Make the skill taxonomy work for hand-built drills, not just cloned presets. Coa
 
 ---
 
-## Build 11 — Benchmark log skill chips + mobile-capture columns ⏳
+## Build 11 — Benchmark log skill chips + mobile-capture columns ✅
+
+### Shipped (2026-05-27)
+- `BenchmarkLogClient.tsx` now consumes a `skillTagGroups: SkillTagGroup[]` prop loaded server-side. The chip section renders one labelled group per skill (primary skills first, ★ Primary badge + accent dot derived from `SKILL_GROUP_ACCENT`). When the drill has no `drill_skills` rows, the original `FALLBACK_TAGS` list still renders under a "No skills tagged on this drill yet" hint.
+- `benchmarks/log/page.tsx` fetches `drill_skills` joined to `skills`, then `skill_tags` for those skill ids (active only, sorted by `display_order`). Result is sorted primary-first then by `skills.display_order` and stripped of skills with zero active chips.
+- Insert payload now stamps `entry_mode='benchmark'`, `captured_on='desktop'`, and `needs_review` from a per-player "Mark for review" checkbox rendered below the chip section. Re-saves (Previous → Next) still wipe today's rows for that (player, drill, assessor) and re-insert, so the flag round-trips correctly.
+- `team-home-data.ts` extended `benchmark_results` select with `needs_review`, computes a `needsReviewCount` capped to the last 30 days, and returns it on `TeamDashboardData`.
+- `RecentActivityCard` accepts `teamId` + `needsReviewCount` and renders a pill-styled link to the review queue above the activity rows when the count is > 0.
+- New route `/dashboard/team/[teamId]/review` (server page + `ReviewQueueRow` client + `clearNeedsReview` server action). Renders flagged entries with player, drill (linked to drill detail), value (formatted per benchmark_type), tags, notes, source (`entry_mode` / `captured_on`), and a "Clear flag" button that updates `needs_review=false` and revalidates the dashboard.
+- Branch: `build-11-skill-chip-capture` off `main`. Single commit. Not merged to main.
+
+### Notes / known divergences from the plan
+- No shared `<SkillTagPicker>` component — chips render inline in `BenchmarkLogClient`, per the plan's "keep chips inline until there's a third consumer".
+- "Mark for review" is per-player (one checkbox below the chip group), not per-set. Per-player matches the existing save model (one Save per player covers every type for that player), and the plan's risk note recommended per-set with a small unobtrusive checkbox — when a player came back via Previous, the entire row is wiped and re-inserted, so a per-player flag is the simpler primitive that still surfaces correctly in the queue.
+- Review queue is capped to the last 30 days (matches the dashboard badge logic). Older flagged entries are still in the table but won't appear in the queue or count.
 
 ### Goal
 Wire the rest of the `benchmark_results` mobile-capture columns and the per-drill skill_tag chip selector into the benchmark logging flow. Today's flow uses a hardcoded `QUICK_TAGS` array and doesn't surface the new `entry_mode` / `needs_review` / `captured_on` columns.
@@ -1117,7 +1131,7 @@ These are vertical slices. After each build, the app is shippable in the sense t
 - After Build 8: "Player progress charts ship."
 - After Build 9: "Skill taxonomy + preset library — coaches start with 51 pre-tagged drills instead of an empty library."
 - After Build 10: "Coaches can tag custom drills with skills too. Both data sources feeding the assessment engine."
-- After Build 11: "Logging surfaces skill-aware chips and supports the mobile-quick-capture workflow."
+- After Build 11: "Logging surfaces skill-aware chips. Needs-review flag round-trips to a dashboard queue." (Mobile quick-capture lands in Build 14.)
 - After Build 12: "Team Skill Radar on the dashboard — first visible payoff of the assessment engine."
 - After Build 13: "Per-player strength/weakness card — Taylor can see what each player is actually good at."
 - After Build 14: "Mobile parity reached; mid-practice quick-rate captures ratings during the live drill."

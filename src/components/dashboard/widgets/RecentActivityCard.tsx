@@ -1,3 +1,4 @@
+import Link from "next/link";
 import SectionHead from "./SectionHead";
 import type { ActivityRow } from "@/lib/dashboard/team-home-data";
 
@@ -12,10 +13,64 @@ const CAT_COLOR: Record<string, string> = {
   fundamentals: "#FFB347",
 };
 
-export default function RecentActivityCard({ rows }: { rows: ActivityRow[] }) {
+export default function RecentActivityCard({
+  rows,
+  teamId,
+  needsReviewCount,
+}: {
+  rows: ActivityRow[];
+  teamId: string;
+  needsReviewCount: number;
+}) {
   return (
     <div className="w-card">
       <SectionHead label="Recent activity" meta="LAST 7 DAYS" />
+      {needsReviewCount > 0 && (
+        <Link
+          href={`/dashboard/team/${teamId}/review`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "10px 12px",
+            marginBottom: 12,
+            borderRadius: 10,
+            border: "1px solid rgba(255, 138, 48, 0.32)",
+            background: "rgba(255, 138, 48, 0.08)",
+            color: "var(--uff-text)",
+            textDecoration: "none",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                padding: "2px 8px",
+                borderRadius: 9999,
+                background: "var(--color-orange-500, #D48A30)",
+                color: "#0D1117",
+                fontWeight: 600,
+              }}
+            >
+              {needsReviewCount}
+            </span>
+            <span style={{ fontSize: 13 }}>
+              flagged for review
+            </span>
+          </span>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--uff-text-dim)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            Open queue →
+          </span>
+        </Link>
+      )}
       {rows.length === 0 ? (
         <div
           style={{
