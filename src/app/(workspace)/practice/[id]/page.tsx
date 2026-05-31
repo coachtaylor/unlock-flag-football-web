@@ -173,7 +173,7 @@ export default async function PracticeDetailPage({
               <PastDueBanner
                 status={plan.status}
                 planId={plan.id}
-                isPastDue={isPlanPastDue(plan.practice_date, plan.status)}
+                isPastDue={isPlanPastDue(plan.practice_date, plan.start_time, plan.status)}
                 showDraftBlockedNotice={blocked === "draft"}
               />
 

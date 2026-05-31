@@ -13,6 +13,7 @@ import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanSummaries } from "@/lib/practice/plan-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { isPlanPastDue } from "@/components/practice/PastDueBanner";
 import PracticeListClient from "./PracticeListClient";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +62,24 @@ export default async function PracticeListPage() {
       .eq("team_id", teamId)
       .eq("status", "active"),
   ]);
+
+  // Pause stale live practices: any plan still "live" but >6h past its
+  // scheduled start is flipped back to "scheduled" so the run timer stops.
+  // Mirrors the mobile list. The write is idempotent (only ever targets
+  // live rows); we mutate the in-memory plans so the UI reflects the pause.
+  const stalePlans = plans.filter(
+    (p) => p.status === "live" && isPlanPastDue(p.practice_date, p.start_time, p.status),
+  );
+  if (stalePlans.length > 0) {
+    await supabase
+      .from("practice_plans")
+      .update({ status: "scheduled", started_at: null })
+      .in(
+        "id",
+        stalePlans.map((p) => p.id),
+      );
+    for (const p of stalePlans) p.status = "scheduled";
+  }
 
   // Map confirmed attendees per plan → list of avatar items, plus a
   // position breakdown (QB / Offense / Defense) of the same set.

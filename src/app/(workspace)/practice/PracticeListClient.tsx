@@ -84,8 +84,20 @@ export default function PracticeListClient({
     .filter((p) => p.status === "scheduled" || p.status === "live" || p.status === "draft" || p.practice_date >= todayIso)
     .filter((p) => p.status !== "completed")
     .sort((a, b) => (a.practice_date > b.practice_date ? 1 : -1));
-  const next = upcoming[0];
-  const thisWeek = upcoming.slice(1);
+
+  // Stale scheduled/live practices (>6h past start) get pulled out of the
+  // upcoming groups into their own "Needs Attention" section.
+  const needsAttention = upcoming
+    .filter(
+      (p) =>
+        (p.status === "scheduled" || p.status === "live") &&
+        isPlanPastDue(p.practice_date, p.start_time, p.status),
+    )
+    .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
+  const naIds = new Set(needsAttention.map((p) => p.id));
+  const remaining = upcoming.filter((p) => !naIds.has(p.id));
+  const next = remaining[0];
+  const thisWeek = remaining.slice(1);
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
@@ -122,6 +134,27 @@ export default function PracticeListClient({
             <SectionLabel label="This week" count={thisWeek.length} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {thisWeek.map((p) => (
+                <PlanSummaryCard
+                  key={p.id}
+                  plan={p}
+                  avatars={rosterByPlan[p.id] ?? []}
+                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                  rosterSize={rosterSize}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {needsAttention.length > 0 && (
+          <div>
+            <SectionLabel
+              label="Needs Attention!"
+              count={needsAttention.length}
+              tone="alert"
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {needsAttention.map((p) => (
                 <PlanSummaryCard
                   key={p.id}
                   plan={p}
@@ -264,10 +297,12 @@ function SectionLabel({
   label,
   count,
   right,
+  tone,
 }: {
   label: string;
   count?: number;
   right?: React.ReactNode;
+  tone?: "alert";
 }) {
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
@@ -276,7 +311,7 @@ function SectionLabel({
           fontSize: 10,
           fontWeight: 700,
           letterSpacing: ".14em",
-          color: "var(--uff-text-mute)",
+          color: tone === "alert" ? "var(--uff-red, #ff4d4d)" : "var(--uff-text-mute)",
           textTransform: "uppercase",
         }}
       >
@@ -375,7 +410,7 @@ function FeaturedPlanCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <PracticeStatusPill status={plan.status} mini />
-            {isPlanPastDue(plan.practice_date, plan.status) && <PastDueChip />}
+            {isPlanPastDue(plan.practice_date, plan.start_time, plan.status) && <PastDueChip />}
             <span style={{ flex: 1 }} />
             <Link
               href={`/practice/${plan.id}/edit`}
@@ -550,7 +585,7 @@ function PlanSummaryCard({
           >
             {plan.title}
           </div>
-          {isPlanPastDue(plan.practice_date, plan.status) && <PastDueChip />}
+          {isPlanPastDue(plan.practice_date, plan.start_time, plan.status) && <PastDueChip />}
           <PracticeStatusPill status={plan.status} mini />
         </div>
         <div

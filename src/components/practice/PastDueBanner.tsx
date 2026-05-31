@@ -189,17 +189,31 @@ export default function PastDueBanner({
   );
 }
 
-// Convenience: server-side past-due check. Uses ISO YYYY-MM-DD compare
-// against `new Date()` in the server's timezone. Good enough for the
-// banner — a captain in California seeing a "past due" 8 hours early
-// for a UTC-vs-PT delta is not a real problem.
+// A scheduled/live practice is "past due" once its scheduled start slipped
+// more than this long ago. Matches the mobile list (lib practice index).
+export const PAST_DUE_GRACE_MS = 6 * 60 * 60 * 1000;
+
+// Past-due check: now is >6h past the practice's scheduled start
+// (practice_date + start_time, or end-of-day when no time is set).
+// Completed practices are never past due.
 export function isPlanPastDue(
   practiceDate: string,
+  startTime: string | null,
   status: PlanStatus,
 ): boolean {
   if (status === "completed") return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return practiceDate < today;
+  if (!practiceDate) return false;
+  const [y, m, d] = practiceDate.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  let dueMs: number;
+  if (startTime) {
+    const [hh = 0, mm = 0] = startTime.split(":").map(Number);
+    dueMs = new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
+  } else {
+    // No start time — anchor to end of that day so we don't flag it early.
+    dueMs = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+  return Date.now() - dueMs > PAST_DUE_GRACE_MS;
 }
 
 // Inline chip used alongside the status pill on list cards. Red signal
