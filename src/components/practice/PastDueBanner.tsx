@@ -216,22 +216,16 @@ export function isPlanPastDue(
   return Date.now() - dueMs > PAST_DUE_GRACE_MS;
 }
 
-// Inline chip used alongside the status pill on list cards. Red signal
-// for "needs action now" — no border, just the red-tinted background
-// so it reads as a tag rather than competing with the status pill.
+// Inline label used alongside the status pill on list cards. Plain red
+// bold text — no pill/background — so it reads as an urgent signal next
+// to the status pill rather than another chip.
 export function PastDueChip() {
   return (
     <span
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 8px",
-        borderRadius: 4,
-        background: "rgba(255,77,77,0.14)",
         color: "var(--uff-red, #ff4d4d)",
         fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-        fontSize: 9.5,
+        fontSize: 10,
         fontWeight: 700,
         letterSpacing: ".08em",
         textTransform: "uppercase",

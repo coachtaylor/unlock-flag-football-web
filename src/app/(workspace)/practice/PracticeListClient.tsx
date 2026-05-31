@@ -552,6 +552,7 @@ function PlanSummaryCard({
 }) {
   const hasAttendance =
     avatars.length > 0 || breakdown.qb + breakdown.off + breakdown.def > 0;
+  const pastDue = isPlanPastDue(plan.practice_date, plan.start_time, plan.status);
   return (
     <Link
       href={`/practice/${plan.id}`}
@@ -567,7 +568,7 @@ function PlanSummaryCard({
         textDecoration: "none",
       }}
     >
-      <CompactDate iso={plan.practice_date} />
+      <CompactDate iso={plan.practice_date} pastDue={pastDue} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
           <div
@@ -585,7 +586,7 @@ function PlanSummaryCard({
           >
             {plan.title}
           </div>
-          {isPlanPastDue(plan.practice_date, plan.start_time, plan.status) && <PastDueChip />}
+          {pastDue && <PastDueChip />}
           <PracticeStatusPill status={plan.status} mini />
         </div>
         <div
@@ -821,10 +822,11 @@ function MixBarLegend({
 }
 
 // Tighter inline date stamp for summary rows — replaces the 60×60 DateTile.
-function CompactDate({ iso }: { iso: string }) {
+function CompactDate({ iso, pastDue }: { iso: string; pastDue?: boolean }) {
   const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
   const mon = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
   const day = String(d.getDate());
+  const red = "var(--uff-red, #ff4d4d)";
   return (
     <div
       style={{
@@ -837,14 +839,21 @@ function CompactDate({ iso }: { iso: string }) {
         lineHeight: 1,
       }}
     >
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", color: "var(--uff-text-mute)" }}>
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: ".14em",
+          color: pastDue ? red : "var(--uff-text-mute)",
+        }}
+      >
         {mon}
       </span>
       <span
         style={{
           fontSize: 18,
           fontWeight: 800,
-          color: "var(--uff-text)",
+          color: pastDue ? red : "var(--uff-text)",
           marginTop: 2,
           letterSpacing: "-0.02em",
         }}
