@@ -69,3 +69,30 @@ const BY_ID: Record<SkillGroup, SkillGroupMeta> = SKILL_GROUP_META.reduce(
 export function skillGroupMeta(id: SkillGroup): SkillGroupMeta {
   return BY_ID[id];
 }
+
+// Guided-tagging map: which skill groups a drill can tag, given its practice
+// phase. Keyed by the phase category slug (CatSlug, see drills/atoms). Athletic
+// is offered in every phase (position-agnostic); IQ surfaces wherever
+// reads/decisions happen. The DrillForm uses this so an Offense-phase drill
+// can't carry Defense skills. Mirrors unlock-mobile/constants/skill-groups.ts.
+export const PHASE_TO_SKILL_GROUPS: Record<string, SkillGroup[]> = {
+  warmup: ["athletic"],
+  agilities: ["athletic"],
+  conditioning: ["athletic"],
+  offense: ["athletic", "offense", "qb", "iq"],
+  defense: ["athletic", "defense", "iq"],
+  scrimmage: ["athletic", "offense", "qb", "defense", "iq"],
+};
+
+// Union of allowed skill groups across a set of phase slugs, in canonical
+// SKILL_GROUP_META order.
+export function allowedSkillGroupsForPhases(
+  phaseSlugs: (string | null | undefined)[]
+): SkillGroup[] {
+  const set = new Set<SkillGroup>();
+  for (const slug of phaseSlugs) {
+    const groups = slug ? PHASE_TO_SKILL_GROUPS[slug] : undefined;
+    if (groups) for (const g of groups) set.add(g);
+  }
+  return SKILL_GROUP_META.filter((m) => set.has(m.id)).map((m) => m.id);
+}

@@ -24,17 +24,25 @@ type Props = {
   skills: Skill[];
   value: SkillPickerValue;
   onChange: (next: SkillPickerValue) => void;
+  // When provided, only these skill groups render. Used by DrillForm to scope
+  // the picker to the drill's chosen phase.
+  groups?: SkillGroup[];
 };
 
-export default function SkillPicker({ skills, value, onChange }: Props) {
-  const grouped = SKILL_GROUP_META.map((g) => ({
-    ...g,
-    // The picker uses the verbose label in its group headers.
-    label: g.longLabel,
-    items: skills
-      .filter((s) => s.skill_group === g.id)
-      .sort((a, b) => a.display_order - b.display_order),
-  })).filter((g) => g.items.length > 0);
+export default function SkillPicker({ skills, value, onChange, groups }: Props) {
+  const groupFilter = groups ? new Set(groups) : null;
+  const grouped = SKILL_GROUP_META.filter(
+    (g) => !groupFilter || groupFilter.has(g.id),
+  )
+    .map((g) => ({
+      ...g,
+      // The picker uses the verbose label in its group headers.
+      label: g.longLabel,
+      items: skills
+        .filter((s) => s.skill_group === g.id)
+        .sort((a, b) => a.display_order - b.display_order),
+    }))
+    .filter((g) => g.items.length > 0);
 
   // 3-state cycle: undefined → 0.5 → 1.0 → undefined
   function cycle(skillId: string) {

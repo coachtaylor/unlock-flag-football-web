@@ -39,10 +39,12 @@ import type { SidebarWorkspace } from "@/lib/dashboard/sidebar-workspaces";
 import SkillPicker, {
   type SkillPickerValue,
 } from "@/components/uff-web/drills/SkillPicker";
+import { allowedSkillGroupsForPhases } from "@/lib/drills/skill-groups";
 import type {
   DrillSkillLink,
   DrillSkillWeight,
   Skill,
+  SkillGroup,
 } from "@/lib/types/skills";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -155,17 +157,27 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     () => categories.filter((c) => c.type === "phase"),
     [categories],
   );
-  const skillCats = useMemo(
-    () => categories.filter((c) => c.type === "skill"),
-    [categories],
-  );
+  // skillId → skill_group, for pruning out-of-scope skills on phase change.
+  const skillGroupById = useMemo(() => {
+    const m = new Map<string, SkillGroup>();
+    for (const s of skills) m.set(s.id, s.skill_group);
+    return m;
+  }, [skills]);
 
   const [name, setName] = useState(initial?.drillName ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [sourceUrl, setSourceUrl] = useState(initial?.sourceUrl ?? "");
-  const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(
-    new Set(initial?.categoryIds ?? []),
-  );
+  const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(() => {
+    // Only phase categories are managed now — the Skill category axis was
+    // retired in favor of the skill taxonomy. Strip any legacy skill-cat
+    // links off an edited drill; they drop on the next save (Phase kept).
+    const phaseIds = new Set(
+      categories.filter((c) => c.type === "phase").map((c) => c.id),
+    );
+    return new Set(
+      (initial?.categoryIds ?? []).filter((id) => phaseIds.has(id)),
+    );
+  });
   const [pickedSkills, setPickedSkills] = useState<SkillPickerValue>(
     () => {
       const m = new Map<string, DrillSkillWeight>();
@@ -230,12 +242,30 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const toggleCat = (id: string) =>
-    setSelectedCatIds((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
+  const toggleCat = (id: string) => {
+    const n = new Set(selectedCatIds);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setSelectedCatIds(n);
+    // Prune tagged skills whose group the new phase set no longer offers, so
+    // an Offense drill can't keep Defense skills after a phase switch.
+    const allowed = new Set(
+      allowedSkillGroupsForPhases(
+        categories.filter((c) => n.has(c.id)).map((c) => c.slug),
+      ),
+    );
+    setPickedSkills((sw) => {
+      let changed = false;
+      const m = new Map(sw);
+      for (const sid of Array.from(m.keys())) {
+        const g = skillGroupById.get(sid);
+        if (!g || !allowed.has(g)) {
+          m.delete(sid);
+          changed = true;
+        }
+      }
+      return changed ? m : sw;
     });
+  };
   const toggleBenchType = (id: BenchKind) =>
     setBenchTypes((prev) => {
       const n = new Set(prev);
@@ -292,6 +322,11 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     () => pickPhaseCat(selectedCatList.map((c) => c.slug)),
     [selectedCatList],
   );
+  // Skill groups the picker may offer, derived from the chosen phase(s).
+  const allowedGroups = useMemo(
+    () => allowedSkillGroupsForPhases(selectedCatList.map((c) => c.slug)),
+    [selectedCatList],
+  );
 
   const nameReady = name.trim().length > 0;
   const catsReady = selectedCatIds.size > 0;
@@ -307,7 +342,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       return;
     }
     if (!catsReady) {
-      setError("Pick at least one category.");
+      setError("Pick at least one phase.");
       return;
     }
     if (usesBench && benchTypes.size === 0) {
@@ -452,13 +487,19 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       setSubmitting(false);
       return;
     }
-    if (pickedSkills.size > 0) {
-      const rows = Array.from(pickedSkills.entries()).map(
-        ([skill_id, weight]) => ({ drill_id: drillId, skill_id, weight }),
-      );
+    // Persist only skills whose group the chosen phase actually offers — the
+    // guided-flow invariant (an Offense drill can't store Defense skills).
+    const allowedSet = new Set(allowedGroups);
+    const skillRows = Array.from(pickedSkills.entries())
+      .filter(([skill_id]) => {
+        const g = skillGroupById.get(skill_id);
+        return g ? allowedSet.has(g) : false;
+      })
+      .map(([skill_id, weight]) => ({ drill_id: drillId, skill_id, weight }));
+    if (skillRows.length > 0) {
       const { error: skillsInsErr } = await supabase
         .from("drill_skills")
-        .insert(rows);
+        .insert(skillRows);
       if (skillsInsErr) {
         setError(skillsInsErr.message);
         setSubmitting(false);
@@ -606,18 +647,12 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
 
               <Section
                 num="02"
-                label="Categories"
-                hint="Tag a phase and one or more skills. The phase you pick anchors the drill's visual identity."
+                label="Phase"
+                hint="When this drill runs in practice. The phase anchors the drill's visual identity and sets which skill groups you can tag below."
               >
                 <CatGroup
-                  label="Phase"
+                  label=""
                   cats={phaseCats}
-                  selected={selectedCatIds}
-                  onToggle={toggleCat}
-                />
-                <CatGroup
-                  label="Skill"
-                  cats={skillCats}
                   selected={selectedCatIds}
                   onToggle={toggleCat}
                 />
@@ -628,11 +663,29 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                 label="Skill tags"
                 hint="Which player skills does this drill develop? These power the team skill profile, the player dashboard, and recommended-drill suggestions. Pick at least one primary."
               >
-                <SkillPicker
-                  skills={skills}
-                  value={pickedSkills}
-                  onChange={setPickedSkills}
-                />
+                {allowedGroups.length === 0 ? (
+                  <div
+                    style={{
+                      border: "1px dashed var(--uff-line)",
+                      borderRadius: 8,
+                      padding: "16px 14px",
+                      textAlign: "center",
+                      color: "var(--uff-text-mute)",
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Pick a phase above first — the skills you can tag depend on
+                    where the drill runs.
+                  </div>
+                ) : (
+                  <SkillPicker
+                    skills={skills}
+                    value={pickedSkills}
+                    onChange={setPickedSkills}
+                    groups={allowedGroups}
+                  />
+                )}
               </Section>
 
               <Section
@@ -1039,17 +1092,19 @@ function CatGroup({
 }) {
   return (
     <div>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: ".18em",
-          color: "var(--uff-text)",
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </div>
+      {label ? (
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: ".18em",
+            color: "var(--uff-text)",
+            marginBottom: 8,
+          }}
+        >
+          {label}
+        </div>
+      ) : null}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {cats.map((c) => {
           const def = WEB_CAT_DEFS[c.slug];

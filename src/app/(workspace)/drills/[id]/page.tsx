@@ -839,9 +839,14 @@ function Hero({
               flexWrap: "wrap",
             }}
           >
-            {cats.map((c) => (
-              <CatPillWeb key={c} slug={c} />
-            ))}
+            {/* Phase pills only — the skill-category axis was retired in
+                favor of the skill taxonomy (rendered in the "Skill tags"
+                section below). */}
+            {cats
+              .filter((c) => WEB_CAT_DEFS[c]?.group === "phase")
+              .map((c) => (
+                <CatPillWeb key={c} slug={c} />
+              ))}
             <StatusPill status={status} />
             {pinned && (
               <span
