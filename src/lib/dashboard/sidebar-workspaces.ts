@@ -28,10 +28,37 @@ export type SidebarWorkspace = {
   isCurrentLeague?: boolean; // parent league of the current team
 };
 
-export async function loadSidebarWorkspaces(
+// Team-context entry point: surfaces the current team's parent league
+// first, then other workspaces. Keeps the original two-arg signature so
+// the existing TeamSidebar caller sites stay untouched.
+export function loadSidebarWorkspaces(
   currentTeamId: string,
   currentLeagueId: string | null,
 ): Promise<SidebarWorkspace[]> {
+  return buildSidebarWorkspaces({ currentTeamId, currentLeagueId });
+}
+
+// League-context entry point: the current league IS the page, so it's
+// excluded from the list (and its child teams are hidden — you reach
+// them through the league overview). Everything else the user can access
+// shows up so the league sidebar can navigate sideways like the team one.
+export function loadSidebarWorkspacesForLeague(
+  currentLeagueId: string,
+): Promise<SidebarWorkspace[]> {
+  return buildSidebarWorkspaces({ currentTeamId: null, currentLeagueId });
+}
+
+type WorkspaceCtx = {
+  currentTeamId: string | null;
+  currentLeagueId: string | null;
+};
+
+async function buildSidebarWorkspaces(
+  ctx: WorkspaceCtx,
+): Promise<SidebarWorkspace[]> {
+  const { currentTeamId, currentLeagueId } = ctx;
+  const isTeamContext = currentTeamId !== null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,7 +75,10 @@ export async function loadSidebarWorkspaces(
       .from("team_members")
       .select("team_id, teams!inner(id, team_name, team_color, league_id)")
       .eq("user_id", user.id),
-    currentLeagueId
+    // Only the team context needs to resolve the parent league by id (to
+    // surface it first). In the league context the current league is
+    // excluded, so there's nothing to fetch.
+    currentLeagueId && isTeamContext
       ? supabase
           .from("leagues")
           .select("id, league_name, league_color")
@@ -72,20 +102,27 @@ export async function loadSidebarWorkspaces(
   const seenLeagueIds = new Set<string>();
   const out: SidebarWorkspace[] = [];
 
-  // 1. Current team's parent league always appears first, even if the
-  //    user isn't a league_admin (they may just be a team member). We
-  //    fetch it separately so the link works regardless of role.
-  const parentLeague =
-    (currentLeagueRow as { data?: EmbeddedLeague | null })?.data ?? null;
-  if (parentLeague) {
-    seenLeagueIds.add(parentLeague.id);
-    out.push({
-      id: parentLeague.id,
-      kind: "league",
-      name: parentLeague.league_name,
-      color: teamColorHex(parentLeague.league_color),
-      isCurrentLeague: true,
-    });
+  if (isTeamContext) {
+    // Team context — the current team's parent league always appears
+    // first, even if the user isn't a league_admin (they may just be a
+    // team member). We fetch it separately so the link works regardless
+    // of role.
+    const parentLeague =
+      (currentLeagueRow as { data?: EmbeddedLeague | null })?.data ?? null;
+    if (parentLeague) {
+      seenLeagueIds.add(parentLeague.id);
+      out.push({
+        id: parentLeague.id,
+        kind: "league",
+        name: parentLeague.league_name,
+        color: teamColorHex(parentLeague.league_color),
+        isCurrentLeague: true,
+      });
+    }
+  } else if (currentLeagueId) {
+    // League context — the current league is the page itself, so exclude
+    // it (and, via the de-dup below, its child teams).
+    seenLeagueIds.add(currentLeagueId);
   }
 
   // 2. Other leagues the user admins.
@@ -106,7 +143,7 @@ export async function loadSidebarWorkspaces(
   // 3. Other teams the user is on (skip current team + teams inside any
   //    league we've already surfaced so the same workspace isn't shown
   //    twice).
-  const seenTeamIds = new Set<string>([currentTeamId]);
+  const seenTeamIds = new Set<string>(currentTeamId ? [currentTeamId] : []);
   for (const row of memberRows.data ?? []) {
     const raw = row.teams as EmbeddedTeam | EmbeddedTeam[] | null;
     const t = Array.isArray(raw) ? raw[0] ?? null : raw;

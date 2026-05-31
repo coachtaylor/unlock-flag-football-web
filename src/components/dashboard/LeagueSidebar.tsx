@@ -6,8 +6,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DashIcon, Icon } from "@/components/uff/icons";
+import { DashIcon } from "@/components/uff/icons";
 import SidebarCollapseToggle from "./SidebarCollapseToggle";
+import type { SidebarWorkspace } from "@/lib/dashboard/sidebar-workspaces";
 
 export type LeagueContext = {
   id: string;
@@ -21,12 +22,17 @@ type Props = {
   league: LeagueContext;
   user: { firstName: string; lastName: string };
   accent?: string;
+  // Other workspaces the user can access (sibling leagues + standalone
+  // teams). Fetched server-side via loadSidebarWorkspacesForLeague so the
+  // league sidebar can navigate sideways the same way the team one does.
+  workspaces?: SidebarWorkspace[];
 };
 
 export default function LeagueSidebar({
   league,
   user,
   accent = "var(--uff-orange)",
+  workspaces = [],
 }: Props) {
   const pathname = usePathname();
   const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
@@ -128,7 +134,9 @@ export default function LeagueSidebar({
         const active =
           it.id === "settings"
             ? pathname.startsWith("/settings")
-            : pathname === it.href;
+            : it.href === overviewHref
+              ? it.id === "overview" && pathname === overviewHref
+              : pathname === it.href;
         return (
           <Link
             key={it.id}
@@ -143,17 +151,73 @@ export default function LeagueSidebar({
         );
       })}
 
-      <div className="spacer" />
-
+      <div className="navlbl">Workspaces</div>
+      {workspaces.map((w) => {
+        const href =
+          w.kind === "league"
+            ? `/dashboard/league/${w.id}`
+            : `/dashboard/team/${w.id}`;
+        return (
+          <Link
+            key={`${w.kind}-${w.id}`}
+            href={href}
+            className="navitem"
+            title={`${w.name} (${w.kind})`}
+            style={{ paddingLeft: 10 }}
+          >
+            <div
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                background: w.color,
+                color: "#1a0f08",
+                display: "grid",
+                placeItems: "center",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "-0.04em",
+                flexShrink: 0,
+              }}
+            >
+              {w.name[0]}
+            </div>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {w.name}
+            </span>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: ".12em",
+                color: "var(--uff-text-mute)",
+              }}
+            >
+              {w.kind === "league" ? "LEAGUE" : "TEAM"}
+            </span>
+          </Link>
+        );
+      })}
       <Link
         href="/dashboard"
         className="navitem"
         title="All workspaces"
-        style={{ fontSize: 12, color: "var(--uff-text-mute)" }}
+        style={{ paddingLeft: 10, fontSize: 12, color: "var(--uff-text-mute)" }}
       >
-        <Icon.arrowLeft size={13} />
+        <DashIcon.grid size={18} />
         <span>All workspaces</span>
       </Link>
+
+      <div className="spacer" />
 
       <div
         className="user-card"
