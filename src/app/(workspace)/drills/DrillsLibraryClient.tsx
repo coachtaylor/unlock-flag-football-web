@@ -14,7 +14,6 @@ import {
   BenchIconRow,
   CatPillWeb,
   PHASE_CATS,
-  SKILL_CATS,
   Spark,
   StatusPill,
   TrendChip,
@@ -23,6 +22,8 @@ import {
   type CatSlug,
   type DrillStatus,
 } from "@/components/uff-web/drills/atoms";
+import { SKILL_GROUP_META, skillGroupMeta } from "@/lib/drills/skill-groups";
+import type { SkillGroup } from "@/lib/types/skills";
 
 // Phase derivation — separate from pickPhaseCat (which falls back to any
 // cat) because the row treatment specifically wants to call out missing
@@ -52,6 +53,9 @@ export type DrillRow = {
   name: string;
   status: DrillStatus;
   cats: CatSlug[];
+  // Skill groups the drill develops (from the skill taxonomy), in canonical
+  // radar order. Drives the skill-group filter — see DrillsFilterRail.
+  skillGroups: SkillGroup[];
   types: BenchKind[];
   primaryType: BenchKind | null;
   duration: number | null;
@@ -89,7 +93,12 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
     [drills],
   );
   const [search, setSearch] = useState("");
+  // Phase filter (structural axis) and skill-group filter (taxonomy axis) are
+  // independent — a drill matches when it satisfies both active sets.
   const [activeCats, setActiveCats] = useState<Set<CatSlug>>(new Set());
+  const [activeSkillGroups, setActiveSkillGroups] = useState<Set<SkillGroup>>(
+    new Set()
+  );
   const [activeTypes, setActiveTypes] = useState<Set<BenchKind>>(new Set());
   const [statuses, setStatuses] = useState<Set<DrillStatus>>(
     new Set(DEFAULT_STATUSES)
@@ -118,6 +127,8 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
     if (q) xs = xs.filter((d) => d.name.toLowerCase().includes(q));
     if (activeCats.size > 0)
       xs = xs.filter((d) => d.cats.some((c) => activeCats.has(c)));
+    if (activeSkillGroups.size > 0)
+      xs = xs.filter((d) => d.skillGroups.some((g) => activeSkillGroups.has(g)));
     if (activeTypes.size > 0)
       xs = xs.filter((d) => d.types.some((t) => activeTypes.has(t)));
     if (statuses.size > 0) xs = xs.filter((d) => statuses.has(d.status));
@@ -155,7 +166,16 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
       }
     });
     return xs;
-  }, [drills, search, activeCats, activeTypes, statuses, sortKey, sortDir]);
+  }, [
+    drills,
+    search,
+    activeCats,
+    activeSkillGroups,
+    activeTypes,
+    statuses,
+    sortKey,
+    sortDir,
+  ]);
 
   function toggle<T>(set: Set<T>, val: T, setter: (s: Set<T>) => void) {
     const next = new Set(set);
@@ -184,6 +204,10 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
         <DrillsFilterRail
           activeCats={activeCats}
           onToggleCat={(v) => toggle(activeCats, v, setActiveCats)}
+          activeSkillGroups={activeSkillGroups}
+          onToggleSkillGroup={(v) =>
+            toggle(activeSkillGroups, v, setActiveSkillGroups)
+          }
           activeTypes={activeTypes}
           onToggleType={(v) => toggle(activeTypes, v, setActiveTypes)}
           statuses={statuses}
@@ -191,6 +215,7 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
           drills={drills}
           onClear={() => {
             setActiveCats(new Set());
+            setActiveSkillGroups(new Set());
             setActiveTypes(new Set());
             setStatuses(new Set(DEFAULT_STATUSES));
           }}
@@ -317,6 +342,8 @@ function DrillsToolbar({
 function DrillsFilterRail({
   activeCats,
   onToggleCat,
+  activeSkillGroups,
+  onToggleSkillGroup,
   activeTypes,
   onToggleType,
   statuses,
@@ -326,6 +353,8 @@ function DrillsFilterRail({
 }: {
   activeCats: Set<CatSlug>;
   onToggleCat: (v: CatSlug) => void;
+  activeSkillGroups: Set<SkillGroup>;
+  onToggleSkillGroup: (v: SkillGroup) => void;
   activeTypes: Set<BenchKind>;
   onToggleType: (v: BenchKind) => void;
   statuses: Set<DrillStatus>;
@@ -338,6 +367,16 @@ function DrillsFilterRail({
     drills.forEach((d) => {
       d.cats.forEach((c) => {
         out[c] = (out[c] ?? 0) + 1;
+      });
+    });
+    return out;
+  }, [drills]);
+
+  const countBySkillGroup = useMemo(() => {
+    const out: Partial<Record<SkillGroup, number>> = {};
+    drills.forEach((d) => {
+      d.skillGroups.forEach((g) => {
+        out[g] = (out[g] ?? 0) + 1;
       });
     });
     return out;
@@ -393,7 +432,7 @@ function DrillsFilterRail({
         </button>
       </div>
 
-      <FilterGroup label="Category · Phase">
+      <FilterGroup label="Phase">
         {PHASE_CATS.map((c) => (
           <FilterRow
             key={c}
@@ -406,15 +445,15 @@ function DrillsFilterRail({
         ))}
       </FilterGroup>
 
-      <FilterGroup label="Category · Skill">
-        {SKILL_CATS.map((c) => (
+      <FilterGroup label="Skill group">
+        {SKILL_GROUP_META.map((g) => (
           <FilterRow
-            key={c}
-            on={activeCats.has(c)}
-            onClick={() => onToggleCat(c)}
-            label={WEB_CAT_DEFS[c].label}
-            swatch={WEB_CAT_DEFS[c].color}
-            count={countByCat[c] ?? 0}
+            key={g.id}
+            on={activeSkillGroups.has(g.id)}
+            onClick={() => onToggleSkillGroup(g.id)}
+            label={g.label}
+            swatch={g.color}
+            count={countBySkillGroup[g.id] ?? 0}
           />
         ))}
       </FilterGroup>
@@ -745,12 +784,6 @@ function SortHead({
   );
 }
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -826,6 +859,42 @@ function TeamChip({
         }}
       />
       {team.name}
+    </span>
+  );
+}
+
+// Compact skill-group chip — dot + short group label, colored by the
+// taxonomy palette. Mirrors the skill-group treatment on the drill detail
+// page so the list and detail views read as the same product.
+function SkillGroupChip({ group }: { group: SkillGroup }) {
+  const meta = skillGroupMeta(group);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "1px 7px 1px 5px",
+        borderRadius: 4,
+        background: `color-mix(in srgb, ${meta.color} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${meta.color} 38%, transparent)`,
+        fontSize: 10.5,
+        fontWeight: 500,
+        color: "var(--uff-text-dim)",
+        lineHeight: 1.4,
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 2,
+          background: meta.color,
+          flexShrink: 0,
+        }}
+      />
+      {meta.label}
     </span>
   );
 }
@@ -937,34 +1006,38 @@ function DrillTableRow({
             flexDirection: "column",
             paddingTop: 2,
             paddingLeft: 16,
-            gap: 4,
+            gap: 5,
             minWidth: 0,
           }}
         >
-          {chunk(d.cats.slice(0, 4), 2).map((pair, i) => (
-            <div
-              key={i}
-              style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
-            >
-              {pair.map((c) => (
+          {/* Phase pill(s) — the structural axis. */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {d.cats
+              .filter((c) => WEB_CAT_DEFS[c]?.group === "phase")
+              .map((c) => (
                 <CatPillWeb key={c} slug={c} mini />
               ))}
-              {/* +N indicator tacked onto the last visible row */}
-              {i === Math.ceil(Math.min(d.cats.length, 4) / 2) - 1 &&
-                d.cats.length > 4 && (
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 10,
-                      color: "var(--uff-text-mute)",
-                      alignSelf: "center",
-                    }}
-                  >
-                    +{d.cats.length - 4}
-                  </span>
-                )}
+          </div>
+          {/* Skill groups — the taxonomy axis (capped at 3 + overflow). */}
+          {d.skillGroups.length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {d.skillGroups.slice(0, 3).map((g) => (
+                <SkillGroupChip key={g} group={g} />
+              ))}
+              {d.skillGroups.length > 3 && (
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    color: "var(--uff-text-mute)",
+                    alignSelf: "center",
+                  }}
+                >
+                  +{d.skillGroups.length - 3}
+                </span>
+              )}
             </div>
-          ))}
+          )}
         </div>
 
         <div
@@ -1123,7 +1196,8 @@ function DrillsCardList({
             </div>
             <StatusPill status={d.status} />
           </div>
-          {d.cats.length > 0 && (
+          {(d.cats.some((c) => WEB_CAT_DEFS[c]?.group === "phase") ||
+            d.skillGroups.length > 0) && (
             <div
               style={{
                 display: "flex",
@@ -1132,8 +1206,13 @@ function DrillsCardList({
                 marginBottom: 8,
               }}
             >
-              {d.cats.map((c) => (
-                <CatPillWeb key={c} slug={c} mini />
+              {d.cats
+                .filter((c) => WEB_CAT_DEFS[c]?.group === "phase")
+                .map((c) => (
+                  <CatPillWeb key={c} slug={c} mini />
+                ))}
+              {d.skillGroups.map((g) => (
+                <SkillGroupChip key={g} group={g} />
               ))}
             </div>
           )}

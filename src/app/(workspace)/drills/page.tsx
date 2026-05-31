@@ -20,6 +20,9 @@ import {
   type CatSlug,
   type DrillStatus,
 } from "@/components/uff-web/drills/atoms";
+import { loadDrillSkills } from "@/lib/drills/skills-data";
+import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
+import type { SkillGroup } from "@/lib/types/skills";
 import DrillsLibraryClient, {
   type DrillRow,
 } from "./DrillsLibraryClient";
@@ -94,34 +97,40 @@ export default async function DrillsPage() {
   ]);
 
   const drillIds = (drills ?? []).map((d) => d.id as string);
-  const [{ data: drillCatLinks }, { data: results }] = drillIds.length
-    ? await Promise.all([
-        supabase
-          .from("team_drill_categories")
-          .select("drill_id, category_id")
-          .in("drill_id", drillIds),
-        supabase
-          .from("benchmark_results")
-          .select(
-            "drill_id, benchmark_type, time_seconds, rating, made_count, attempts_count, created_at"
-          )
-          .in("drill_id", drillIds)
-          .order("created_at", { ascending: true }),
-      ])
-    : [
-        { data: [] as { drill_id: string; category_id: string }[] },
-        {
-          data: [] as Array<{
-            drill_id: string;
-            benchmark_type: string | null;
-            time_seconds: number | null;
-            rating: number | null;
-            made_count: number | null;
-            attempts_count: number | null;
-            created_at: string;
-          }>,
-        },
-      ];
+  const [{ data: drillCatLinks }, { data: results }, skillsByDrill] =
+    drillIds.length
+      ? await Promise.all([
+          supabase
+            .from("team_drill_categories")
+            .select("drill_id, category_id")
+            .in("drill_id", drillIds),
+          supabase
+            .from("benchmark_results")
+            .select(
+              "drill_id, benchmark_type, time_seconds, rating, made_count, attempts_count, created_at"
+            )
+            .in("drill_id", drillIds)
+            .order("created_at", { ascending: true }),
+          // Skill taxonomy links per drill — powers the skill-group filter
+          // (replacing the retired skill-category chips). Returns
+          // Record<drillId, TaggedSkill[]> with skill_group already joined.
+          loadDrillSkills(supabase, drillIds),
+        ])
+      : [
+          { data: [] as { drill_id: string; category_id: string }[] },
+          {
+            data: [] as Array<{
+              drill_id: string;
+              benchmark_type: string | null;
+              time_seconds: number | null;
+              rating: number | null;
+              made_count: number | null;
+              attempts_count: number | null;
+              created_at: string;
+            }>,
+          },
+          {} as Record<string, never[]>,
+        ];
 
   const categoryById = new Map<string, { slug: CatSlug; name: string }>();
   (categories ?? []).forEach((c) => {
@@ -178,6 +187,13 @@ export default async function DrillsPage() {
       .map((id) => categoryById.get(id)?.slug)
       .filter((s): s is CatSlug => !!s);
 
+    // Skill groups the drill develops, derived from its taxonomy links and
+    // ordered canonically (radar order). Drives the skill-group filter.
+    const tagged = skillsByDrill[drillId] ?? [];
+    const skillGroups: SkillGroup[] = SKILL_GROUP_META.filter((m) =>
+      tagged.some((t) => t.skill_group === m.id)
+    ).map((m) => m.id);
+
     // Coalesce legacy single benchmark_type into the new array shape. The
     // form is being upgraded in a follow-up; the read path bridges either.
     const rawTypes = (d.benchmark_types as string[] | null) ?? [];
@@ -211,6 +227,7 @@ export default async function DrillsPage() {
       name: d.drill_name as string,
       status: d.status as DrillStatus,
       cats,
+      skillGroups,
       types,
       primaryType,
       duration: (d.default_duration_min as number | null) ?? null,
