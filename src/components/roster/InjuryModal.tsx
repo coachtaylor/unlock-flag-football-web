@@ -17,7 +17,8 @@
 //     INJURED status pill on the roster list).
 //   - Controlled: the parent owns `open` + `onOpenChange` and renders
 //     no inline trigger. Used by RosterListClient so one modal
-//     instance serves the whole list, opened with a per-row kebab.
+//     instance serves the whole list, opened by clicking a row's
+//     status pill.
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -239,8 +240,9 @@ export default function InjuryModal({
                   lineHeight: 1.5,
                 }}
               >
-                Clears the injury flag and the saved note. The player
-                will go back to a normal active state across the roster.
+                Clears the injury flag and returns the player to a normal
+                active state across the roster. The saved note is kept for
+                your records.
               </p>
             )}
 

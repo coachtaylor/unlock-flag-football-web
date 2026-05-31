@@ -13,8 +13,8 @@ export type ToggleInjuryPayload = {
   teamId: string;
   isInjured: boolean;
   // Only used when isInjured === true. Empty / whitespace-only strings
-  // collapse to null. When isInjured === false the note is force-cleared
-  // — recovering from an injury shouldn't leave stale notes lying around.
+  // collapse to null. When isInjured === false the note is left untouched
+  // — recovering from an injury keeps the saved note for the record.
   note: string | null;
 };
 
@@ -58,11 +58,14 @@ export async function toggleInjury(
   }
   if (!canWrite) return { ok: false, error: "Not authorised" };
 
-  const trimmed = payload.note?.trim() || null;
-  const update = {
+  // Marking injured updates the note; marking healthy flips only the flag
+  // and preserves whatever note was saved (notes are never auto-deleted).
+  const update: { is_injured: boolean; injury_note?: string | null } = {
     is_injured: payload.isInjured,
-    injury_note: payload.isInjured ? trimmed : null,
   };
+  if (payload.isInjured) {
+    update.injury_note = payload.note?.trim() || null;
+  }
 
   const { error: updErr } = await supabase
     .from("team_players")

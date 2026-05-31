@@ -51,9 +51,8 @@ export default function RosterListClient({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [positionFilter, setPositionFilter] = useState<string | null>(null);
-  // One InjuryModal instance for the whole list. Each row's kebab sets
-  // this to the player it should target, which controls modal visibility
-  // via the modal's `open` prop. Closing nulls it out.
+  // Clicking a row's status pill targets that player here, which opens the
+  // shared InjuryModal (one instance for the whole list). Closing nulls it.
   const [injuryTarget, setInjuryTarget] = useState<RosterPlayer | null>(null);
 
   const counts = useMemo(
@@ -255,7 +254,6 @@ export default function RosterListClient({
             <span>Status</span>
             <span>Last benchmark</span>
             <span />
-            <span />
           </div>
 
           {filtered.map((p, i) => (
@@ -264,7 +262,7 @@ export default function RosterListClient({
               p={p}
               href={`${rosterBasePath}/${p.id}`}
               stripe={i % 2 === 1}
-              onInjuryAction={() => setInjuryTarget(p)}
+              onRequestInjury={() => setInjuryTarget(p)}
             />
           ))}
         </div>
@@ -287,31 +285,10 @@ export default function RosterListClient({
       <style>{`
         .roster-row-grid {
           display: grid;
-          grid-template-columns: 44px 1.6fr 1.4fr 60px 110px 1.8fr 36px 110px;
+          grid-template-columns: 44px 1.6fr 1.4fr 60px 110px 1.8fr 44px;
           align-items: center;
           gap: 14px;
           padding: 12px 18px;
-        }
-        .roster-row-action {
-          width: 28px;
-          height: 28px;
-          border-radius: 6px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: transparent;
-          border: 1px solid transparent;
-          color: var(--uff-text-mute);
-          cursor: pointer;
-          transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-        }
-        .roster-row-action:hover {
-          background: rgba(255,255,255,0.06);
-          color: var(--uff-text);
-          border-color: var(--uff-line);
-        }
-        .roster-row-action.is-injured {
-          color: var(--uff-red, #ff4d4d);
         }
         .roster-head {
           padding: 10px 18px;
@@ -347,13 +324,22 @@ function RosterRow({
   p,
   href,
   stripe,
-  onInjuryAction,
+  onRequestInjury,
 }: {
   p: RosterPlayer;
   href: string;
   stripe: boolean;
-  onInjuryAction: () => void;
+  onRequestInjury: () => void;
 }) {
+  function handleToggleInjury(e: React.MouseEvent) {
+    // Row is wrapped in a Link — without these guards the click would
+    // also navigate to the player detail page. Opens the injury modal so
+    // the user can add/keep a note rather than flipping the flag blindly.
+    e.preventDefault();
+    e.stopPropagation();
+    onRequestInjury();
+  }
+
   return (
     <Link href={href} className={`roster-row roster-row-grid ${stripe ? "stripe" : ""}`}>
       <Avatar player={p} size={32} fontSize={11} />
@@ -398,7 +384,11 @@ function RosterRow({
         {p.jerseyNumber ? `#${p.jerseyNumber}` : "—"}
       </span>
 
-      <StatusPill status={p.status} injured={p.isInjured} />
+      <StatusPill
+        status={p.status}
+        injured={p.isInjured}
+        onToggle={handleToggleInjury}
+      />
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         {p.lastBench ? (
@@ -437,26 +427,6 @@ function RosterRow({
             No benchmarks yet
           </span>
         )}
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "center" }}>
-        <button
-          type="button"
-          className={`roster-row-action ${p.isInjured ? "is-injured" : ""}`}
-          aria-label={
-            p.isInjured ? `Mark ${p.name} healthy` : `Mark ${p.name} injured`
-          }
-          title={p.isInjured ? "Mark healthy" : "Mark injured"}
-          onClick={(e) => {
-            // Row is wrapped in a Link — without these guards the click
-            // would also navigate to the player detail page.
-            e.preventDefault();
-            e.stopPropagation();
-            onInjuryAction();
-          }}
-        >
-          <Icon.more size={14} />
-        </button>
       </div>
 
       <div
@@ -562,10 +532,15 @@ function StatusPill({
   status,
   injured,
   compact,
+  onToggle,
 }: {
   status: "active" | "inactive";
   injured: boolean;
   compact?: boolean;
+  // When provided, the pill becomes a button that opens the injury modal:
+  // a click on "Active"/"Inactive" starts marking the player injured, a
+  // click on "Injured" starts marking them healthy again.
+  onToggle?: (e: React.MouseEvent) => void;
 }) {
   const isActive = status === "active";
   const label = injured ? "Injured" : isActive ? "Active" : "Inactive";
@@ -584,23 +559,40 @@ function StatusPill({
     : isActive
       ? "1px solid rgba(194,255,61,0.30)"
       : "1px solid var(--uff-line-soft)";
+  const interactive = typeof onToggle === "function";
   return (
-    <span
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={!interactive}
+      title={injured ? "Mark healthy" : "Mark injured"}
+      aria-label={injured ? "Mark healthy" : "Mark injured"}
+      onMouseEnter={(e) => {
+        if (interactive) e.currentTarget.style.filter = "brightness(1.3)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.filter = "none";
+      }}
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
+        fontFamily: "inherit",
         fontSize: compact ? 10 : 10.5,
         fontWeight: 700,
         letterSpacing: "0.10em",
         textTransform: "uppercase",
-        padding: compact ? "2px 7px" : "3px 9px",
+        lineHeight: 1,
+        margin: 0,
+        padding: compact ? "4px 8px" : "5px 10px",
         borderRadius: 999,
         background: bg,
         border,
         color,
         whiteSpace: "nowrap",
         flexShrink: 0,
+        cursor: interactive ? "pointer" : "default",
+        transition: "filter 120ms ease",
       }}
     >
       <span
@@ -612,7 +604,7 @@ function StatusPill({
         }}
       />
       {label}
-    </span>
+    </button>
   );
 }
 
