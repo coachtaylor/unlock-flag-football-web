@@ -20,6 +20,7 @@ import {
 import { BlockReadCard, BreakReadRow } from "@/components/practice/BlockReadCard";
 import ManageAttendanceCard, { type RsvpPlayer } from "@/components/practice/ManageAttendanceCard";
 import PastDueBanner, { isPlanPastDue } from "@/components/practice/PastDueBanner";
+import PlanLifecycleActions from "@/components/practice/PlanLifecycleActions";
 import { blockColor } from "@/lib/practice/block-colors";
 import { duplicatePlanAndRedirect } from "@/lib/practice/actions";
 
@@ -156,6 +157,11 @@ export default async function PracticeDetailPage({
               <Link href={`/practice/${plan.id}/edit`} className="wbtn primary">
                 Edit plan
               </Link>
+              <PlanLifecycleActions
+                planId={plan.id}
+                status={plan.status}
+                archived={plan.archived}
+              />
             </>
           }
         />

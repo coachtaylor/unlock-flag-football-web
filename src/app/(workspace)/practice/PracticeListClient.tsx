@@ -77,10 +77,16 @@ export default function PracticeListClient({
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
-  const completed = plans
+  // Archived (soft-deleted) plans get their own bottom section and are
+  // excluded from every active group.
+  const activePlans = plans.filter((p) => !p.archived);
+  const archived = plans
+    .filter((p) => p.archived)
+    .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
+  const completed = activePlans
     .filter((p) => p.status === "completed")
     .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
-  const upcoming = plans
+  const upcoming = activePlans
     .filter((p) => p.status === "scheduled" || p.status === "live" || p.status === "draft" || p.practice_date >= todayIso)
     .filter((p) => p.status !== "completed")
     .sort((a, b) => (a.practice_date > b.practice_date ? 1 : -1));
@@ -172,6 +178,24 @@ export default function PracticeListClient({
             <SectionLabel label="Recent" count={completed.length} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {completed.map((p) => (
+                <PlanSummaryCard
+                  key={p.id}
+                  plan={p}
+                  completed
+                  avatars={rosterByPlan[p.id] ?? []}
+                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                  rosterSize={rosterSize}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {archived.length > 0 && (
+          <div>
+            <SectionLabel label="Archived" count={archived.length} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {archived.map((p) => (
                 <PlanSummaryCard
                   key={p.id}
                   plan={p}

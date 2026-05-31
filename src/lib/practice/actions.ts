@@ -184,6 +184,30 @@ export async function deletePlan(planId: string): Promise<void> {
   revalidatePath("/practice");
 }
 
+// Archive = soft delete. Live/completed practices can't be hard-deleted, only
+// archived (they keep their real status and drop out of the active lists).
+export async function archivePlan(planId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("practice_plans")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", planId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/practice");
+  revalidatePath(`/practice/${planId}`);
+}
+
+export async function unarchivePlan(planId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("practice_plans")
+    .update({ archived_at: null })
+    .eq("id", planId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/practice");
+  revalidatePath(`/practice/${planId}`);
+}
+
 export async function saveAttendance(
   planId: string,
   rows: { player_id: string; rsvp: boolean | null }[],

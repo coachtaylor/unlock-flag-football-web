@@ -59,6 +59,7 @@ export type PracticePlan = {
   end_time: string | null;
   status: PlanStatus;
   notes: string | null;
+  archived: boolean;
   blocks: PlanBlock[];
   breaks: PlanBreak[];
   attendees: PlanAttendee[];
@@ -78,6 +79,7 @@ export type PlanSummary = {
   rsvp_in: number;
   blocks: { id: string; name: string; minutes: number }[];
   break_minutes: number;
+  archived: boolean;
 };
 
 // ── Plan derived helpers ─────────────────────────────────────────────────
@@ -202,13 +204,27 @@ export async function fetchPlanFull(
   supabase: SupabaseClient,
   planId: string,
 ): Promise<PracticePlan | null> {
-  const { data: plan } = await supabase
+  const planRes = await supabase
     .from("practice_plans")
     .select(
-      "id, team_id, title, practice_date, start_time, end_time, status, notes",
+      "id, team_id, title, practice_date, start_time, end_time, status, notes, archived_at",
     )
     .eq("id", planId)
     .maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let plan = planRes.data as Record<string, any> | null;
+  if (planRes.error) {
+    // archived_at may not exist yet (pre-migration 70) — retry without it.
+    const retry = await supabase
+      .from("practice_plans")
+      .select(
+        "id, team_id, title, practice_date, start_time, end_time, status, notes",
+      )
+      .eq("id", planId)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    plan = retry.data as Record<string, any> | null;
+  }
   if (!plan) return null;
 
   const [blocksRes, drillsRes, breaksRes, attendeesRes] = await Promise.all([
@@ -311,6 +327,7 @@ export async function fetchPlanFull(
     end_time: (plan.end_time as string | null) ?? null,
     status: ((plan.status as string) ?? "draft") as PlanStatus,
     notes: (plan.notes as string | null) ?? null,
+    archived: !!((plan as { archived_at?: string | null }).archived_at),
     blocks,
     breaks: (breaksRes.data ?? []).map((br) => ({
       id: br.id as string,
@@ -330,11 +347,23 @@ export async function fetchPlanSummaries(
   supabase: SupabaseClient,
   teamId: string,
 ): Promise<PlanSummary[]> {
-  const { data: plans } = await supabase
+  const plansRes = await supabase
     .from("practice_plans")
-    .select("id, team_id, title, practice_date, start_time, status")
+    .select("id, team_id, title, practice_date, start_time, status, archived_at")
     .eq("team_id", teamId)
     .order("practice_date", { ascending: false });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let plans = plansRes.data as Record<string, any>[] | null;
+  if (plansRes.error) {
+    // archived_at may not exist yet (pre-migration 70) — retry without it.
+    const retry = await supabase
+      .from("practice_plans")
+      .select("id, team_id, title, practice_date, start_time, status")
+      .eq("team_id", teamId)
+      .order("practice_date", { ascending: false });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    plans = retry.data as Record<string, any>[] | null;
+  }
   if (!plans || plans.length === 0) return [];
 
   const planIds = plans.map((p) => p.id as string);
@@ -432,6 +461,7 @@ export async function fetchPlanSummaries(
       rsvp_in: rsvpInByPlan.get(id) ?? 0,
       blocks,
       break_minutes: breakMin,
+      archived: !!((p as { archived_at?: string | null }).archived_at),
     };
   });
 }

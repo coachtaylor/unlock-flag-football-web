@@ -143,6 +143,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       end_time: endTime,
       status,
       notes: plan.notes,
+      archived: plan.archived,
       blocks: blocks.map((b) => ({ ...b, drills: b.drills })),
       breaks: breaks,
       attendees: Object.entries(attendees).map(([player_id, rsvp]) => ({
