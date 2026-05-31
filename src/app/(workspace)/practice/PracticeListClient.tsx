@@ -65,6 +65,15 @@ export default function PracticeListClient({
 }: ListProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Collapsed section keys (view-only state, not persisted).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleSection = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   if (plans.length === 0) {
     return (
@@ -119,36 +128,52 @@ export default function PracticeListClient({
 
         {next && (
           <div>
-            <SectionLabel label="Up next" right={<RelativeWhen iso={next.practice_date} />} />
-            <FeaturedPlanCard
-              plan={next}
-              avatars={rosterByPlan[next.id] ?? []}
-              breakdown={breakdownByPlan[next.id] ?? { qb: 0, off: 0, def: 0 }}
-              rosterSize={rosterSize}
-              isPending={isPending}
-              onDuplicate={() => {
-                const fd = new FormData();
-                fd.set("planId", next.id);
-                startTransition(() => duplicatePlanAndRedirect(fd));
-              }}
+            <SectionLabel
+              label="Up next"
+              right={<RelativeWhen iso={next.practice_date} />}
+              collapsible
+              collapsed={collapsed.has("upNext")}
+              onToggle={() => toggleSection("upNext")}
             />
+            {!collapsed.has("upNext") && (
+              <FeaturedPlanCard
+                plan={next}
+                avatars={rosterByPlan[next.id] ?? []}
+                breakdown={breakdownByPlan[next.id] ?? { qb: 0, off: 0, def: 0 }}
+                rosterSize={rosterSize}
+                isPending={isPending}
+                onDuplicate={() => {
+                  const fd = new FormData();
+                  fd.set("planId", next.id);
+                  startTransition(() => duplicatePlanAndRedirect(fd));
+                }}
+              />
+            )}
           </div>
         )}
 
         {thisWeek.length > 0 && (
           <div>
-            <SectionLabel label="This week" count={thisWeek.length} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {thisWeek.map((p) => (
-                <PlanSummaryCard
-                  key={p.id}
-                  plan={p}
-                  avatars={rosterByPlan[p.id] ?? []}
-                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                  rosterSize={rosterSize}
-                />
-              ))}
-            </div>
+            <SectionLabel
+              label="This week"
+              count={thisWeek.length}
+              collapsible
+              collapsed={collapsed.has("thisWeek")}
+              onToggle={() => toggleSection("thisWeek")}
+            />
+            {!collapsed.has("thisWeek") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {thisWeek.map((p) => (
+                  <PlanSummaryCard
+                    key={p.id}
+                    plan={p}
+                    avatars={rosterByPlan[p.id] ?? []}
+                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                    rosterSize={rosterSize}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -158,54 +183,75 @@ export default function PracticeListClient({
               label="Needs Attention!"
               count={needsAttention.length}
               tone="alert"
+              collapsible
+              collapsed={collapsed.has("needsAttention")}
+              onToggle={() => toggleSection("needsAttention")}
             />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {needsAttention.map((p) => (
-                <PlanSummaryCard
-                  key={p.id}
-                  plan={p}
-                  avatars={rosterByPlan[p.id] ?? []}
-                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                  rosterSize={rosterSize}
-                />
-              ))}
-            </div>
+            {!collapsed.has("needsAttention") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {needsAttention.map((p) => (
+                  <PlanSummaryCard
+                    key={p.id}
+                    plan={p}
+                    avatars={rosterByPlan[p.id] ?? []}
+                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                    rosterSize={rosterSize}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {completed.length > 0 && (
           <div>
-            <SectionLabel label="Recent" count={completed.length} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {completed.map((p) => (
-                <PlanSummaryCard
-                  key={p.id}
-                  plan={p}
-                  completed
-                  avatars={rosterByPlan[p.id] ?? []}
-                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                  rosterSize={rosterSize}
-                />
-              ))}
-            </div>
+            <SectionLabel
+              label="Recent"
+              count={completed.length}
+              collapsible
+              collapsed={collapsed.has("recent")}
+              onToggle={() => toggleSection("recent")}
+            />
+            {!collapsed.has("recent") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {completed.map((p) => (
+                  <PlanSummaryCard
+                    key={p.id}
+                    plan={p}
+                    completed
+                    avatars={rosterByPlan[p.id] ?? []}
+                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                    rosterSize={rosterSize}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {archived.length > 0 && (
           <div>
-            <SectionLabel label="Archived" count={archived.length} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {archived.map((p) => (
-                <PlanSummaryCard
-                  key={p.id}
-                  plan={p}
-                  completed
-                  avatars={rosterByPlan[p.id] ?? []}
-                  breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                  rosterSize={rosterSize}
-                />
-              ))}
-            </div>
+            <SectionLabel
+              label="Archived"
+              count={archived.length}
+              collapsible
+              collapsed={collapsed.has("archived")}
+              onToggle={() => toggleSection("archived")}
+            />
+            {!collapsed.has("archived") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {archived.map((p) => (
+                  <PlanSummaryCard
+                    key={p.id}
+                    plan={p}
+                    completed
+                    avatars={rosterByPlan[p.id] ?? []}
+                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
+                    rosterSize={rosterSize}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -322,14 +368,32 @@ function SectionLabel({
   count,
   right,
   tone,
+  collapsible,
+  collapsed,
+  onToggle,
 }: {
   label: string;
   count?: number;
   right?: React.ReactNode;
   tone?: "alert";
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+    <div
+      onClick={collapsible ? onToggle : undefined}
+      role={collapsible ? "button" : undefined}
+      aria-expanded={collapsible ? !collapsed : undefined}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 6,
+        cursor: collapsible ? "pointer" : undefined,
+        userSelect: "none",
+      }}
+    >
       <span
         style={{
           fontSize: 10,
@@ -346,6 +410,25 @@ function SectionLabel({
       </span>
       <span style={{ flex: 1 }} />
       {right}
+      {collapsible && (
+        <svg
+          width={12}
+          height={12}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--uff-text-mute)"
+          strokeWidth={2.4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+            transition: "transform .15s",
+          }}
+          aria-hidden
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      )}
     </div>
   );
 }
