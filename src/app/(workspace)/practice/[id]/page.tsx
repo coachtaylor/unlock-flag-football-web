@@ -161,6 +161,7 @@ export default async function PracticeDetailPage({
                 planId={plan.id}
                 status={plan.status}
                 archived={plan.archived}
+                title={plan.title}
               />
             </>
           }

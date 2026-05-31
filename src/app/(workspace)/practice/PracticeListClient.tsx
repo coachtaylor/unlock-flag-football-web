@@ -28,6 +28,7 @@ import {
   unarchivePlan,
 } from "@/lib/practice/actions";
 import { PastDueChip, isPlanPastDue } from "@/components/practice/PastDueBanner";
+import DeletePlanModal from "@/components/practice/DeletePlanModal";
 
 // Pencil icon used by the hero card's edit affordance. PIcon doesn't ship
 // an edit glyph yet, so inline a minimal one here rather than touching the
@@ -41,24 +42,24 @@ function EditIcon({ size = 12 }: { size?: number }) {
   );
 }
 
-// Status-aware manage control for list cards. Delete (draft/scheduled),
-// Archive (live/completed), or Unarchive (archived). data-stop-card-nav so
-// the click doesn't also trigger the card's navigation.
-function ManageIconButton({
-  plan,
-  onManage,
+type ManageAction = "archive" | "unarchive" | "delete";
+
+// Small square icon button used inside the manage control.
+function ManageGlyphButton({
+  action,
+  danger,
+  onClick,
 }: {
-  plan: PlanSummary;
-  onManage: () => void;
+  action: ManageAction;
+  danger?: boolean;
+  onClick: () => void;
 }) {
-  const canDelete = plan.status === "draft" || plan.status === "scheduled";
-  const mode: "delete" | "archive" | "unarchive" = plan.archived
-    ? "unarchive"
-    : canDelete
-    ? "delete"
-    : "archive";
   const title =
-    mode === "delete" ? "Delete" : mode === "archive" ? "Archive" : "Unarchive";
+    action === "delete"
+      ? "Delete"
+      : action === "archive"
+      ? "Archive"
+      : "Unarchive";
   return (
     <button
       type="button"
@@ -69,7 +70,7 @@ function ManageIconButton({
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        onManage();
+        onClick();
       }}
       style={{
         width: 26,
@@ -77,7 +78,7 @@ function ManageIconButton({
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        color: mode === "delete" ? "var(--uff-red, #ff4d4d)" : "var(--uff-text-mute)",
+        color: danger ? "var(--uff-red, #ff4d4d)" : "var(--uff-text-mute)",
       }}
     >
       <svg
@@ -91,13 +92,13 @@ function ManageIconButton({
         strokeLinejoin="round"
         aria-hidden
       >
-        {mode === "delete" ? (
+        {action === "delete" ? (
           <>
             <path d="M3 6h18" />
             <path d="M8 6V4h8v2" />
             <path d="M6 6l1 14h10l1-14" />
           </>
-        ) : mode === "archive" ? (
+        ) : action === "archive" ? (
           <>
             <path d="M3 4h18v4H3z" />
             <path d="M5 8v12h14V8" />
@@ -114,6 +115,29 @@ function ManageIconButton({
       </svg>
     </button>
   );
+}
+
+// Status-aware manage control for list cards. Lifecycle policy: every active
+// practice can only be Archived (data is always kept). An archived practice
+// can be Unarchived or permanently Deleted (delete goes through a type-the-
+// name confirm in the parent). data-stop-card-nav so clicks don't also fire
+// the card's navigation.
+function ManageIconButton({
+  plan,
+  onManage,
+}: {
+  plan: PlanSummary;
+  onManage: (action: ManageAction) => void;
+}) {
+  if (plan.archived) {
+    return (
+      <>
+        <ManageGlyphButton action="unarchive" onClick={() => onManage("unarchive")} />
+        <ManageGlyphButton action="delete" danger onClick={() => onManage("delete")} />
+      </>
+    );
+  }
+  return <ManageGlyphButton action="archive" onClick={() => onManage("archive")} />;
 }
 
 type ConfirmedAvatar = { initials: string; color: string };
@@ -155,29 +179,30 @@ export default function PracticeListClient({
       else next.add(key);
       return next;
     });
+  // The archived plan a coach is confirming a permanent delete on. Delete is
+  // only reachable from the archive, behind a type-the-name confirm modal.
+  const [deleteTarget, setDeleteTarget] = useState<PlanSummary | null>(null);
 
-  // Manage a plan from its card. Delete vs archive follows the lifecycle
-  // policy: draft/scheduled delete outright; live/completed archive only;
-  // archived plans unarchive.
-  const managePlan = (plan: PlanSummary) => {
-    if (plan.archived) {
-      if (!confirm("Unarchive this practice? It returns to your active lists."))
-        return;
+  // Manage a plan from its card. Lifecycle policy: every active practice can
+  // only be archived (data is always kept). Once archived it can be
+  // unarchived, or permanently deleted via the type-the-name modal.
+  const managePlan = (plan: PlanSummary, action: ManageAction) => {
+    if (action === "delete") {
+      setDeleteTarget(plan);
+      return;
+    }
+    if (action === "unarchive") {
       startTransition(async () => {
         await unarchivePlan(plan.id);
         router.refresh();
       });
       return;
     }
-    if (plan.status === "draft" || plan.status === "scheduled") {
-      if (!confirm("Delete this practice? This can't be undone.")) return;
-      startTransition(async () => {
-        await deletePlan(plan.id);
-        router.refresh();
-      });
-      return;
-    }
-    if (!confirm("Archive this practice? It moves to your Archived list."))
+    if (
+      !confirm(
+        "Archive this practice? It moves to your Archived list — all data is kept, and you can unarchive it later.",
+      )
+    )
       return;
     startTransition(async () => {
       await archivePlan(plan.id);
@@ -257,7 +282,7 @@ export default function PracticeListClient({
                   fd.set("planId", next.id);
                   startTransition(() => duplicatePlanAndRedirect(fd));
                 }}
-                onManage={() => managePlan(next)}
+                onManage={(a) => managePlan(next, a)}
               />
             )}
           </div>
@@ -281,7 +306,7 @@ export default function PracticeListClient({
                     avatars={rosterByPlan[p.id] ?? []}
                     breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
                     rosterSize={rosterSize}
-                    onManage={() => managePlan(p)}
+                    onManage={(a) => managePlan(p, a)}
                   />
                 ))}
               </div>
@@ -308,7 +333,7 @@ export default function PracticeListClient({
                     avatars={rosterByPlan[p.id] ?? []}
                     breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
                     rosterSize={rosterSize}
-                    onManage={() => managePlan(p)}
+                    onManage={(a) => managePlan(p, a)}
                   />
                 ))}
               </div>
@@ -335,7 +360,7 @@ export default function PracticeListClient({
                     avatars={rosterByPlan[p.id] ?? []}
                     breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
                     rosterSize={rosterSize}
-                    onManage={() => managePlan(p)}
+                    onManage={(a) => managePlan(p, a)}
                   />
                 ))}
               </div>
@@ -362,7 +387,7 @@ export default function PracticeListClient({
                     avatars={rosterByPlan[p.id] ?? []}
                     breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
                     rosterSize={rosterSize}
-                    onManage={() => managePlan(p)}
+                    onManage={(a) => managePlan(p, a)}
                   />
                 ))}
               </div>
@@ -370,6 +395,22 @@ export default function PracticeListClient({
           </div>
         )}
       </div>
+
+      <DeletePlanModal
+        open={!!deleteTarget}
+        title={deleteTarget?.title || "Untitled practice"}
+        busy={isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          const target = deleteTarget;
+          if (!target) return;
+          startTransition(async () => {
+            await deletePlan(target.id);
+            setDeleteTarget(null);
+            router.refresh();
+          });
+        }}
+      />
     </div>
   );
 }
@@ -597,7 +638,7 @@ function FeaturedPlanCard({
   rosterSize: number;
   isPending: boolean;
   onDuplicate: () => void;
-  onManage: () => void;
+  onManage: (action: ManageAction) => void;
 }) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
@@ -775,7 +816,7 @@ function PlanSummaryCard({
   avatars: ConfirmedAvatar[];
   breakdown: RsvpBreakdown;
   rosterSize: number;
-  onManage: () => void;
+  onManage: (action: ManageAction) => void;
 }) {
   const router = useRouter();
   const hasAttendance =
