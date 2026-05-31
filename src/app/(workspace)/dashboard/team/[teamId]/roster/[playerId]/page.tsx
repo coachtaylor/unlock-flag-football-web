@@ -18,6 +18,10 @@ import PlayerHistory, {
   type PlayerHistoryLocked,
 } from "./PlayerHistory";
 import InjuryModal from "@/components/roster/InjuryModal";
+import PlayerSkillProfileCard, {
+  type PlayerSkill,
+} from "@/components/dashboard/widgets/PlayerSkillProfileCard";
+import type { SkillGroup } from "@/lib/types/skills";
 
 type DrillJoin = {
   id?: string;
@@ -200,8 +204,12 @@ export default async function PlayerDetailPage({
   }
   if (!canView) notFound();
 
-  const [{ data: player }, { data: benchesRaw }, { data: observationsRaw }] =
-    await Promise.all([
+  const [
+    { data: player },
+    { data: benchesRaw },
+    { data: observationsRaw },
+    { data: skillProfileRaw },
+  ] = await Promise.all([
       supabase
         .from("team_players")
         .select(
@@ -227,6 +235,14 @@ export default async function PlayerDetailPage({
         )
         .eq("player_id", playerId)
         .order("created_at", { ascending: false }),
+      // Skill profile (Build 13). v_player_skill_profile already scopes to
+      // skills the player has signal on, so no position-bias filtering is
+      // needed — a row only exists where a tagged drill was assessed.
+      supabase
+        .from("v_player_skill_profile")
+        .select("skill_id, skill_name, skill_group, composite_score, drill_sample_size")
+        .eq("player_id", playerId)
+        .eq("team_id", teamId),
     ]);
 
   if (!player || player.team_id !== teamId) notFound();
@@ -333,6 +349,25 @@ export default async function PlayerDetailPage({
       createdAt: o.created_at,
     };
   });
+
+  // Skill profile rows (Build 13). composite_score is 0..1; drop nulls
+  // (the view emits a row only when at least one tagged drill scored).
+  type SkillProfileRow = {
+    skill_id: string;
+    skill_name: string;
+    skill_group: SkillGroup;
+    composite_score: number | null;
+    drill_sample_size: number | null;
+  };
+  const skillProfile: PlayerSkill[] = ((skillProfileRaw ?? []) as SkillProfileRow[])
+    .filter((r) => r.composite_score != null)
+    .map((r) => ({
+      skillId: r.skill_id,
+      skillName: r.skill_name,
+      skillGroup: r.skill_group,
+      composite: Number(r.composite_score),
+      sampleSize: r.drill_sample_size ?? 0,
+    }));
 
   const benchmarkCount = benches.length;
   // Personal bests across all drills (samples that beat all prior in that drill).
@@ -596,6 +631,8 @@ export default async function PlayerDetailPage({
                 meta={isInjured ? "Update injury" : "Update profile"}
               />
             </div>
+
+            <PlayerSkillProfileCard skills={skillProfile} playerName={playerName} />
 
             {(player.notes as string | null) && (
               <div className="w-card" style={{ padding: 14 }}>

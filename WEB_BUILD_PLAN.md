@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-05-30: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 13, 14, 15, 16 ⏳.
+Build status as of 2026-05-30: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 14, 15, 16 ⏳.
 
 ---
 
@@ -992,7 +992,18 @@ First visible consumer of `v_player_skill_profile`. Adds a radar chart spoke per
 
 ---
 
-## Build 13 — Player skill profile card on player detail ⏳
+## Build 13 — Player skill profile card on player detail ✅
+
+### Shipped (2026-05-30, branch `build-13-player-skill-profile` off `main`)
+- New `<PlayerSkillProfileCard>` (`src/components/dashboard/widgets/PlayerSkillProfileCard.tsx`) — second consumer of `v_player_skill_profile`, scoped to one player. Renders **Top skills** + **Needs work** sub-blocks, each row showing the skill name, a group-colored composite bar, the score on the anchored 1–5 scale (`composite_score × 5`), and a sample-size badge (`nN`, tinted red when `n<2` so a single-rating average is visibly low-confidence). Bottom reference strip spells out the 1/3/5 rating anchors.
+- **Partition:** strengths = top 3 by composite; weaknesses = the lowest 3 *below* rank 3, weakest-first. Unit-verified across n = 3/4/5/6/10 — never overlaps, and at n=3 only the ranked top block shows (no artificial "weakness").
+- **Locked-insight state** below 3 measured skills: distinguishes "no signal yet" (0 skills) from "N more to unlock" (1–2 skills), naming the player.
+- **Position bias** is handled by the view itself — `v_player_skill_profile` emits a row only where a tagged drill was actually assessed for the player, so a DB never appears scored 0 on QB-only skills (those skills simply aren't rows). No position filtering needed; documented inline.
+- Player detail page fetches the profile in its existing `Promise.all` (`.eq("player_id")` + `.eq("team_id")`) and shapes rows inline; card mounted in the hero (left) column above Notes / Observations.
+
+### Notes / known divergences from the plan
+- **Spec said "top 3 / bottom 3" flat** — shipped as relabeled **Top skills / Needs work** sub-blocks (clearer than "strengths/weaknesses" for a sparse profile) with the no-overlap partition above. Same intent, friendlier framing for low-data players.
+- **Browser verification of the populated state was not possible this session:** the Supabase MCP is pointed at a different project (`ymxrscbksxqtuqzbrcze`) than the app (`cclkmoczomakkxfvavkw`) — same constraint Build 12 hit — and the running dev server wasn't preview-managed. Verified instead via `tsc --noEmit` + `eslint` clean and a standalone unit check of the partition logic. The locked state and the 0-skill empty state are the default paths a fresh player hits.
 
 ### Goal
 Per-player strengths/weaknesses card on the player detail page. Top 3 skills + bottom 3 with composite scores and sample-size badges. The "is Marcus actually good at coverage?" answer that the whole assessment engine exists to provide.
