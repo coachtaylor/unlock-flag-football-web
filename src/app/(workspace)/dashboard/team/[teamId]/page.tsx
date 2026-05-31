@@ -17,7 +17,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import { Icon } from "@/components/uff/icons";
 import Link from "next/link";
 
-import { loadTeamDashboard } from "@/lib/dashboard/team-home-data";
+import { loadTeamDashboard, loadTeamSkillRadar } from "@/lib/dashboard/team-home-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
 import NextPracticeCard from "@/components/dashboard/widgets/NextPracticeCard";
@@ -30,6 +30,7 @@ import AttendanceCard from "@/components/dashboard/widgets/AttendanceCard";
 import NeedsAttentionCard from "@/components/dashboard/widgets/NeedsAttentionCard";
 import RecentActivityCard from "@/components/dashboard/widgets/RecentActivityCard";
 import MostRunDrillsCard from "@/components/dashboard/widgets/MostRunDrillsCard";
+import TeamSkillRadarCard from "@/components/dashboard/widgets/TeamSkillRadarCard";
 import SectionHead from "@/components/dashboard/widgets/SectionHead";
 import CaptainViewToggle from "@/components/dashboard/widgets/CaptainViewToggle";
 
@@ -105,9 +106,10 @@ export default async function TeamDashboardPage({
   if (!canView) notFound();
 
   // Load all widget data in one pass.
-  const [data, sidebarWorkspaces] = await Promise.all([
+  const [data, sidebarWorkspaces, skillRadar] = await Promise.all([
     loadTeamDashboard(supabase, teamId, user.id),
     loadSidebarWorkspaces(teamId, team.league_id),
+    loadTeamSkillRadar(supabase, teamId),
   ]);
 
   const playerView = sp.view === "player" && data.isCurrentUserCaptain;
@@ -217,8 +219,14 @@ export default async function TeamDashboardPage({
             <MoversCard movers={data.movers} teamId={teamId} />
           </div>
 
-          {/* Drill mix · Cadence · Attendance · Attention (4-up wrap) */}
-          <div className="td-row td-row-quad">
+          {/* Team skill radar + Needs attention */}
+          <div className="td-row td-row-radar">
+            <TeamSkillRadarCard data={skillRadar} />
+            <NeedsAttentionCard items={data.attention} teamId={teamId} />
+          </div>
+
+          {/* Drill mix · Cadence · Attendance (3-up wrap) */}
+          <div className="td-row td-row-trio">
             <DrillMixCard
               entries={data.drillMix.entries}
               total={data.drillMix.total}
@@ -226,7 +234,6 @@ export default async function TeamDashboardPage({
             />
             <PracticeCadenceCard data={data.cadence} />
             <AttendanceCard data={attendance} />
-            <NeedsAttentionCard items={data.attention} teamId={teamId} />
           </div>
 
           {/* Activity + Most-run drills */}
@@ -264,10 +271,8 @@ export default async function TeamDashboardPage({
         @media (min-width: 1024px) {
           .td-row-hero { grid-template-columns: 1.4fr 1fr; }
           .td-row-trends { grid-template-columns: 1.6fr 1fr; }
-          .td-row-quad { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (min-width: 1280px) {
-          .td-row-quad { grid-template-columns: repeat(4, 1fr); }
+          .td-row-radar { grid-template-columns: 1.5fr 1fr; }
+          .td-row-trio { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
     </div>
