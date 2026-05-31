@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-05-27: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 11, 12, 13, 14, 15, 16 ⏳.
+Build status as of 2026-05-30: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 12 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 11, 13, 14, 15, 16 ⏳. (Build 12 shipped ahead of Build 11 — its only hard dependency, `v_player_skill_profile`, shipped in Build 9.)
 
 ---
 
@@ -934,7 +934,19 @@ Wire the rest of the `benchmark_results` mobile-capture columns and the per-dril
 
 ---
 
-## Build 12 — Team Skill Radar dashboard widget ⏳
+## Build 12 — Team Skill Radar dashboard widget ✅
+
+### Shipped (2026-05-30, branch `build-12-skill-radar` off `fix-injury-button-clarity`)
+- New `<TeamSkillRadarCard>` (`src/components/dashboard/widgets/TeamSkillRadarCard.tsx`) — Recharts `RadarChart` over the five skill groups on the shared `chartTheme`, plotting team-average composite on the 1–5 scale, plus a legend with composite `/5`, a 4w trend arrow, sample size (`nN`), and locked-insight rows. Polar-axis spoke labels tint to their group color and grey out (`#5A5A62`, weight 400) when the spoke is locked. Whole-card empty state when no group has any signal.
+- New `loadTeamSkillRadar(supabase, teamId)` in `team-home-data.ts` — first consumer of `v_player_skill_profile`. Per group: team-average composite (avg-per-player → avg-across-players), contributing-player count, `locked` when `<3` players, and a directional trend delta computed from raw `benchmark_results × drill_skills × skills` over the last 4 weeks vs the prior 4 weeks. Self-contained loader (own `Promise.all`) run in parallel from the page.
+- New shared `src/lib/drills/skill-groups.ts` (`SKILL_GROUP_META`) — single source of truth for the five groups' short label / long label / hex color / blurb. `SkillPicker.tsx` refactored to consume it (removed its private `GROUP_META`). Hex literals because Recharts can't read CSS vars.
+- Team dashboard page: radar loaded in the existing `Promise.all` and slotted into a new `td-row-radar` paired with Needs Attention; the old 4-up quad row became a 3-up `td-row-trio` (Drill mix · Cadence · Attendance).
+
+### Notes / known divergences from the plan
+- **Spoke value vs trend window mismatch (intentional):** the radar spoke plots the view's canonical 90-day composite, while the trend arrow is a shorter 4w-vs-prior-4w directional proxy (the view can't be windowed). The arrow is labeled "vs prior 4 weeks" so the two aren't conflated.
+- **Locked-spoke treatment:** rather than dropping a `<3`-player spoke to zero (which would distort the polygon — the "ghost radar" risk), locked spokes still plot their value but are flagged via greyed axis label + a locked-insight legend row. Reasonable interpretation of "lock spokes that don't meet the threshold."
+- **Empty-state copy** mentions BOTH prerequisites ("Tag drills with skills, then log rated benchmarks for 3+ players") because the view is empty when either condition is unmet — not only when player count is low.
+- Verified end-to-end in the browser: populated radar (polygon + group-colored/greyed spokes + 0–5 radius axis + legend math) confirmed via a temporary mock; empty state confirmed against real data; tsc + eslint clean; no console errors. Could not DB-verify row counts — the Supabase MCP is currently pointed at a different project than the app uses.
 
 ### Goal
 First visible consumer of `v_player_skill_profile`. Adds a radar chart spoke per skill group to the team dashboard, showing team-average composite vs. trend over the last 4 weeks. Validates that the assessment engine produces trustworthy aggregates before piling on more widgets.

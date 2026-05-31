@@ -16,6 +16,7 @@
 // drills and custom-built drills feel like the same product.
 
 import type { Skill, SkillGroup, DrillSkillWeight } from "@/lib/types/skills";
+import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
 
 export type SkillPickerValue = Map<string, DrillSkillWeight>; // skillId → weight
 
@@ -25,42 +26,11 @@ type Props = {
   onChange: (next: SkillPickerValue) => void;
 };
 
-const GROUP_META: { id: SkillGroup; label: string; color: string; blurb: string }[] = [
-  {
-    id: "athletic",
-    label: "Athletic",
-    color: "var(--uff-lime)",
-    blurb: "Physical attributes — applies to every position.",
-  },
-  {
-    id: "offense",
-    label: "Offense — Skill Position",
-    color: "var(--uff-orange)",
-    blurb: "Catching, routes, separation, YAC.",
-  },
-  {
-    id: "qb",
-    label: "QB",
-    color: "#6EA8FF",
-    blurb: "Throwing accuracy at distance + off-platform.",
-  },
-  {
-    id: "defense",
-    label: "Defense",
-    color: "#B89BFF",
-    blurb: "Flag pull, coverage, pursuit, rush.",
-  },
-  {
-    id: "iq",
-    label: "Football IQ",
-    color: "#FFB347",
-    blurb: "Coach-rated cognitive skills — no objective drill captures them.",
-  },
-];
-
 export default function SkillPicker({ skills, value, onChange }: Props) {
-  const grouped = GROUP_META.map((g) => ({
+  const grouped = SKILL_GROUP_META.map((g) => ({
     ...g,
+    // The picker uses the verbose label in its group headers.
+    label: g.longLabel,
     items: skills
       .filter((s) => s.skill_group === g.id)
       .sort((a, b) => a.display_order - b.display_order),

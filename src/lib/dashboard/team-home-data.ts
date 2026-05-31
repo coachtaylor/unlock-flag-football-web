@@ -163,6 +163,32 @@ export type TeamDashboardData = {
   currentUserPlayerId: string | null;
 };
 
+/* ─────────────── skill radar (Build 12) ─────────────── */
+
+export type SkillRadarSpoke = {
+  group: SkillGroup;
+  label: string;
+  color: string;
+  // Team-average composite, 0..1 (avg-per-player then avg-across-players).
+  // null only when no player has a signal in this group.
+  composite: number | null;
+  contributingPlayers: number;
+  // Directional movement, last 4 weeks vs the prior 4 weeks, in composite
+  // (0..1) units. null when either window lacks data. NOTE: the composite
+  // above is the view's canonical 90-day aggregate; this delta is a
+  // shorter-window directional proxy (the view can't be windowed), so it's
+  // labeled "vs prior 4 wks" in the UI, not implied to match the spoke.
+  trendDelta: number | null;
+  // < 3 contributing players → low confidence. The card greys the spoke
+  // and shows a locked-insight row instead of trusting 1–2 outliers.
+  locked: boolean;
+};
+
+export type SkillRadarData = {
+  spokes: SkillRadarSpoke[];
+  anyData: boolean;
+};
+
 /* ─────────────── category palette ─────────────── */
 
 const CATEGORY_PALETTE: Record<string, { color: string; label: string }> = {
@@ -199,6 +225,8 @@ function categoryKey(name: string | null | undefined) {
 import { playerColorForIndex } from "@/components/uff/team-colors";
 import { blockColor } from "@/lib/practice/block-colors";
 import { isPrimaryOffense, isPrimaryDefense } from "@/lib/positions";
+import type { SkillGroup } from "@/lib/types/skills";
+import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
 
 function initialsOf(name: string) {
   return name
@@ -1080,6 +1108,170 @@ export async function loadTeamDashboard(
     mostRunDrills,
     isCurrentUserCaptain: currentPlayer?.is_captain === true,
     currentUserPlayerId: currentPlayer?.id ?? null,
+  };
+}
+
+/* ─────────────── skill radar loader (Build 12) ─────────────── */
+
+// First visible consumer of v_player_skill_profile. Aggregates the
+// per-(player, skill) composites up to the five skill-group spokes, and
+// computes a directional 4w-vs-prior-4w trend from raw benchmark_results.
+//
+// Self-contained (own queries) so it can run in parallel with
+// loadTeamDashboard from the page rather than bloating that loader.
+export async function loadTeamSkillRadar(
+  supabase: SupabaseClient,
+  teamId: string
+): Promise<SkillRadarData> {
+  const now = Date.now();
+  const day = 1000 * 60 * 60 * 24;
+  const fourWeeksAgo = new Date(now - day * 28).toISOString().slice(0, 10);
+  const eightWeeksAgo = new Date(now - day * 56).toISOString().slice(0, 10);
+
+  const [profileRes, benchRes, drillSkillsRes, skillsRes] = await Promise.all([
+    // Canonical 90-day composite per (player, skill). RLS on the
+    // underlying benchmark_results scopes this to teams the user can see.
+    supabase
+      .from("v_player_skill_profile")
+      .select("player_id, skill_group, composite_score")
+      .eq("team_id", teamId),
+
+    // Raw results for the trend windows (last 8 weeks).
+    supabase
+      .from("benchmark_results")
+      .select("drill_id, rating, made_count, attempts_count, assessment_date")
+      .eq("team_id", teamId)
+      .gte("assessment_date", eightWeeksAgo),
+
+    // drill → skill weights for this team's drills (inner join enforces
+    // the team scope + RLS).
+    supabase
+      .from("drill_skills")
+      .select("drill_id, skill_id, weight, team_drills!inner(team_id)")
+      .eq("team_drills.team_id", teamId),
+
+    // Global skill catalog → group lookup.
+    supabase.from("skills").select("id, skill_group"),
+  ]);
+
+  type ProfileRow = {
+    player_id: string;
+    skill_group: SkillGroup;
+    composite_score: number | null;
+  };
+  type BenchRow = {
+    drill_id: string;
+    rating: number | null;
+    made_count: number | null;
+    attempts_count: number | null;
+    assessment_date: string;
+  };
+  type DrillSkillRow = { drill_id: string; skill_id: string; weight: number };
+
+  const profileRows = (profileRes.data ?? []) as ProfileRow[];
+  const benchRows = (benchRes.data ?? []) as BenchRow[];
+  const drillSkillRows = (drillSkillsRes.data ?? []) as unknown as DrillSkillRow[];
+  const skillRows = (skillsRes.data ?? []) as { id: string; skill_group: SkillGroup }[];
+
+  // ── Current composite per group (avg-per-player, then avg-across-players) ──
+  // group → playerId → list of that player's skill composites in the group
+  const byGroupPlayer = new Map<SkillGroup, Map<string, number[]>>();
+  for (const r of profileRows) {
+    if (r.composite_score == null) continue;
+    let players = byGroupPlayer.get(r.skill_group);
+    if (!players) {
+      players = new Map();
+      byGroupPlayer.set(r.skill_group, players);
+    }
+    const arr = players.get(r.player_id) ?? [];
+    arr.push(r.composite_score);
+    players.set(r.player_id, arr);
+  }
+
+  // ── Trend: drill → groups+weights, then weighted group composite per window ──
+  const skillGroupById = new Map(skillRows.map((s) => [s.id, s.skill_group]));
+  const drillGroups = new Map<string, { group: SkillGroup; weight: number }[]>();
+  for (const ds of drillSkillRows) {
+    const group = skillGroupById.get(ds.skill_id);
+    if (!group) continue;
+    const list = drillGroups.get(ds.drill_id) ?? [];
+    list.push({ group, weight: ds.weight });
+    drillGroups.set(ds.drill_id, list);
+  }
+
+  function resultScore(r: BenchRow): number | null {
+    if (r.rating != null) return r.rating / 5;
+    if (r.attempts_count && r.attempts_count > 0) {
+      return (r.made_count ?? 0) / r.attempts_count;
+    }
+    return null;
+  }
+
+  // group → {sum, wsum} per window
+  type Accum = Map<SkillGroup, { sum: number; wsum: number }>;
+  const windowComposite = (rows: BenchRow[]): Accum => {
+    const acc: Accum = new Map();
+    for (const r of rows) {
+      const score = resultScore(r);
+      if (score == null) continue;
+      const groups = drillGroups.get(r.drill_id);
+      if (!groups) continue;
+      for (const g of groups) {
+        const cur = acc.get(g.group) ?? { sum: 0, wsum: 0 };
+        cur.sum += score * g.weight;
+        cur.wsum += g.weight;
+        acc.set(g.group, cur);
+      }
+    }
+    return acc;
+  };
+
+  const currentWindow = windowComposite(
+    benchRows.filter((r) => r.assessment_date >= fourWeeksAgo)
+  );
+  const priorWindow = windowComposite(
+    benchRows.filter(
+      (r) => r.assessment_date >= eightWeeksAgo && r.assessment_date < fourWeeksAgo
+    )
+  );
+
+  function groupAvg(acc: Accum, group: SkillGroup): number | null {
+    const v = acc.get(group);
+    if (!v || v.wsum === 0) return null;
+    return v.sum / v.wsum;
+  }
+
+  // ── Assemble spokes in canonical group order ──
+  const spokes: SkillRadarSpoke[] = SKILL_GROUP_META.map((meta) => {
+    const players = byGroupPlayer.get(meta.id);
+    const contributingPlayers = players?.size ?? 0;
+
+    let composite: number | null = null;
+    if (players && contributingPlayers > 0) {
+      const perPlayer = Array.from(players.values()).map(
+        (scores) => scores.reduce((a, b) => a + b, 0) / scores.length
+      );
+      composite = perPlayer.reduce((a, b) => a + b, 0) / perPlayer.length;
+    }
+
+    const cur = groupAvg(currentWindow, meta.id);
+    const prior = groupAvg(priorWindow, meta.id);
+    const trendDelta = cur != null && prior != null ? cur - prior : null;
+
+    return {
+      group: meta.id,
+      label: meta.label,
+      color: meta.color,
+      composite,
+      contributingPlayers,
+      trendDelta,
+      locked: contributingPlayers < 3,
+    };
+  });
+
+  return {
+    spokes,
+    anyData: spokes.some((s) => s.contributingPlayers > 0),
   };
 }
 
