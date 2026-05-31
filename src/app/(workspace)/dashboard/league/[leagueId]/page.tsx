@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueDashboardData } from "@/lib/dashboard/league-data";
+import { loadSidebarWorkspacesForLeague } from "@/lib/dashboard/sidebar-workspaces";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import DashSection from "@/components/dashboard/DashSection";
 import LeagueSidebar from "@/components/dashboard/LeagueSidebar";
@@ -24,6 +25,7 @@ export default async function LeagueDashboardPage({
   if (!data) notFound();
 
   const { league, teams, user: profileUser } = data;
+  const workspaces = await loadSidebarWorkspacesForLeague(league.id);
   const initials =
     `${profileUser.firstName?.[0] ?? ""}${profileUser.lastName?.[0] ?? ""}`.toUpperCase() ||
     profileUser.email[0]?.toUpperCase() ||
@@ -43,6 +45,7 @@ export default async function LeagueDashboardPage({
           firstName: profileUser.firstName ?? profileUser.email,
           lastName: profileUser.lastName ?? "",
         }}
+        workspaces={workspaces}
       />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -54,14 +57,6 @@ export default async function LeagueDashboardPage({
           title={league.league_name}
           kicker={league.format.toUpperCase()}
           userInitials={initials}
-          actions={
-            <Link
-              href={`/teams/new?leagueId=${league.id}`}
-              className="wbtn primary"
-            >
-              <Icon.plus size={13} /> Add team
-            </Link>
-          }
         />
 
         <div className="page" style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}>
@@ -128,40 +123,51 @@ function LeagueHero({
   });
   return (
     <div
-      className="w-card"
       style={{
-        padding: 0,
-        background: `linear-gradient(180deg, ${league.league_color}14 0%, transparent 50%), var(--uff-surface)`,
-        border: "1px solid var(--uff-line-soft)",
-        borderRadius: 18,
+        position: "relative",
+        padding: "4px 2px 18px",
+        borderBottom: "1px solid var(--uff-line-soft)",
+        marginBottom: 18,
         overflow: "hidden",
       }}
     >
-      <div style={{ height: 4, background: league.league_color }} />
+      {/* soft identity glow, anchored to the icon — replaces the card fill */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: -40,
+          left: -30,
+          width: 260,
+          height: 160,
+          background: `radial-gradient(60% 70% at 30% 40%, ${league.league_color}1F 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }}
+      />
       <div
         style={{
-          padding: "16px 18px",
+          position: "relative",
           display: "flex",
           alignItems: "center",
-          gap: 14,
+          gap: 16,
           flexWrap: "wrap",
         }}
       >
         <div
           style={{
-            width: 52,
-            height: 52,
-            borderRadius: 14,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
             background: league.league_color,
             color: "#1a0f08",
             display: "grid",
             placeItems: "center",
             fontFamily: "var(--font-mono)",
             fontWeight: 800,
-            fontSize: 21,
+            fontSize: 23,
             letterSpacing: "-0.04em",
             flexShrink: 0,
-            boxShadow: `0 6px 18px ${league.league_color}40`,
+            boxShadow: `0 8px 22px ${league.league_color}45`,
           }}
         >
           {league.league_name[0]}
@@ -172,7 +178,7 @@ function LeagueHero({
               display: "flex",
               alignItems: "center",
               gap: 8,
-              marginBottom: 6,
+              marginBottom: 7,
             }}
           >
             <span
@@ -201,10 +207,10 @@ function LeagueHero({
           </div>
           <div
             style={{
-              fontSize: 22,
+              fontSize: 26,
               fontWeight: 700,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.2,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.15,
               color: "var(--uff-text)",
             }}
           >
@@ -214,7 +220,7 @@ function LeagueHero({
             style={{
               fontSize: 12.5,
               color: "var(--uff-text-dim)",
-              marginTop: 3,
+              marginTop: 4,
             }}
           >
             Created {created} · {league.members_count}{" "}
