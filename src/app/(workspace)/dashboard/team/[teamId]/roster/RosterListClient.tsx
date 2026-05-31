@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/uff/icons";
 import { playerColorForIndex } from "@/components/uff/team-colors";
+import InjuryModal from "@/components/roster/InjuryModal";
 
 export type RosterPlayer = {
   id: string;
@@ -17,6 +18,7 @@ export type RosterPlayer = {
   status: "active" | "inactive";
   isCaptain: boolean;
   isInjured: boolean;
+  injuryNote: string | null;
   colorIndex: number;
   lastBench: {
     drillName: string;
@@ -49,6 +51,10 @@ export default function RosterListClient({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [positionFilter, setPositionFilter] = useState<string | null>(null);
+  // One InjuryModal instance for the whole list. Each row's kebab sets
+  // this to the player it should target, which controls modal visibility
+  // via the modal's `open` prop. Closing nulls it out.
+  const [injuryTarget, setInjuryTarget] = useState<RosterPlayer | null>(null);
 
   const counts = useMemo(
     () => ({
@@ -249,6 +255,7 @@ export default function RosterListClient({
             <span>Status</span>
             <span>Last benchmark</span>
             <span />
+            <span />
           </div>
 
           {filtered.map((p, i) => (
@@ -257,18 +264,54 @@ export default function RosterListClient({
               p={p}
               href={`${rosterBasePath}/${p.id}`}
               stripe={i % 2 === 1}
+              onInjuryAction={() => setInjuryTarget(p)}
             />
           ))}
         </div>
       )}
 
+      {injuryTarget && (
+        <InjuryModal
+          playerId={injuryTarget.id}
+          teamId={teamId}
+          playerName={injuryTarget.name}
+          currentlyInjured={injuryTarget.isInjured}
+          currentNote={injuryTarget.injuryNote}
+          open={true}
+          onOpenChange={(next) => {
+            if (!next) setInjuryTarget(null);
+          }}
+        />
+      )}
+
       <style>{`
         .roster-row-grid {
           display: grid;
-          grid-template-columns: 44px 1.6fr 1.4fr 60px 110px 1.8fr 110px;
+          grid-template-columns: 44px 1.6fr 1.4fr 60px 110px 1.8fr 36px 110px;
           align-items: center;
           gap: 14px;
           padding: 12px 18px;
+        }
+        .roster-row-action {
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: 1px solid transparent;
+          color: var(--uff-text-mute);
+          cursor: pointer;
+          transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+        }
+        .roster-row-action:hover {
+          background: rgba(255,255,255,0.06);
+          color: var(--uff-text);
+          border-color: var(--uff-line);
+        }
+        .roster-row-action.is-injured {
+          color: var(--uff-red, #ff4d4d);
         }
         .roster-head {
           padding: 10px 18px;
@@ -304,10 +347,12 @@ function RosterRow({
   p,
   href,
   stripe,
+  onInjuryAction,
 }: {
   p: RosterPlayer;
   href: string;
   stripe: boolean;
+  onInjuryAction: () => void;
 }) {
   return (
     <Link href={href} className={`roster-row roster-row-grid ${stripe ? "stripe" : ""}`}>
@@ -392,6 +437,26 @@ function RosterRow({
             No benchmarks yet
           </span>
         )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <button
+          type="button"
+          className={`roster-row-action ${p.isInjured ? "is-injured" : ""}`}
+          aria-label={
+            p.isInjured ? `Mark ${p.name} healthy` : `Mark ${p.name} injured`
+          }
+          title={p.isInjured ? "Mark healthy" : "Mark injured"}
+          onClick={(e) => {
+            // Row is wrapped in a Link — without these guards the click
+            // would also navigate to the player detail page.
+            e.preventDefault();
+            e.stopPropagation();
+            onInjuryAction();
+          }}
+        >
+          <Icon.more size={14} />
+        </button>
       </div>
 
       <div

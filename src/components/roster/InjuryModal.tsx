@@ -1,8 +1,7 @@
 "use client";
 
-// Branded modal for marking a player injured / healthy (Build 6.5c).
-// Mounts inside the player detail page; the trigger button lives in
-// the hero card so it's discoverable from the player's overview.
+// Branded modal for marking a player injured / healthy (Build 6.5c,
+// refactored 2026-05-27 for clearer action affordance + roster reuse).
 //
 // Two states:
 //   - Marking injured: required-ish note textarea (empty OK but
@@ -10,13 +9,20 @@
 //   - Marking healthy: a single-line confirmation; primary CTA
 //     "Mark healthy"
 //
-// Replaces the prior pattern of toggling is_injured + injury_note from
-// inside the player edit form. Per MOBILE_APP_REFERENCE §6.5: injury
-// controls live on the detail page, not in the edit form.
+// Trigger modes:
+//   - Inline (default): the modal renders its own trigger button. The
+//     button now reads as an action — neutral surface with red accent
+//     + plus icon — instead of the previous solid-red pill that looked
+//     like a status badge ("Mark injured" sitting next to the red
+//     INJURED status pill on the roster list).
+//   - Controlled: the parent owns `open` + `onOpenChange` and renders
+//     no inline trigger. Used by RosterListClient so one modal
+//     instance serves the whole list, opened with a per-row kebab.
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toggleInjury } from "@/lib/roster/injury-actions";
+import { Icon } from "@/components/uff/icons";
 
 type Props = {
   playerId: string;
@@ -24,6 +30,10 @@ type Props = {
   playerName: string;
   currentlyInjured: boolean;
   currentNote: string | null;
+  // Controlled mode: parent supplies open + setter. When provided, the
+  // inline trigger button is suppressed.
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
 };
 
 export default function InjuryModal({
@@ -32,9 +42,18 @@ export default function InjuryModal({
   playerName,
   currentlyInjured,
   currentNote,
+  open: openProp,
+  onOpenChange,
 }: Props) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const controlled = typeof openProp === "boolean";
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? !!openProp : openState;
+  const setOpen = (next: boolean) => {
+    if (controlled) onOpenChange?.(next);
+    else setOpenState(next);
+  };
+
   const [note, setNote] = useState(currentNote ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -59,6 +78,9 @@ export default function InjuryModal({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+    // setOpen is stable enough for this purpose — controlled callers
+    // provide a stable setter; uncontrolled uses the local setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pending]);
 
   // The modal is asking the user to FLIP the current state — when
@@ -87,29 +109,14 @@ export default function InjuryModal({
     });
   }
 
-  // Trigger button — sits inline wherever the parent renders the modal.
-  const triggerLabel = currentlyInjured ? "Mark healthy" : "Mark injured";
-  const triggerColor = currentlyInjured
-    ? "var(--uff-lime, #c2ff3d)"
-    : "var(--uff-red, #ff4d4d)";
-  const triggerBg = currentlyInjured
-    ? "rgba(194,255,61,0.10)"
-    : "rgba(255,77,77,0.10)";
-
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="wbtn"
-        style={{
-          background: triggerBg,
-          color: triggerColor,
-          borderColor: "transparent",
-        }}
-      >
-        {triggerLabel}
-      </button>
+      {!controlled && (
+        <InjuryTriggerButton
+          currentlyInjured={currentlyInjured}
+          onClick={() => setOpen(true)}
+        />
+      )}
 
       {open && (
         <div
@@ -288,5 +295,53 @@ export default function InjuryModal({
         </div>
       )}
     </>
+  );
+}
+
+// Inline trigger styled as an ACTION, not a status badge.
+//
+// Previous version was solid red text on red-tinted background, which
+// sat right next to the red INJURED status pill on the player detail
+// hero and read as "this player is marked injured." Now: neutral
+// surface, red text + plus icon, outlined hover. Reads as a button.
+function InjuryTriggerButton({
+  currentlyInjured,
+  onClick,
+}: {
+  currentlyInjured: boolean;
+  onClick: () => void;
+}) {
+  const accent = currentlyInjured
+    ? "var(--uff-lime, #c2ff3d)"
+    : "var(--uff-red, #ff4d4d)";
+  const accentBorder = currentlyInjured
+    ? "rgba(194,255,61,0.42)"
+    : "rgba(255,77,77,0.42)";
+  const accentHoverBg = currentlyInjured
+    ? "rgba(194,255,61,0.08)"
+    : "rgba(255,77,77,0.08)";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="wbtn injury-trigger"
+      style={{
+        background: "transparent",
+        color: accent,
+        border: `1px solid ${accentBorder}`,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = accentHoverBg;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <Icon.plus size={12} />
+      {currentlyInjured ? "Mark healthy" : "Mark injured"}
+    </button>
   );
 }
