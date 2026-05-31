@@ -44,3 +44,32 @@ export async function clonePresetDrill(
 
   return { ok: true, drillId };
 }
+
+export type RemoveCloneResult = { ok: true } | { ok: false; error: string };
+
+// removeClonedDrill: removes this team's clone of a preset from the team
+// library by deleting the team_drills row (the same hard-delete used
+// elsewhere on mobile — matches that behavior so the preset card flips back
+// to "Add to team"). Only ever touches the team's COPY; the global
+// preset_drills row is untouched and stays browsable / re-addable. RLS on
+// team_drills enforces that the caller belongs to the drill's team.
+export async function removeClonedDrill(
+  drillId: string,
+): Promise<RemoveCloneResult> {
+  if (!drillId) return { ok: false, error: "Missing drillId." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("team_drills")
+    .delete()
+    .eq("id", drillId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/drills");
+  revalidatePath("/drills/library");
+  return { ok: true };
+}

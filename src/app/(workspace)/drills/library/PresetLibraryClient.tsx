@@ -13,7 +13,7 @@ import type {
   SkillGroup,
   TaggedSkill,
 } from "@/lib/types/skills";
-import { clonePresetDrill } from "./actions";
+import { clonePresetDrill, removeClonedDrill } from "./actions";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -612,6 +612,11 @@ function PresetCard({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Remove-clone flow (only relevant once cloned). Separate transition from
+  // the clone so the two buttons' pending states don't interfere.
+  const [removing, startRemoveTransition] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const primaryGroup = preset.skills[0]?.skill_group ?? null;
   const groupColor = primaryGroup
@@ -624,6 +629,18 @@ function PresetCard({
       const result = await clonePresetDrill(preset.id, teamId);
       if (result.ok) onCloned(result.drillId);
       else setError(result.error);
+    });
+  }
+
+  function handleRemove() {
+    if (!preset.clonedDrillId) return;
+    setRemoveError(null);
+    startRemoveTransition(async () => {
+      const result = await removeClonedDrill(preset.clonedDrillId!);
+      // On success the server action revalidates /drills/library, so the
+      // refreshed props flip this card back to "Add to team".
+      if (result.ok) setConfirmOpen(false);
+      else setRemoveError(result.error);
     });
   }
 
@@ -676,7 +693,47 @@ function PresetCard({
           </div>
         </div>
         {/* No benchmark badge — benchmark designation is a captain opt-in after
-            cloning (see clone_preset_drill_to_team), not a property of presets. */}
+            cloning (see clone_preset_drill_to_team), not a property of presets.
+            Top-right trash removes the team's clone; only shown once cloned. */}
+        {preset.alreadyCloned && preset.clonedDrillId && (
+          <button
+            type="button"
+            onClick={() => {
+              setRemoveError(null);
+              setConfirmOpen(true);
+            }}
+            title="Remove from library"
+            aria-label="Remove from library"
+            style={{
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              background: "transparent",
+              border: 0,
+              color: "var(--uff-red)",
+              cursor: "pointer",
+            }}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Description */}
@@ -745,6 +802,122 @@ function PresetCard({
           {error}
         </div>
       )}
+
+      {confirmOpen && (
+        <RemoveConfirm
+          drillName={preset.drill_name}
+          removing={removing}
+          error={removeError}
+          onCancel={() => {
+            if (!removing) setConfirmOpen(false);
+          }}
+          onConfirm={handleRemove}
+        />
+      )}
+    </div>
+  );
+}
+
+// Centered confirm overlay for removing a cloned preset. Mirrors the mobile
+// ConfirmDialog: scrim, card, destructive red confirm. The global preset is
+// never deleted — only the team's copy.
+function RemoveConfirm({
+  drillName,
+  removing,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  drillName: string;
+  removing: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        background: "rgba(0,0,0,0.55)",
+        display: "grid",
+        placeItems: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-card"
+        style={{
+          width: "100%",
+          maxWidth: 380,
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <div style={{ fontSize: 17, fontWeight: 600, color: "var(--uff-text)" }}>
+          Remove from library?
+        </div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: "var(--uff-text-dim)" }}>
+          &quot;{drillName}&quot; will be removed from your team library. The
+          preset stays available to add again.
+        </div>
+        {error && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--uff-red)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {error}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={removing}
+            style={{
+              flex: 1,
+              padding: "9px 12px",
+              borderRadius: 8,
+              background: "transparent",
+              border: "1px solid var(--uff-line)",
+              color: "var(--uff-text-dim)",
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: removing ? "default" : "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={removing}
+            style={{
+              flex: 1,
+              padding: "9px 12px",
+              borderRadius: 8,
+              background: removing ? "var(--uff-text-mute)" : "var(--uff-red)",
+              border: 0,
+              color: "#0a0a0d",
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: removing ? "wait" : "pointer",
+            }}
+          >
+            {removing ? "Removing…" : "Remove"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -831,10 +1004,10 @@ function CloneButton({
         style={{
           fontSize: 11,
           fontWeight: 600,
-          color: "var(--uff-text-mute)",
+          color: "var(--uff-lime)",
           textDecoration: "none",
           padding: "6px 10px",
-          border: "1px solid var(--uff-line-soft)",
+          border: "1px solid color-mix(in srgb, var(--uff-lime) 35%, transparent)",
           borderRadius: 6,
           background: "transparent",
           whiteSpace: "nowrap",
