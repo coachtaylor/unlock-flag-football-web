@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-05-30: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 14, 15, 16 ⏳.
+Build status as of 2026-06-01: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 14.5 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 15, 16 ⏳. (Build 14 mobile-parity epic shipped 14a–14f. Build 14.5 — Coach attribution & activity tracking — shipped on both web + mobile 2026-06-01; the existing Recent Activity feed had mis-attributed the actor, which this corrects.)
 
 ---
 
@@ -1034,7 +1034,16 @@ Per-player strengths/weaknesses card on the player detail page. Top 3 skills + b
 
 ---
 
-## Build 14 — Mobile parity for skill taxonomy ⏳
+## Build 14 — Mobile parity for skill taxonomy ✅
+
+### Shipped (2026-06-01) — sub-builds 14a–14f, all merged to `unlock-mobile` main
+- **14a** — DrillForm guided two-axis flow (Phase → scoped skill picker) + drills-list filter on skill-group taxonomy. Web parity port. (Branch `build-14a-drill-skill-picker`.)
+- **14b** — Mobile preset drill library at `/drills/library` (browse + clone via `clone_preset_drill_to_team`). Shared `Sheet`/`HeaderIconButton` extracted.
+- **14c** — Benchmark-log skill chips + mobile-capture columns (`entry_mode`/`captured_on`/`needs_review`). `loadBenchmarkSkillTags()` + `SkillTagGroup` in `lib/skills.ts`.
+- **14d** — Mid-practice **quick-rate sheet** on the run-practice screen (mobile-only; web defers permanently): present player → 1–5 + skill chips + note + "needs more detail" (default on) → writes `entry_mode='practice_quick'`. DRY extractions: `lib/benchmarks.ts` `upsertBenchmarkResult()`, `SkillTagChips`, `lib/date.ts` `localDateString()`, `PlayerAvatar`. Also: Start Practice jumps straight to the run screen; **phase now required to save** a drill (web parity).
+- **14e** — Player skill-profile card on the player detail page (Top skills / Needs work from `v_player_skill_profile`, anchored 1–5 + sample-size badge). Port of web Build 13.
+- **14f** — Needs-review queue (`app/benchmarks/review.tsx` + shared `NeedsReviewLink` entry on dashboard + benchmarks hub). Closes the flag→revisit loop. Web already had its own queue.
+- **Migrations run (app project `cclkmoczomakkxfvavkw`):** 70 backfill drill phases, 71 `team_drill_categories` ON DELETE CASCADE, 72 `team_drills` DELETE policy (was missing — silent no-op under RLS), 73 clone RPC now produces published + phased drills.
 
 ### Goal
 Bring everything Builds 9 → 13 ship on web to the React Native mobile app: browse preset library, tag drills with skills, log with skill_tag chips, mid-practice quick-rate sheet (the mobile-only piece that web defers permanently), per-player skill profile.
@@ -1063,6 +1072,66 @@ Bring everything Builds 9 → 13 ship on web to the React Native mobile app: bro
 - **8-second target is the whole point.** Anything over 12 seconds and captains will stop using it.
 - **Voice-to-text quality varies by phone.** Stick with native OS dictation for v1.
 - **Run-practice screen UI density.** The rate sheet has to coexist with the timer, attendance, and per-drill notes. Use a bottom-sheet pattern so the existing UI doesn't shift.
+
+---
+
+## Build 14.5 — Coach attribution & activity tracking ✅
+
+### Shipped (2026-06-01) — both web + mobile, schema applied to project `cclkmoczomakkxfvavkw`
+- **Schema (mig 74–77, run):** `activity_events` append-only log (RLS via `get_my_team_ids_incl_league`, append-only — no client writes); denormalized actor columns (`team_drills.updated_by`, `practice_plans.updated_by`, `team_players.created_by/updated_by`, `benchmark_results.review_cleared_by/_at`) + `set_updated_meta()` trigger; `log_activity_event()` SECURITY DEFINER fn fired by AFTER triggers on 8 tables (verb derived from OLD/NEW diffing; skips when `auth.uid()` is null); best-effort backfill of creation events.
+- **Actor-bug fix:** the Recent Activity feed previously showed the *assessed player* as "who logged it" (`who = player_name ?? "Coach"`) and a literal `"Coach"` for practices. Both web (`lib/dashboard/team-home-data.ts`) and mobile (`lib/dashboard.ts fetchActivity`) now read `activity_events`, so the actor is real.
+- **Shared helpers (one per repo, kept identical):** `formatActorTime()` (relative <7d, absolute date after) — web `lib/time.ts`, mobile `lib/date.ts`; `lib/activity.ts` (`loadTeamActivity`, `loadEntityHistory`, `describeActivity`, `resolveActorNames/Name`) on both.
+- **Bylines (last editor for collaborative artifacts, author for point-in-time):** drill detail, player detail, practice-plan detail — web + mobile. Review queue rows show **"by {assessor}"** (calibration signal — surfaces who logged a flagged rating, incl. the self-assessment-bias case).
+- **History-on-tap:** web `EntityHistory` modal + mobile `EntityHistorySheet` (lazy-load `loadEntityHistory`), wired on drill + practice-plan detail.
+- **DRY / safety:** actor-name rule + timestamp format exist once per repo; every new column added to selects with a schema-drift fallback so un-migrated environments degrade gracefully (byline hidden, never a hard error). Both repos typecheck clean.
+
+### Goal
+
+### Goal
+On a multi-captain team (3 captains), every meaningful coaching action records **who** did it and **when**, surfaced as (a) subtle bylines on detail cards and (b) one team activity feed — both fed by a single event log. Trust (weight a benchmark by who logged it), coordination (don't double-up), accountability (who to follow up with).
+
+### Decisions locked (2026-06-01)
+- **One event log powers both** the feed and the card bylines. The append-only `activity_events` table is canonical; denormalized `updated_by`/author columns on artifact rows are a read-cache written in the same transaction.
+- **Collaborative artifacts** (drills, practice plans) show **last editor** on the card; full create→edit→finalize→begin→complete history behind a tap. **Point-in-time events** (notes, benchmark results) show **immutable author**.
+- **Timestamp rule:** relative ("2d ago") within 7 days, **absolute date** ("Jun 1") after. ONE helper per repo, identical logic.
+- **Actor identity = the user/auth identity** (`actor_user_id`, resolved to a name via `profiles`). Never `team_players` — the captain-as-player record is a *subject* (`subject_player_id`), with no link to the user. This is how the design sidesteps the "separate records, no link" constraint.
+
+### In scope (the tracked action set)
+- **Drills:** created · updated · published · unpublished (the schema's "archive" = unpublish) · pinned · unpinned to dashboard
+- **Practice plans:** created · edited · finalized · began · completed · archived
+- **Post-practice log:** logged
+- **Players:** added · edited · deactivated · reactivated · injury logged · injury resolved
+- **Notes:** player note · practice note (in-practice quick note)
+- **Benchmarks:** assessment logged · quick-rated (mid-practice) · needs-review cleared
+
+### Out of scope
+- New event *types* beyond the set above (add later as features ship).
+- Cross-team / org-level activity feed (multi-team rollout concern).
+- Editing or deleting events (append-only; no client write policies).
+- Email/digest notifications off the feed.
+
+### Architecture
+- **Event writes via DB triggers, not app code.** `AFTER INSERT/UPDATE` triggers on the tracked tables call `log_activity_event()` with `actor_user_id = auth.uid()`, diffing `OLD`/`NEW` status to pick the verb. One place, both apps covered for free, future writes covered automatically. Guard: `if auth.uid() is null then return` so the 2am AI batch job (service role) never trips a not-null actor. Trade-off: logic lives in the DB (less greppable) — mitigated by the migration being the documentation of record.
+- **Byline read-cache:** `set_updated_meta()` BEFORE-UPDATE trigger stamps `updated_at = now()` + `updated_by = auth.uid()` on the collaborative tables, so list-screen bylines read a column instead of querying the log N times.
+
+### Files touched
+- **Schema (shared, `qb_supabase_full_package/sql/`):** `74_activity_events.sql` (table + RLS + indexes), `75_attribution_columns.sql` (denormalized actor columns + `set_updated_meta()`), `76_activity_event_triggers.sql` (`log_activity_event()` + per-table AFTER triggers + benchmark review-cleared BEFORE trigger), `77_backfill_activity_events.sql` (best-effort seed from existing `created_by`/`assessed_by`).
+- **Web:** new `lib/activity.ts` (`loadTeamActivity`, `loadEntityHistory`), `formatActorTime()` (extend existing `relativeTime()`), `<Byline>` component, history modal; **rewrite the faked activity assembly in `lib/dashboard/team-home-data.ts`** to read `activity_events`; bylines on drill/practice/player/benchmark detail.
+- **Mobile:** new `lib/activity.ts` (mirror), `formatActorTime()` in `lib/date.ts` beside `localDateString`, `<Byline>` component, history sheet; bylines on the matching detail screens + a team activity surface.
+
+### Acceptance criteria
+- Every tracked action writes exactly one `activity_events` row with the correct actor (`auth.uid()`), verb, entity, and (where relevant) `subject_player_id` — no double-logging from the client.
+- A drill created by captain A and edited by captain B shows "updated by B · 2d ago" on the card and the full A→B history on tap.
+- A benchmark logged by captain A on player B shows author A (never "B logged it") — the feed-actor bug is gone.
+- Timestamps read relative under 7 days, absolute date at/after 7 days, identically on web and mobile.
+- Feed + bylines both read from `activity_events`; deleting the JS-aggregation path leaves no behavioral regression.
+- RLS: a captain only sees their own team(s)' events (`get_my_team_ids_incl_league`).
+
+### Risks
+- **Trigger invisibility.** Attribution logic lives in the DB; an app dev won't see it by grepping TS. Mitigation: header comment block + this plan entry as the source of record.
+- **Service-role writes.** The AI batch job and any RPC running as definer have `auth.uid() = null` → guarded to skip event creation (don't crash, don't mis-attribute).
+- **Backfill is partial.** Only creation events are reconstructable from `created_by`/`assessed_by`; pre-migration edits/transitions are lost. Acceptable; documented in 77.
+- **Feed growth.** Unbounded log; trivial at MVP scale. Revisit windowing (30–90d) + archival past ~100k rows.
 
 ---
 
@@ -1158,6 +1227,7 @@ These are vertical slices. After each build, the app is shippable in the sense t
 - After Build 12: "Team Skill Radar on the dashboard — first visible payoff of the assessment engine."
 - After Build 13: "Per-player strength/weakness card — Taylor can see what each player is actually good at."
 - After Build 14: "Mobile parity reached; mid-practice quick-rate captures ratings during the live drill."
+- After Build 14.5: "Every coaching action is attributed — who did what, when — on cards and in one team activity feed. The feed stops lying about who logged a benchmark."
 - After Build 15: "Polished, accessible, no rough edges."
 - After Build 16: "Ready to share with the other two teams in the org."
 

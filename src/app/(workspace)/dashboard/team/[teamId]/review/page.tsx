@@ -6,6 +6,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActorNames } from "@/lib/activity";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
@@ -28,6 +29,7 @@ type ReviewRow = {
   created_at: string;
   captured_on: string | null;
   entry_mode: string | null;
+  assessed_by: string | null;
 };
 
 function formatValue(row: ReviewRow): string {
@@ -110,7 +112,7 @@ export default async function ReviewQueuePage({
   const { data: flagged } = await supabase
     .from("benchmark_results")
     .select(
-      "id, drill_id, player_id, benchmark_type, rating, time_seconds, made_count, attempts_count, tags, notes, assessment_date, created_at, captured_on, entry_mode",
+      "id, drill_id, player_id, benchmark_type, rating, time_seconds, made_count, attempts_count, tags, notes, assessment_date, created_at, captured_on, entry_mode, assessed_by",
     )
     .eq("team_id", teamId)
     .eq("needs_review", true)
@@ -144,6 +146,12 @@ export default async function ReviewQueuePage({
   );
   const playerNameById = new Map(
     (playersRes.data ?? []).map((p) => [p.id as string, p.player_name as string]),
+  );
+  // Who logged each flagged assessment (Build 14.5) — surfaces calibration:
+  // you can see which captain rated, including the self-assessment-bias case.
+  const assessorNameById = await resolveActorNames(
+    supabase,
+    rows.map((r) => r.assessed_by),
   );
 
   const teamColor = teamColorHex(team.team_color);
@@ -256,6 +264,9 @@ export default async function ReviewQueuePage({
                     assessmentDate={formatDate(row.assessment_date)}
                     capturedOn={row.captured_on ?? "desktop"}
                     entryMode={row.entry_mode ?? "benchmark"}
+                    assessorName={
+                      row.assessed_by ? assessorNameById.get(row.assessed_by) ?? null : null
+                    }
                     tags={row.tags ?? []}
                     notes={row.notes}
                   />

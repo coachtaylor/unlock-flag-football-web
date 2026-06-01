@@ -80,6 +80,10 @@ export type PracticePlan = {
   status: PlanStatus;
   notes: string | null;
   archived: boolean;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   blocks: PlanBlock[];
   breaks: PlanBreak[];
   attendees: PlanAttendee[];
@@ -227,14 +231,14 @@ export async function fetchPlanFull(
   const planRes = await supabase
     .from("practice_plans")
     .select(
-      "id, team_id, title, practice_date, start_time, end_time, status, notes, archived_at",
+      "id, team_id, title, practice_date, start_time, end_time, status, notes, archived_at, created_by, updated_by, created_at, updated_at",
     )
     .eq("id", planId)
     .maybeSingle();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let plan = planRes.data as Record<string, any> | null;
   if (planRes.error) {
-    // archived_at may not exist yet (pre-migration 70) — retry without it.
+    // archived_at / attribution columns (mig 70 / 75) may not exist yet — retry without them.
     const retry = await supabase
       .from("practice_plans")
       .select(
@@ -348,6 +352,10 @@ export async function fetchPlanFull(
     status: ((plan.status as string) ?? "draft") as PlanStatus,
     notes: (plan.notes as string | null) ?? null,
     archived: !!((plan as { archived_at?: string | null }).archived_at),
+    created_by: (plan.created_by as string | null) ?? null,
+    updated_by: (plan.updated_by as string | null) ?? null,
+    created_at: (plan.created_at as string | null) ?? null,
+    updated_at: (plan.updated_at as string | null) ?? null,
     blocks,
     breaks: (breaksRes.data ?? []).map((br) => ({
       id: br.id as string,

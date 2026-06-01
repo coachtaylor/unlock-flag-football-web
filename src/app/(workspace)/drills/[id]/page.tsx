@@ -6,6 +6,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActorNames } from "@/lib/activity";
+import EntityHistory from "@/components/activity/EntityHistory";
 import { getAccessibleTeamIds } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
 import DiagramRenderer from "@/components/DiagramRenderer";
@@ -88,7 +90,7 @@ export default async function DrillDetailPage({ params }: Props) {
   const { data: drill } = await supabase
     .from("team_drills")
     .select(
-      "id, team_id, drill_name, description, source_url, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by"
+      "id, team_id, drill_name, description, source_url, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by, updated_by"
     )
     .eq("id", id)
     .maybeSingle();
@@ -172,20 +174,14 @@ export default async function DrillDetailPage({ params }: Props) {
   const primarySlug: CatSlug = pickPhaseCat(cats);
   const catColor = WEB_CAT_DEFS[primarySlug]?.color ?? "var(--uff-orange)";
 
-  // Created-by profile lookup
+  // Attribution: creator + last editor (Build 14.5). Shared resolver keeps the
+  // display-name rule identical across the app; editor falls back to creator
+  // when the drill has never been edited.
   const createdById = drill.created_by as string | null;
-  const { data: creatorProfile } = createdById
-    ? await supabase
-        .from("profiles")
-        .select("first_name, last_name")
-        .eq("id", createdById)
-        .maybeSingle()
-    : { data: null as { first_name: string | null; last_name: string | null } | null };
-  const creatorName = creatorProfile
-    ? [creatorProfile.first_name, creatorProfile.last_name]
-        .filter((x): x is string => !!x)
-        .join(" ") || "Coach"
-    : "—";
+  const updatedById = drill.updated_by as string | null;
+  const actorNames = await resolveActorNames(supabase, [createdById, updatedById]);
+  const creatorName = createdById ? actorNames.get(createdById) ?? "Coach" : "—";
+  const editorName = updatedById ? actorNames.get(updatedById) ?? "Coach" : creatorName;
 
   // Recent benchmark results — last 5 for the recent-logs feed; plus a
   // wider 24-row window for the snapshot stats.
@@ -735,6 +731,7 @@ export default async function DrillDetailPage({ params }: Props) {
             <div className="drilldetail-rail">
               <MetaCard
                 creatorName={creatorName}
+                editorName={editorName}
                 createdAt={drill.created_at as string}
                 updatedAt={drill.updated_at as string}
                 sourceHost={sourceHost}
@@ -1000,6 +997,7 @@ function HeroSep() {
 
 function MetaCard({
   creatorName,
+  editorName,
   createdAt,
   updatedAt,
   sourceHost,
@@ -1009,6 +1007,7 @@ function MetaCard({
   drillId,
 }: {
   creatorName: string;
+  editorName: string;
   createdAt: string;
   updatedAt: string;
   sourceHost: string;
@@ -1040,7 +1039,9 @@ function MetaCard({
 
       <KV k="Created by" v={creatorName} />
       <KV k="Created" v={formatShortDate(createdAt)} />
+      <KV k="Updated by" v={editorName} />
       <KV k="Updated" v={formatShortDate(updatedAt)} mono />
+      <KV k="" v={<EntityHistory entityType="drill" entityId={drillId} label="View full history" />} />
       <KV
         k="Source"
         v={

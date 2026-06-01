@@ -9,6 +9,9 @@ import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanFull, interleavePlan, planTotals } from "@/lib/practice/plan-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { resolveActorNames } from "@/lib/activity";
+import Byline from "@/components/activity/Byline";
+import EntityHistory from "@/components/activity/EntityHistory";
 import {
   PracticeStatusPill,
   BudgetBar,
@@ -73,6 +76,11 @@ export default async function PracticeDetailPage({
 
   const t = planTotals(plan);
   const rows = interleavePlan(plan);
+
+  // Attribution byline (Build 14.5): last editor, falling back to creator.
+  const planActors = await resolveActorNames(supabase, [plan.created_by, plan.updated_by]);
+  const planEditorId = plan.updated_by ?? plan.created_by;
+  const planEditorName = planEditorId ? planActors.get(planEditorId) ?? "Coach" : null;
 
   // Build the full roster payload for the manage-attendance card. We want
   // every active player on the team so the modal can flip their status,
@@ -211,6 +219,16 @@ export default async function PracticeDetailPage({
                 >
                   {plan.title}
                 </div>
+                {planEditorName && (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <Byline
+                      who={planEditorName}
+                      verb={plan.updated_by ? "Updated" : "Created"}
+                      at={plan.updated_at ?? plan.created_at}
+                    />
+                    <EntityHistory entityType="practice_plan" entityId={plan.id} label="View full history" />
+                  </div>
+                )}
                 <div
                   style={{
                     marginTop: 14,

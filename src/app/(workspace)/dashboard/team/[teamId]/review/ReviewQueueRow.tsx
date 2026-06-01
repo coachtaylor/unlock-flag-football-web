@@ -15,6 +15,7 @@ type Props = {
   assessmentDate: string;
   capturedOn: string;
   entryMode: string;
+  assessorName?: string | null;
   tags: string[];
   notes: string | null;
 };
@@ -36,6 +37,7 @@ export default function ReviewQueueRow({
   assessmentDate,
   capturedOn,
   entryMode,
+  assessorName,
   tags,
   notes,
 }: Props) {
@@ -110,6 +112,7 @@ export default function ReviewQueueRow({
           >
             {SOURCE_LABEL[entryMode] ?? entryMode} · {capturedOn} ·{" "}
             {assessmentDate}
+            {assessorName ? ` · by ${assessorName}` : ""}
           </p>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>

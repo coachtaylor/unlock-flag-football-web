@@ -5,6 +5,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActorName } from "@/lib/activity";
+import Byline from "@/components/activity/Byline";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { DashIcon, Icon } from "@/components/uff/icons";
@@ -213,7 +215,7 @@ export default async function PlayerDetailPage({
       supabase
         .from("team_players")
         .select(
-          "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at"
+          "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at, created_by"
         )
         .eq("id", playerId)
         .maybeSingle(),
@@ -395,6 +397,11 @@ export default async function PlayerDetailPage({
   const joinedLabel = player.created_at
     ? `Joined ${shortMonth(player.created_at as string)}`
     : "";
+  // Attribution byline (Build 14.5): who added this player.
+  const addedByName = await resolveActorName(
+    supabase,
+    (player.created_by as string | null) ?? null,
+  );
 
   return (
     <div className="uff-web">
@@ -510,6 +517,11 @@ export default async function PlayerDetailPage({
                   >
                     {playerName}
                   </div>
+                  {addedByName && (
+                    <div style={{ marginTop: 4 }}>
+                      <Byline who={addedByName} verb="Added" at={player.created_at as string | null} />
+                    </div>
+                  )}
                 </div>
               </div>
 

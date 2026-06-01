@@ -228,6 +228,7 @@ import { blockColor } from "@/lib/practice/block-colors";
 import { isPrimaryOffense, isPrimaryDefense } from "@/lib/positions";
 import type { SkillGroup } from "@/lib/types/skills";
 import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
+import { loadTeamActivity } from "@/lib/activity";
 
 function initialsOf(name: string) {
   return name
@@ -953,42 +954,22 @@ export async function loadTeamDashboard(
     }
   }
 
-  /* ── Recent activity (benchmarks + practices + drill changes, 7d) ── */
-
-  const sevenDaysAgo = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 7).toISOString();
-  const activity: ActivityRow[] = [];
-  // recent benchmarks
-  for (const b of [...benchmarks].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))) {
-    if (b.created_at < sevenDaysAgo) continue;
-    const p = playerById.get(b.player_id);
-    const drill = pinnedDrills.find((d) => d.id === b.drill_id);
-    const benchType =
-      (b.benchmark_type as PinnedPulse["benchmarkType"] | null) ?? "rated";
-    const v = valueFromBenchmark(b, benchType);
-    activity.push({
-      who: p?.player_name ?? "Coach",
-      verb: "logged",
-      what: `${drill?.drill_name ?? "benchmark"} · ${v != null ? v.toFixed(benchType === "timed" ? 2 : 1) + pulseUnit(benchType) : "—"}`,
-      when: relativeTime(b.created_at),
-      category: categoryKey(drillCats.find((c) => drillCatLinkByDrill.get(b.drill_id)?.includes(c.id))?.category_name),
-      isPr: false,
-    });
-    if (activity.length >= 4) break;
-  }
-  // recent practices
-  for (const p of recentPractices) {
-    if (!p.created_at) continue;
-    if (p.created_at < sevenDaysAgo) continue;
-    if (activity.length >= 6) break;
-    activity.push({
-      who: "Coach",
-      verb: p.status === "completed" ? "logged" : "planned",
-      what: `${p.title ?? "Practice"}${p.status === "completed" ? " · completed" : ""}`,
-      when: relativeTime(p.created_at),
-      category: "offense",
-      isPr: false,
-    });
-  }
+  /* ── Recent activity — from the activity_events log (Build 14.5). ── */
+  // Single source of truth: actor, verb, and object all come from the event
+  // log and are resolved to real names in loadTeamActivity. Replaces the old
+  // per-table assembly that mis-attributed the actor (it showed the assessed
+  // player as "who logged it", and a literal "Coach" for every practice).
+  // Returns [] gracefully if the log isn't populated yet.
+  const activity: ActivityRow[] = (
+    await loadTeamActivity(supabase, teamId, { limit: 8, sinceDays: 7 })
+  ).map((e) => ({
+    who: e.who,
+    verb: e.verbLabel,
+    what: e.what,
+    when: e.when,
+    category: e.category,
+    isPr: false,
+  }));
 
   /* ── Most-run drills ── */
 
@@ -1284,15 +1265,4 @@ export async function loadTeamSkillRadar(
     spokes,
     anyData: spokes.some((s) => s.contributingPlayers > 0),
   };
-}
-
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diffMs / 60000);
-  if (m < 60) return `${Math.max(1, m)}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d === 1) return "Yesterday";
-  return `${d}d ago`;
 }
