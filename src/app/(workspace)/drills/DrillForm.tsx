@@ -849,7 +849,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="08"
                 label="Visibility"
-                hint="Drafts stay hidden from the practice planner. Pinned drills surface on the team dashboard."
+                hint="Drafts stay hidden from the practice planner. Pin to the team dashboard from the preview panel."
               >
                 <div
                   className="fr-seg"
@@ -891,7 +891,6 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                     </button>
                   ))}
                 </div>
-                <PinToggle on={pinned} onChange={setPinned} />
               </Section>
 
               {error && (
@@ -922,6 +921,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                 types={Array.from(benchTypes)}
                 status={status}
                 pinned={pinned}
+                onTogglePinned={() => setPinned((p) => !p)}
               />
               {usesBench && benchTypes.size > 0 && (
                 <CaptureWidgetPreview
@@ -1489,96 +1489,6 @@ function BenchTargetsBlock({
   );
 }
 
-// ── Pin toggle ─────────────────────────────────────────────────────────
-
-function PinToggle({
-  on,
-  onChange,
-}: {
-  on: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!on)}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "12px 14px",
-        background: "var(--uff-surface-2)",
-        border: `1px solid ${on ? "rgba(255,106,26,0.32)" : "var(--uff-line)"}`,
-        borderRadius: 12,
-        cursor: "pointer",
-        fontFamily: "inherit",
-        textAlign: "left",
-        color: "var(--uff-text)",
-      }}
-    >
-      <span
-        style={{
-          width: 22,
-          height: 22,
-          borderRadius: 6,
-          background: on ? "var(--uff-orange)" : "transparent",
-          border: on ? "none" : "1.5px solid var(--uff-line)",
-          display: "grid",
-          placeItems: "center",
-          color: "#0a0a0d",
-          flexShrink: 0,
-        }}
-      >
-        {on && (
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M4 12l5 5L20 6" />
-          </svg>
-        )}
-      </span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600 }}>
-          Pin to team dashboard
-        </div>
-        <div
-          style={{
-            fontSize: 11.5,
-            color: "var(--uff-text)",
-            marginTop: 2,
-          }}
-        >
-          Surfaces this drill in the &ldquo;Pinned pulses&rdquo; widget on
-          every coach&rsquo;s dashboard.
-        </div>
-      </div>
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill={on ? "var(--uff-orange)" : "none"}
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{
-          color: on ? "var(--uff-orange)" : "var(--uff-text)",
-        }}
-      >
-        <path d="M14 4l6 6-4 1-3 6-2-2-5 5-1-1 5-5-2-2 6-3z" />
-      </svg>
-    </button>
-  );
-}
-
 // ── Stepper ────────────────────────────────────────────────────────────
 
 function Stepper({
@@ -1948,6 +1858,7 @@ function DrillFormPreview({
   types,
   status,
   pinned,
+  onTogglePinned,
 }: {
   name: string;
   duration: number;
@@ -1957,6 +1868,7 @@ function DrillFormPreview({
   types: BenchKind[];
   status: "draft" | "published";
   pinned: boolean;
+  onTogglePinned: () => void;
 }) {
   const accent = WEB_CAT_DEFS[primarySlug]?.color ?? "var(--uff-orange)";
   return (
@@ -2088,21 +2000,64 @@ function DrillFormPreview({
           <KVRow
             k="Dashboard"
             v={
-              <span
+              <button
+                type="button"
+                onClick={onTogglePinned}
+                aria-pressed={pinned}
+                className="uff-pin-toggle"
+                title={
+                  pinned
+                    ? "Unpin from the team dashboard"
+                    : "Pin to the team dashboard"
+                }
                 style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: pinned
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  background: pinned
                     ? "var(--uff-orange)"
-                    : "var(--uff-text-mute)",
+                    : "rgba(255,106,26,0.08)",
+                  border: `1px solid ${
+                    pinned ? "var(--uff-orange)" : "rgba(255,106,26,0.45)"
+                  }`,
+                  color: pinned ? "#0a0a0d" : "var(--uff-orange)",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  transition:
+                    "background 120ms ease, border-color 120ms ease, transform 80ms ease",
                 }}
               >
-                {pinned ? "Pinned" : "Not pinned"}
-              </span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill={pinned ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M14 4l6 6-4 1-3 6-2-2-5 5-1-1 5-5-2-2 6-3z" />
+                </svg>
+                {pinned ? "Pinned · tap to remove" : "Pin to dashboard"}
+              </button>
             }
           />
         </div>
       </div>
+      <style>{`
+        .uff-pin-toggle:hover {
+          background: var(--uff-orange) !important;
+          border-color: var(--uff-orange) !important;
+          color: #0a0a0d !important;
+        }
+        .uff-pin-toggle:active { transform: scale(0.96); }
+      `}</style>
     </div>
   );
 }

@@ -22,7 +22,7 @@ import {
 } from "@/components/uff-web/drills/atoms";
 import { loadDrillSkills } from "@/lib/drills/skills-data";
 import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
-import type { SkillGroup } from "@/lib/types/skills";
+import type { SkillGroup, TaggedSkill } from "@/lib/types/skills";
 import DrillsLibraryClient, {
   type DrillRow,
 } from "./DrillsLibraryClient";
@@ -89,7 +89,7 @@ export default async function DrillsPage() {
     supabase
       .from("team_drills")
       .select(
-        "id, team_id, drill_name, status, benchmark_type, benchmark_types, default_duration_min, is_dashboard_pinned, updated_at"
+        "id, team_id, drill_name, description, status, benchmark_type, benchmark_types, default_duration_min, default_reps, is_dashboard_pinned, updated_at"
       )
       .in("team_id", accessibleTeamIds)
       .in("status", ["draft", "published"])
@@ -193,6 +193,16 @@ export default async function DrillsPage() {
     const skillGroups: SkillGroup[] = SKILL_GROUP_META.filter((m) =>
       tagged.some((t) => t.skill_group === m.id)
     ).map((m) => m.id);
+    // Skills for the card chips — primaries first, then by canonical group
+    // order so the chip row reads the same as the preset cards.
+    const groupOrder = new Map(SKILL_GROUP_META.map((m, i) => [m.id, i]));
+    const skills: TaggedSkill[] = [...tagged].sort((a, b) => {
+      if (a.weight !== b.weight) return b.weight - a.weight; // primary (1.0) first
+      return (
+        (groupOrder.get(a.skill_group) ?? 99) -
+        (groupOrder.get(b.skill_group) ?? 99)
+      );
+    });
 
     // Coalesce legacy single benchmark_type into the new array shape. The
     // form is being upgraded in a follow-up; the read path bridges either.
@@ -225,12 +235,15 @@ export default async function DrillsPage() {
     return {
       id: drillId,
       name: d.drill_name as string,
+      description: (d.description as string | null) ?? null,
       status: d.status as DrillStatus,
       cats,
       skillGroups,
+      skills,
       types,
       primaryType,
       duration: (d.default_duration_min as number | null) ?? null,
+      reps: (d.default_reps as number | null) ?? null,
       pinned: !!d.is_dashboard_pinned,
       updatedAt: d.updated_at as string,
       runs,

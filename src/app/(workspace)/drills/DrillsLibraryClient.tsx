@@ -1,8 +1,10 @@
 "use client";
 
-// Drill library — responsive client. Desktop renders a sortable table
-// with a sticky filter rail on the left; mobile collapses to a single-
-// column card stack with the filter chips moved to a horizontal scroller.
+// Drill library — responsive client. Mirrors the preset library
+// (PresetLibraryClient): a counted search toolbar, a sticky filter rail on
+// desktop (md/900px+), and a responsive card grid (1 → 2 → 3 columns) that
+// is identical on mobile and desktop. The old desktop table treatment was
+// retired so the team library and the preset library read as one product.
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,8 +13,6 @@ import {
   BENCH_TYPES,
   BenchChipStack,
   BenchIcon,
-  BenchIconRow,
-  CatPillWeb,
   PHASE_CATS,
   Spark,
   StatusPill,
@@ -22,12 +22,13 @@ import {
   type CatSlug,
   type DrillStatus,
 } from "@/components/uff-web/drills/atoms";
-import { SKILL_GROUP_META, skillGroupMeta } from "@/lib/drills/skill-groups";
-import type { SkillGroup } from "@/lib/types/skills";
+import { SkillChip } from "@/components/uff-web/drills/SkillChip";
+import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
+import type { SkillGroup, TaggedSkill } from "@/lib/types/skills";
 
 // Phase derivation — separate from pickPhaseCat (which falls back to any
-// cat) because the row treatment specifically wants to call out missing
-// phase as a nudge ("+ Add a phase").
+// cat) because the card treatment specifically wants to call out a missing
+// phase via a muted left border.
 function rowPhase(cats: CatSlug[]):
   | { slug: CatSlug; label: string; color: string; missing: false }
   | { slug: null; label: "ADD A PHASE"; color: string; missing: true } {
@@ -51,14 +52,19 @@ function rowPhase(cats: CatSlug[]):
 export type DrillRow = {
   id: string;
   name: string;
+  description: string | null;
   status: DrillStatus;
   cats: CatSlug[];
   // Skill groups the drill develops (from the skill taxonomy), in canonical
   // radar order. Drives the skill-group filter — see DrillsFilterRail.
   skillGroups: SkillGroup[];
+  // The drill's tagged skills (primaries first) — rendered as named chips on
+  // the card, matching the preset library cards.
+  skills: TaggedSkill[];
   types: BenchKind[];
   primaryType: BenchKind | null;
   duration: number | null;
+  reps: number | null;
   pinned: boolean;
   updatedAt: string;
   runs: number;
@@ -66,27 +72,37 @@ export type DrillRow = {
   lastResult: number | null;
   samples: number[];
   trend: number | null;
-  // Which team this drill belongs to. Rendered as a chip on each row when
+  // Which team this drill belongs to. Rendered as a chip on each card when
   // the current user has access to drills from more than one team (league
   // admins, multi-team coaches). The page sets `showTeam` on the client to
-  // toggle the chip; rows always carry the team data so the chip can be
+  // toggle the chip; cards always carry the team data so the chip can be
   // shown without re-fetch.
   team: { id: string; name: string; color: string };
 };
 
-type SortKey =
-  | "name"
-  | "category"
-  | "types"
-  | "status"
-  | "updated"
-  | "last"
-  | "trend";
-
 const DEFAULT_STATUSES: DrillStatus[] = ["published", "draft"];
 
+// Sort axes for the card grid. The table's click-to-sort column heads are
+// gone; these are surfaced through the SortMenu in the toolbar instead.
+type SortKey = "updated" | "name" | "last" | "trend" | "runs";
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "updated", label: "Recently updated" },
+  { key: "name", label: "Name" },
+  { key: "last", label: "Latest result" },
+  { key: "trend", label: "Trend" },
+  { key: "runs", label: "Most runs" },
+];
+// The direction a freshly-selected key defaults to (before any toggle).
+const SORT_DEFAULT_DIR: Record<SortKey, "asc" | "desc"> = {
+  updated: "desc",
+  name: "asc",
+  last: "desc",
+  trend: "desc",
+  runs: "desc",
+};
+
 export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) {
-  // Show a per-row team chip only when the user has drills across more than
+  // Show a per-card team chip only when the user has drills across more than
   // one team. Single-team users (the common case) get a clean list.
   const showTeam = useMemo(
     () => new Set(drills.map((d) => d.team.id)).size > 1,
@@ -133,36 +149,32 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
       xs = xs.filter((d) => d.types.some((t) => activeTypes.has(t)));
     if (statuses.size > 0) xs = xs.filter((d) => statuses.has(d.status));
 
+    // Comparators are written ascending; `dir` flips them for desc. Null
+    // numeric values sort to the bottom regardless of direction so empty
+    // drills never crowd the top.
     const dir = sortDir === "asc" ? 1 : -1;
-    // Null sentinel pushes empty values to the bottom regardless of dir.
-    const nullsLast = (v: number | null) =>
-      v == null ? Number.POSITIVE_INFINITY : v;
+    const cmpNum = (a: number | null, b: number | null) => {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1; // a after b (nulls last) — independent of dir
+      if (b == null) return -1;
+      return (a - b) * dir;
+    };
     xs.sort((a, b) => {
       switch (sortKey) {
         case "name":
           return a.name.localeCompare(b.name) * dir;
-        case "category":
-          return (a.cats[0] ?? "").localeCompare(b.cats[0] ?? "") * dir;
-        case "types":
-          return (a.types.length - b.types.length) * dir;
-        case "status":
-          return a.status.localeCompare(b.status) * dir;
-        case "last": {
-          const av = nullsLast(a.lastResult);
-          const bv = nullsLast(b.lastResult);
-          return (av - bv) * dir;
-        }
-        case "trend": {
-          const av = nullsLast(a.trend);
-          const bv = nullsLast(b.trend);
-          return (av - bv) * dir;
-        }
+        case "last":
+          return cmpNum(a.lastResult, b.lastResult);
+        case "trend":
+          return cmpNum(a.trend, b.trend);
+        case "runs":
+          return (a.runs - b.runs) * dir;
         case "updated":
-        default: {
-          const at = new Date(a.updatedAt).getTime();
-          const bt = new Date(b.updatedAt).getTime();
-          return (bt - at) * dir;
-        }
+        default:
+          return (
+            (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) *
+            dir
+          );
       }
     });
     return xs;
@@ -177,6 +189,15 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
     sortDir,
   ]);
 
+  // Select a sort axis; re-selecting the active axis flips direction.
+  function selectSort(k: SortKey) {
+    if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir(SORT_DEFAULT_DIR[k]);
+    }
+  }
+
   function toggle<T>(set: Set<T>, val: T, setter: (s: Set<T>) => void) {
     const next = new Set(set);
     if (next.has(val)) next.delete(val);
@@ -184,13 +205,12 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
     setter(next);
   }
 
-  function clickSort(k: SortKey) {
-    if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(k);
-      setSortDir(k === "updated" ? "desc" : "asc");
-    }
-  }
+  const clearAll = () => {
+    setActiveCats(new Set());
+    setActiveSkillGroups(new Set());
+    setActiveTypes(new Set());
+    setStatuses(new Set(DEFAULT_STATUSES));
+  };
 
   return (
     <div className="drill-lib">
@@ -198,6 +218,11 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
         search={search}
         setSearch={setSearch}
         searchRef={searchRef}
+        total={drills.length}
+        showing={rows.length}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSelectSort={selectSort}
       />
 
       <div className="drill-lib-grid">
@@ -213,127 +238,300 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
           statuses={statuses}
           onToggleStatus={(v) => toggle(statuses, v, setStatuses)}
           drills={drills}
-          onClear={() => {
-            setActiveCats(new Set());
-            setActiveSkillGroups(new Set());
-            setActiveTypes(new Set());
-            setStatuses(new Set(DEFAULT_STATUSES));
-          }}
+          onClear={clearAll}
         />
 
-        <div className="drill-lib-table-wrap">
-          <DrillsTable
-            rows={rows}
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={clickSort}
-            showTeam={showTeam}
-          />
-        </div>
-
-        <div className="drill-lib-cards-wrap">
-          <DrillsCardList rows={rows} showTeam={showTeam} />
+        <div className="drill-lib-cards">
+          {rows.length === 0 ? (
+            <EmptyState onClear={clearAll} />
+          ) : (
+            <div className="drill-card-grid">
+              {rows.map((d) => (
+                <DrillCard key={d.id} d={d} showTeam={showTeam} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <style>{`
-        .drill-lib {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
+        .drill-lib { display: flex; flex-direction: column; gap: 16px; }
         .drill-lib-grid {
           display: grid;
           grid-template-columns: 1fr;
           gap: 20px;
           align-items: start;
         }
-        /* Show cards by default, table from md+. */
-        .drill-lib-table-wrap { display: none; }
-        .drill-lib-cards-wrap { display: block; }
         @media (min-width: 900px) {
           .drill-lib-grid {
-            grid-template-columns: 188px minmax(0, 1fr);
+            grid-template-columns: 200px minmax(0, 1fr);
           }
-          .drill-lib-table-wrap { display: block; }
-          .drill-lib-cards-wrap { display: none; }
         }
-        .drill-row {
-          transition: background 120ms ease;
+        .drill-card-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 12px;
         }
-        .drill-row:hover {
-          background: color-mix(in srgb, var(--phase) 6%, transparent);
+        @media (min-width: 700px) {
+          .drill-card-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 1240px) {
+          .drill-card-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
+        .drill-card { transition: background 120ms ease, border-color 120ms ease; }
+        .drill-card:hover {
+          background: color-mix(in srgb, var(--phase) 5%, var(--uff-surface-raised, transparent));
         }
       `}</style>
     </div>
   );
 }
 
-// ── Toolbar — search only (benchmark-type filters live in the left rail) ──
+// ── Toolbar — search + sort + showing/total count ──────────────────────
 function DrillsToolbar({
   search,
   setSearch,
   searchRef,
+  total,
+  showing,
+  sortKey,
+  sortDir,
+  onSelectSort,
 }: {
   search: string;
   setSearch: (v: string) => void;
   searchRef: React.MutableRefObject<HTMLInputElement | null>;
+  total: number;
+  showing: number;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSelectSort: (k: SortKey) => void;
 }) {
   return (
     <div
       style={{
-        height: 40,
-        background: "var(--uff-surface)",
-        border: "1px solid var(--uff-line-soft)",
-        borderRadius: 10,
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        padding: "0 12px",
+        gap: 12,
+        flexWrap: "wrap",
       }}
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ color: "var(--uff-text-mute)" }}
-      >
-        <circle cx="11" cy="11" r="7" />
-        <path d="M21 21l-4.3-4.3" />
-      </svg>
-      <input
-        ref={searchRef}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search drills, equipment, cues…"
+      <div
         style={{
           flex: 1,
-          background: "transparent",
-          border: 0,
-          outline: 0,
-          color: "var(--uff-text)",
-          fontFamily: "inherit",
-          fontSize: 13.5,
-        }}
-      />
-      <kbd
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 10.5,
-          background: "rgba(255,255,255,0.05)",
+          minWidth: 240,
+          height: 40,
+          background: "var(--uff-surface)",
           border: "1px solid var(--uff-line-soft)",
-          borderRadius: 4,
-          padding: "1px 5px",
-          color: "var(--uff-text-dim)",
+          borderRadius: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "0 12px",
         }}
       >
-        /
-      </kbd>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: "var(--uff-text-mute)" }}
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.3-4.3" />
+        </svg>
+        <input
+          ref={searchRef}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search drills, equipment, cues…"
+          style={{
+            flex: 1,
+            background: "transparent",
+            border: 0,
+            outline: 0,
+            color: "var(--uff-text)",
+            fontFamily: "inherit",
+            fontSize: 13.5,
+          }}
+        />
+        <kbd
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 10.5,
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid var(--uff-line-soft)",
+            borderRadius: 4,
+            padding: "1px 5px",
+            color: "var(--uff-text-dim)",
+          }}
+        >
+          /
+        </kbd>
+      </div>
+      <SortMenu sortKey={sortKey} sortDir={sortDir} onSelect={onSelectSort} />
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          color: "var(--uff-text-mute)",
+          letterSpacing: ".04em",
+        }}
+      >
+        {showing} / {total}
+      </span>
+    </div>
+  );
+}
+
+// ── Sort menu — card-grid replacement for the table's column-head sort ──
+function SortMenu({
+  sortKey,
+  sortDir,
+  onSelect,
+}: {
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSelect: (k: SortKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const activeLabel =
+    SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
+
+  // Close on outside click / Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          height: 40,
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          padding: "0 12px",
+          background: "var(--uff-surface)",
+          border: "1px solid var(--uff-line-soft)",
+          borderRadius: 10,
+          color: "var(--uff-text-dim)",
+          fontFamily: "inherit",
+          fontSize: 12.5,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: "var(--uff-text-mute)" }}
+        >
+          <path d="M3 6h13M3 12h9M3 18h5" />
+          <path d="M18 9l3 3-3 3" />
+        </svg>
+        <span style={{ color: "var(--uff-text)" }}>{activeLabel}</span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--uff-text-mute)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {sortDir === "asc" ? "↑" : "↓"}
+        </span>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute",
+            top: 46,
+            right: 0,
+            zIndex: 30,
+            minWidth: 200,
+            background: "var(--uff-surface-raised, var(--uff-surface))",
+            border: "1px solid var(--uff-line)",
+            borderRadius: 10,
+            padding: 5,
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
+          }}
+        >
+          {SORT_OPTIONS.map((o) => {
+            const active = o.key === sortKey;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                role="menuitem"
+                onClick={() => onSelect(o.key)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  width: "100%",
+                  padding: "7px 9px",
+                  borderRadius: 6,
+                  background: active ? "rgba(255,106,26,0.10)" : "transparent",
+                  border: 0,
+                  color: active ? "var(--uff-orange)" : "var(--uff-text-dim)",
+                  fontFamily: "inherit",
+                  fontSize: 12.5,
+                  fontWeight: active ? 600 : 500,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <span>{o.label}</span>
+                {active && (
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 12,
+                    }}
+                  >
+                    {sortDir === "asc" ? "↑" : "↓"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -644,169 +842,16 @@ function FilterRow({
   );
 }
 
-// ── Desktop table ──────────────────────────────────────────────────────
-function DrillsTable({
-  rows,
-  sortKey,
-  sortDir,
-  onSort,
-  showTeam,
-}: {
-  rows: DrillRow[];
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onSort: (k: SortKey) => void;
-  showTeam: boolean;
-}) {
-  return (
-    <div className="w-card" style={{ padding: 0, overflow: "hidden" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "minmax(0, 1.7fr) minmax(0, 1.3fr) minmax(0, 0.9fr) 96px 124px",
-          columnGap: 24,
-          gap: 0,
-          padding: "12px 18px",
-          borderBottom: "1px solid var(--uff-line)",
-          background: "rgba(255,255,255,0.015)",
-          alignItems: "center",
-        }}
-      >
-        <SortHead label="Drill" k="name" sortKey={sortKey} sortDir={sortDir} onClick={onSort} />
-        <div style={{ paddingLeft: 16 }}>
-          <SortHead label="Categories" k="category" sortKey={sortKey} sortDir={sortDir} onClick={onSort} />
-        </div>
-        <div style={{ paddingLeft: 16 }}>
-          <SortHead label="Benchmarks" k="types" sortKey={sortKey} sortDir={sortDir} onClick={onSort} />
-        </div>
-        <div style={{ marginLeft: -12 }}>
-          <SortHead label="Latest" k="last" sortKey={sortKey} sortDir={sortDir} onClick={onSort} />
-        </div>
-        <SortHead label="Trend" k="trend" sortKey={sortKey} sortDir={sortDir} onClick={onSort} />
-      </div>
+// ── Helpers ────────────────────────────────────────────────────────────
 
-      {rows.map((d, i) => (
-        <DrillTableRow
-          key={d.id}
-          d={d}
-          last={i === rows.length - 1}
-          showTeam={showTeam}
-        />
-      ))}
-
-      {rows.length === 0 && (
-        <div
-          style={{
-            padding: "32px",
-            textAlign: "center",
-            color: "var(--uff-text-mute)",
-          }}
-        >
-          No drills match the current filters. Try clearing some — or{" "}
-          <Link
-            href="/drills/new"
-            style={{
-              color: "var(--uff-orange)",
-              textDecoration: "none",
-            }}
-          >
-            create a new drill
-          </Link>
-          .
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SortHead({
-  label,
-  k,
-  sortKey,
-  sortDir,
-  onClick,
-  align,
-}: {
-  label: string;
-  k: SortKey;
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onClick: (k: SortKey) => void;
-  align?: "right" | "center";
-}) {
-  const active = sortKey === k;
-  const justify =
-    align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start";
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(k)}
-      style={{
-        display: "flex",
-        width: "100%",
-        alignItems: "center",
-        gap: 5,
-        justifyContent: justify,
-        background: "transparent",
-        border: 0,
-        color: active ? "var(--uff-text)" : "var(--uff-text-mute)",
-        fontFamily: "inherit",
-        fontSize: 8.5,
-        fontWeight: 700,
-        letterSpacing: ".18em",
-        lineHeight: 1.2,
-        textTransform: "uppercase",
-        overflowWrap: "anywhere",
-        wordBreak: "break-word",
-        minWidth: 0,
-        cursor: "pointer",
-        padding: 0,
-        textAlign: align === "right" ? "right" : align === "center" ? "center" : "left",
-      }}
-    >
-      {label}
-      {active && (
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {sortDir === "asc" ? <path d="M6 15l6-6 6 6" /> : <path d="M6 9l6 6 6-6" />}
-        </svg>
-      )}
-    </button>
-  );
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diff = Math.max(0, now - then);
-  const day = 86_400_000;
-  if (diff < day) return "today";
-  const days = Math.floor(diff / day);
-  if (days < 7) return `${days}d`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 4) return `${weeks}w`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo`;
-  return `${Math.floor(days / 365)}y`;
-}
-
-// Subline beneath drill name: duration · runs · last run. Falls back
-// gracefully when fields are missing so brand-new drills don't show "·· ·".
-function drillSubline(d: DrillRow): string {
+// Subline beneath the drill name, mirroring the preset card: category/phase
+// · duration · reps. Missing parts are dropped so brand-new drills don't
+// show stray separators.
+function metaLine(catLabel: string | null, d: DrillRow): string {
   const parts: string[] = [];
+  if (catLabel) parts.push(catLabel);
   if (d.duration) parts.push(`${d.duration}m`);
-  if (d.runs > 0) parts.push(`${d.runs} run${d.runs === 1 ? "" : "s"}`);
-  if (d.lastRunAt) parts.push(`last ${relativeTime(d.lastRunAt)} ago`);
-  if (parts.length === 0) return "no benchmark history";
+  if (d.reps) parts.push(`${d.reps} reps`);
   return parts.join(" · ");
 }
 
@@ -824,11 +869,7 @@ function formatBenchValue(v: number, kind: BenchKind): string {
   }
 }
 
-function TeamChip({
-  team,
-}: {
-  team: { name: string; color: string };
-}) {
+function TeamChip({ team }: { team: { name: string; color: string } }) {
   return (
     <span
       style={{
@@ -863,197 +904,148 @@ function TeamChip({
   );
 }
 
-// Compact skill-group chip — dot + short group label, colored by the
-// taxonomy palette. Mirrors the skill-group treatment on the drill detail
-// page so the list and detail views read as the same product.
-function SkillGroupChip({ group }: { group: SkillGroup }) {
-  const meta = skillGroupMeta(group);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "1px 7px 1px 5px",
-        borderRadius: 4,
-        background: `color-mix(in srgb, ${meta.color} 12%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${meta.color} 38%, transparent)`,
-        fontSize: 10.5,
-        fontWeight: 500,
-        color: "var(--uff-text-dim)",
-        lineHeight: 1.4,
-        flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: 2,
-          background: meta.color,
-          flexShrink: 0,
-        }}
-      />
-      {meta.label}
-    </span>
-  );
-}
-
-function DrillTableRow({
-  d,
-  last,
-  showTeam,
-}: {
-  d: DrillRow;
-  last: boolean;
-  showTeam: boolean;
-}) {
+// ── Drill card ─────────────────────────────────────────────────────────
+// Mirrors the preset library card so the team library and the preset
+// library read as one product: w-card with a phase-colored left border,
+// title + category/duration/reps subline, a description, named skill chips,
+// and a bottom meta row. The bottom row carries the team-drill payload that
+// presets don't have — benchmark types on the left, latest result + trend
+// on the right (presets put their clone action there instead).
+function DrillCard({ d, showTeam }: { d: DrillRow; showTeam: boolean }) {
   const phase = rowPhase(d.cats);
   const primary = d.primaryType ? BENCH_BY_ID[d.primaryType] : null;
+  // Category label for the subline — the phase if tagged, else the first
+  // category, mirroring the single category_type on the preset card.
+  const catSlug = phase.missing ? d.cats[0] ?? null : phase.slug;
+  const catLabel = catSlug ? WEB_CAT_DEFS[catSlug]?.label ?? null : null;
+  const sub = metaLine(catLabel, d);
+
   return (
     <Link
       href={`/drills/${d.id}`}
-      className="drill-row"
+      className="w-card drill-card"
       style={
         {
-          position: "relative",
-          display: "grid",
-          gridTemplateColumns:
-            "minmax(0, 1.7fr) minmax(0, 1.3fr) minmax(0, 0.9fr) 96px 124px",
-          columnGap: 24,
-          gap: 0,
-          padding: "14px 18px",
-          borderBottom: last ? "none" : "1px solid var(--uff-line-soft)",
-          alignItems: "start",
+          padding: "14px 14px 12px",
+          borderLeft: `3px solid ${phase.missing ? "var(--uff-line)" : phase.color}`,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          minHeight: 220,
           textDecoration: "none",
           color: "inherit",
           ["--phase" as string]: phase.missing ? "var(--uff-text)" : phase.color,
         } as React.CSSProperties
       }
     >
-      <span
-        aria-hidden="true"
+      {/* Title row */}
+      <div
         style={{
-          position: "absolute",
-          left: 6,
-          top: 14,
-          bottom: 14,
-          width: 3,
-          borderRadius: 2,
-          background: phase.missing ? "var(--uff-line)" : phase.color,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
         }}
-      />
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 600,
-                  letterSpacing: "-0.01em",
-                  color: "var(--uff-text)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  minWidth: 0,
-                }}
-              >
-                {d.name}
-              </span>
-              {d.pinned && (
-                <span title="Pinned to dashboard" style={{ color: "var(--uff-orange)", flexShrink: 0 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M14 4l6 6-4 1-3 6-2-2-5 5-1-1 5-5-2-2 6-3z" />
-                  </svg>
-                </span>
-              )}
-              {d.status !== "published" && (
-                <span style={{ flexShrink: 0 }}>
-                  <StatusPill status={d.status} />
-                </span>
-              )}
-              {showTeam && <TeamChip team={d.team} />}
-            </div>
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: "var(--uff-text)",
+                letterSpacing: "-0.01em",
+                lineHeight: 1.25,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {d.name}
+            </span>
+            {d.pinned && (
+              <span
+                title="Pinned to dashboard"
+                style={{ color: "var(--uff-orange)", flexShrink: 0 }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 4l6 6-4 1-3 6-2-2-5 5-1-1 5-5-2-2 6-3z" />
+                </svg>
+              </span>
+            )}
+          </div>
+          {sub && (
+            <div
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 10.5,
                 color: "var(--uff-text-mute)",
+                marginTop: 3,
                 letterSpacing: ".04em",
+                textTransform: "uppercase",
               }}
             >
-              {drillSubline(d)}
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            paddingTop: 2,
-            paddingLeft: 16,
-            gap: 5,
-            minWidth: 0,
-          }}
-        >
-          {/* Phase pill(s) — the structural axis. */}
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {d.cats
-              .filter((c) => WEB_CAT_DEFS[c]?.group === "phase")
-              .map((c) => (
-                <CatPillWeb key={c} slug={c} mini />
-              ))}
-          </div>
-          {/* Skill groups — the taxonomy axis (capped at 3 + overflow). */}
-          {d.skillGroups.length > 0 && (
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {d.skillGroups.slice(0, 3).map((g) => (
-                <SkillGroupChip key={g} group={g} />
-              ))}
-              {d.skillGroups.length > 3 && (
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 10,
-                    color: "var(--uff-text-mute)",
-                    alignSelf: "center",
-                  }}
-                >
-                  +{d.skillGroups.length - 3}
-                </span>
-              )}
+              {sub}
             </div>
           )}
         </div>
+        {/* Status pill top-right — only when not published, to keep the
+            common case clean (mirrors the table treatment). */}
+        {d.status !== "published" && (
+          <span style={{ flexShrink: 0 }}>
+            <StatusPill status={d.status} />
+          </span>
+        )}
+      </div>
 
+      {/* Description — 3-line clamp, matching the preset card. */}
+      {d.description && (
         <div
           style={{
-            minWidth: 0,
-            display: "flex",
-            justifyContent: "flex-start",
-            paddingLeft: 16,
+            fontSize: 12.5,
+            color: "var(--uff-text-dim)",
+            lineHeight: 1.45,
+            display: "-webkit-box",
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
           }}
         >
-          <BenchIconRow types={d.types} />
+          {d.description}
         </div>
+      )}
 
-        {/* Last result */}
-        <div style={{ textAlign: "left", marginLeft: -12 }}>
-          {d.lastResult != null && primary && (
+      {/* Named skill chips — primaries highlighted, secondaries muted. */}
+      {d.skills.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {d.skills.map((s) => (
+            <SkillChip key={s.id} skill={s} />
+          ))}
+        </div>
+      )}
+
+      {/* Bottom meta row — benchmark types (+ team chip) left, latest result
+          + trend right. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginTop: "auto",
+          paddingTop: 4,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+          <BenchChipStack types={d.types} max={3} mini />
+          {showTeam && <TeamChip team={d.team} />}
+        </div>
+        {d.lastResult != null && primary && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {d.samples.length >= 2 && (
+              <Spark data={d.samples} color={primary.accent} w={42} h={16} />
+            )}
             <span
               style={{
                 fontFamily: "var(--font-mono)",
@@ -1061,6 +1053,7 @@ function DrillTableRow({
                 fontWeight: 600,
                 color: "var(--uff-text)",
                 letterSpacing: "-0.01em",
+                whiteSpace: "nowrap",
               }}
             >
               {formatBenchValue(d.lastResult, primary.id)}
@@ -1075,151 +1068,60 @@ function DrillTableRow({
                 {primary.unit}
               </span>
             </span>
-          )}
-        </div>
-
-        {/* Trend (sparkline + delta) */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-start",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          {d.samples.length >= 2 && primary && (
-            <>
-              <Spark
-                data={d.samples}
-                color={primary.accent}
-                w={42}
-                h={16}
-              />
+            {d.samples.length >= 2 && (
               <TrendChip delta={d.trend} better={primary.better} mini />
-            </>
-          )}
-        </div>
-
+            )}
+          </div>
+        )}
+      </div>
     </Link>
   );
 }
 
-// ── Mobile card list ───────────────────────────────────────────────────
-function DrillsCardList({
-  rows,
-  showTeam,
-}: {
-  rows: DrillRow[];
-  showTeam: boolean;
-}) {
-  if (rows.length === 0) {
-    return (
-      <div
-        className="w-card"
-        style={{
-          padding: 32,
-          textAlign: "center",
-          color: "var(--uff-text-mute)",
-        }}
-      >
+// ── Empty state ───────────────────────────────────────────────────────
+function EmptyState({ onClear }: { onClear: () => void }) {
+  return (
+    <div
+      className="w-card"
+      style={{
+        padding: 32,
+        textAlign: "center",
+        color: "var(--uff-text-mute)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ fontSize: 14, color: "var(--uff-text-dim)" }}>
         No drills match the current filters.
       </div>
-    );
-  }
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {rows.map((d) => {
-        const phase = rowPhase(d.cats);
-        return (
-        <Link
-          key={d.id}
-          href={`/drills/${d.id}`}
-          className="w-card"
+      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={onClear}
           style={{
-            padding: "14px 14px 14px 13px",
-            textDecoration: "none",
-            color: "inherit",
-            display: "block",
-            borderLeft: `3px solid ${phase.missing ? "var(--uff-line)" : phase.color}`,
+            background: "transparent",
+            border: 0,
+            color: "var(--uff-orange)",
+            fontFamily: "inherit",
+            fontSize: 12,
+            cursor: "pointer",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 12,
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 2,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: "-0.01em",
-                    color: "var(--uff-text)",
-                  }}
-                >
-                  {d.name}
-                </span>
-                {d.pinned && (
-                  <span style={{ color: "var(--uff-orange)" }}>
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M14 4l6 6-4 1-3 6-2-2-5 5-1-1 5-5-2-2 6-3z" />
-                    </svg>
-                  </span>
-                )}
-                {showTeam && <TeamChip team={d.team} />}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 10.5,
-                  color: "var(--uff-text-mute)",
-                }}
-              >
-                {drillSubline(d)}
-              </div>
-            </div>
-            <StatusPill status={d.status} />
-          </div>
-          {(d.cats.some((c) => WEB_CAT_DEFS[c]?.group === "phase") ||
-            d.skillGroups.length > 0) && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 4,
-                marginBottom: 8,
-              }}
-            >
-              {d.cats
-                .filter((c) => WEB_CAT_DEFS[c]?.group === "phase")
-                .map((c) => (
-                  <CatPillWeb key={c} slug={c} mini />
-                ))}
-              {d.skillGroups.map((g) => (
-                <SkillGroupChip key={g} group={g} />
-              ))}
-            </div>
-          )}
-          <BenchChipStack types={d.types} max={6} mini />
+          Clear filters
+        </button>
+        <Link
+          href="/drills/new"
+          style={{
+            color: "var(--uff-orange)",
+            textDecoration: "none",
+            fontSize: 12,
+          }}
+        >
+          Create a new drill →
         </Link>
-        );
-      })}
+      </div>
     </div>
   );
 }
