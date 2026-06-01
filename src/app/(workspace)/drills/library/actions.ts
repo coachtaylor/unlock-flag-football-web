@@ -47,6 +47,29 @@ export async function clonePresetDrill(
 
 export type RemoveCloneResult = { ok: true } | { ok: false; error: string };
 
+// Turn a Postgres FK-violation (23503) on team_drills delete into a friendly,
+// actionable message. The data tables (benchmark_results, practice_plan_drills)
+// keep their no-cascade FKs on purpose, so removing a drill that has real data
+// is blocked — tell the coach why instead of leaking the raw constraint text.
+// Kept in sync verbatim with the mobile copy (unlock-mobile preset-library.ts).
+function friendlyRemoveCloneError(error: {
+  code?: string;
+  message?: string;
+  details?: string;
+}): string {
+  const haystack = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  if (error.code === "23503" || haystack.includes("foreign key")) {
+    if (haystack.includes("benchmark_results")) {
+      return "This drill has benchmark results logged. Archive it instead of removing it from the library.";
+    }
+    if (haystack.includes("practice_plan_drills")) {
+      return "This drill is used in a practice plan. Remove it from the plan first, then remove it from the library.";
+    }
+    return "This drill has linked data and can't be removed from the library.";
+  }
+  return error.message ?? "Couldn't remove the drill.";
+}
+
 // removeClonedDrill: removes this team's clone of a preset from the team
 // library by deleting the team_drills row (the same hard-delete used
 // elsewhere on mobile — matches that behavior so the preset card flips back
@@ -67,7 +90,7 @@ export async function removeClonedDrill(
     .from("team_drills")
     .delete()
     .eq("id", drillId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyRemoveCloneError(error) };
 
   revalidatePath("/drills");
   revalidatePath("/drills/library");
