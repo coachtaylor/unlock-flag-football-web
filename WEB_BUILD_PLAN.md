@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-06-01: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 14.5 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 15, 16 ⏳. (Build 14 mobile-parity epic shipped 14a–14f. Build 14.5 — Coach attribution & activity tracking — shipped on both web + mobile 2026-06-01; the existing Recent Activity feed had mis-attributed the actor, which this corrects.)
+Build status as of 2026-06-01: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 14.5, 15 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 16, 17 ⏳. (Build 15 — drill library card parity + sort + pin-to-preview — shipped on both web + mobile 2026-06-01; the originally-planned polish pass + prod prep slid to 16 + 17.) (Build 14 mobile-parity epic shipped 14a–14f. Build 14.5 — Coach attribution & activity tracking — shipped on both web + mobile 2026-06-01; the existing Recent Activity feed had mis-attributed the actor, which this corrects.)
 
 ---
 
@@ -1135,7 +1135,24 @@ On a multi-captain team (3 captains), every meaningful coaching action records *
 
 ---
 
-## Build 15 — Polish pass ⏳
+## Build 15 — Drill library card parity ✅
+
+### Shipped (2026-06-01)
+A consistency pass so the team drill library reads like the preset library, plus a richer sort and a cleaner pin affordance. Branch `build-15-drill-library-cards` on both repos (web `8f4a5cc`, mobile `36f22cf`).
+
+- **Drills list → preset-style cards.** Web `/drills` retired the desktop table; mobile `app/(tabs)/drills` retired the table rows (section headers + scoreboard hero kept). Both now render the same card as the preset library: phase/skill accent stripe, title + Draft/Bench badges, `category·duration·reps` (web) / `duration·reps` (mobile) meta line, 3-line description, and named skill chips.
+- **Same info as preset cards.** Data layer now fetches `description` + `default_reps` and the full tagged skills (primaries first) per drill. (`formats` / `primary_for_positions` are preset-only — never cloned to `team_drills` — so those pills have no team-drill data and are omitted.)
+- **Sort control.** Web = toolbar SortMenu; mobile = sort sheet. Axes: Recently updated (default) · Name (A–Z) · Recently added · Latest result · Trend · Most runs. Numeric sorts push nulls last. Both apps load `benchmark_results` and aggregate runs / latest / trend for the primary type (mirrors `resultValue`); the card surfaces a latest-value + colored trend stat so the benchmark sorts back visible data.
+- **Pin to dashboard (web).** Removed the standalone toggle in the drill edit form; the right-rail preview's "Dashboard" row is now an obvious clickable pin control (orange accent + hover). Mobile already had this as a prominent action on the drill *detail* screen (`PinToDashboardRow`), so no mobile change was needed.
+- **DRY.** Extracted `SkillChip` into a shared component in each repo (web `components/uff-web/drills/SkillChip.tsx`, mobile `components/ui/SkillChip.tsx`), consumed by both the team library and the preset library; deleted the duplicate + web's dead `SkillGroupChip`.
+
+### Notes / known divergences
+- Web drill cards drop the old table's click-to-sort column heads (cards have none); the SortMenu replaces them. Category/type/status are filter-rail concerns, not sort axes.
+- Mobile keeps the phase sections + scoreboard hero — only the row rendering changed to cards.
+
+---
+
+## Build 16 — Polish pass ⏳
 
 ### Goal
 A focused pass through the whole app to clean up loose ends, fix small visual bugs introduced during the responsive work, and tighten interactions.
@@ -1172,7 +1189,7 @@ A focused pass through the whole app to clean up loose ends, fix small visual bu
 
 ---
 
-## Build 16 — Production prep ⏳
+## Build 17 — Production prep ⏳
 
 ### Goal
 Get the app ready to actually share with users beyond just Taylor.
@@ -1228,8 +1245,9 @@ These are vertical slices. After each build, the app is shippable in the sense t
 - After Build 13: "Per-player strength/weakness card — Taylor can see what each player is actually good at."
 - After Build 14: "Mobile parity reached; mid-practice quick-rate captures ratings during the live drill."
 - After Build 14.5: "Every coaching action is attributed — who did what, when — on cards and in one team activity feed. The feed stops lying about who logged a benchmark."
-- After Build 15: "Polished, accessible, no rough edges."
-- After Build 16: "Ready to share with the other two teams in the org."
+- After Build 15: "The team drill library reads like the preset library — rich cards, real sort, cleaner pin. Web + mobile in lockstep."
+- After Build 16: "Polished, accessible, no rough edges."
+- After Build 17: "Ready to share with the other two teams in the org."
 
 ## What's NOT in this plan (and where it lives)
 
