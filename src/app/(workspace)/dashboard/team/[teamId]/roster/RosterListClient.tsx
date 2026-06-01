@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/uff/icons";
 import { playerColorForIndex } from "@/components/uff/team-colors";
+import { initialsFor } from "@/lib/format/initials";
 import InjuryModal from "@/components/roster/InjuryModal";
 
 export type RosterPlayer = {
@@ -31,13 +32,6 @@ export type RosterPlayer = {
 type StatusFilter = "all" | "active" | "inactive" | "injured";
 
 const POSITION_OPTIONS = ["QB", "WR", "RB", "CB", "S", "LB", "C"];
-
-function initialsFor(name: string) {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase() || "?";
-}
 
 export default function RosterListClient({
   teamId,

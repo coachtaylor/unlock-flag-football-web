@@ -11,6 +11,9 @@ import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import RosterListClient, { type RosterPlayer } from "./RosterListClient";
+import CoachingStaffTable, { type StaffMember } from "./CoachingStaffTable";
+import SectionLabel from "./SectionLabel";
+import { STAFF_ROLES, type StaffRole } from "@/lib/team/staff-roles";
 
 type BenchmarkJoin = {
   player_id: string;
@@ -104,13 +107,22 @@ export default async function TeamRosterPage({
   }
   if (!canView) notFound();
 
+  // Captains surface above regular players (then alphabetical within each
+  // group). The new roster stacks coaches → captains → players.
   const { data: players } = await supabase
     .from("team_players")
     .select(
       "id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes"
     )
     .eq("team_id", teamId)
+    .order("is_captain", { ascending: false })
     .order("player_name", { ascending: true });
+
+  // Coaching staff (head/assistant coaches + managers) for the top table.
+  // Names come from a SECURITY DEFINER RPC because profiles RLS is self-only.
+  const { data: staffRows } = await supabase.rpc("get_team_staff", {
+    p_team_id: teamId,
+  });
 
   const playerIds = (players ?? []).map((p) => p.id as string);
   const recentByPlayer = new Map<string, BenchmarkJoin>();
@@ -157,6 +169,43 @@ export default async function TeamRosterPage({
     };
   });
 
+  // Shape staff rows. The RPC already filters to staff roles and orders
+  // head → assistant → manager; we resolve a display name and the "you" flag.
+  type StaffRpcRow = {
+    member_id: string;
+    user_id: string;
+    role: string;
+    coach_specialties: string[] | null;
+    first_name: string | null;
+    last_name: string | null;
+  };
+  const staff: StaffMember[] = ((staffRows as StaffRpcRow[] | null) ?? [])
+    .filter((r): r is StaffRpcRow & { role: StaffRole } =>
+      (STAFF_ROLES as string[]).includes(r.role)
+    )
+    .map((r) => {
+      const name =
+        [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Coach";
+      return {
+        memberId: r.member_id,
+        userId: r.user_id,
+        name,
+        role: r.role,
+        specialties: r.coach_specialties ?? [],
+        isYou: r.user_id === user.id,
+      };
+    });
+
+  const captainCount = rosterPlayers.filter((p) => p.isCaptain).length;
+  const playerNote = [
+    captainCount > 0
+      ? `${captainCount} ${captainCount === 1 ? "captain" : "captains"}`
+      : null,
+    `${rosterPlayers.length} ${rosterPlayers.length === 1 ? "player" : "players"}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const teamColor = teamColorHex(team.team_color);
   const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const initials =
@@ -194,11 +243,16 @@ export default async function TeamRosterPage({
           className="page"
           style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}
         >
-          <RosterListClient
-            teamId={teamId}
-            teamName={team.team_name}
-            players={rosterPlayers}
-          />
+          <CoachingStaffTable staff={staff} />
+
+          <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <SectionLabel label="Players" note={playerNote || undefined} />
+            <RosterListClient
+              teamId={teamId}
+              teamName={team.team_name}
+              players={rosterPlayers}
+            />
+          </section>
         </div>
       </div>
     </div>
