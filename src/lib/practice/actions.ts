@@ -8,7 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { fetchPlanFull } from "./plan-data";
+import { fetchPlanFull, DEFAULT_PLAN_TITLE } from "./plan-data";
 
 export type SaveBlockInput = {
   template_id?: string | null;
@@ -98,7 +98,7 @@ export async function createPlanDraft(teamId: string): Promise<string> {
       team_id: teamId,
       created_by: user.id,
       practice_date: iso,
-      title: "Untitled practice plan",
+      title: DEFAULT_PLAN_TITLE,
       status: "draft",
     })
     .select("id")

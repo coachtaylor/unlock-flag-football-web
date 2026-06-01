@@ -9,6 +9,7 @@
 // plain confirm (still a deliberate two-step action, just no typing gate).
 
 import { useEffect, useState } from "react";
+import { isUntitledPlanTitle } from "@/lib/practice/plan-data";
 
 export default function DeletePlanModal({
   open,
@@ -34,7 +35,9 @@ export default function DeletePlanModal({
   }, [open]);
 
   if (!open) return null;
-  const hasTitle = !!title && title.trim().length > 0;
+  // A real, user-given name requires typing to confirm; placeholder/blank
+  // titles fall back to a plain confirm.
+  const hasTitle = !isUntitledPlanTitle(title);
   const matches = !hasTitle || value === title;
 
   return (
