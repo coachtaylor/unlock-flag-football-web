@@ -6,7 +6,7 @@
 // sheet pair. Save goes through replace_practice_plan_blocks via the
 // server action.
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type {
@@ -131,6 +131,27 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
   const [drillPickerBlock, setDrillPickerBlock] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // "Browse presets" from the drill picker opens the preset library in a NEW
+  // TAB — the editor has no autosave, so a same-tab navigation would drop
+  // unsaved block/drill edits. When the user returns to this tab we refresh
+  // the server data so any presets they just added show up in the catalog;
+  // router.refresh() preserves this client component's in-progress state.
+  const presetRefreshArmedRef = useRef(false);
+  const browsePresets = useCallback(() => {
+    presetRefreshArmedRef.current = true;
+    window.open("/drills/library", "_blank", "noopener,noreferrer");
+  }, []);
+  useEffect(() => {
+    function onFocus() {
+      if (presetRefreshArmedRef.current) {
+        presetRefreshArmedRef.current = false;
+        router.refresh();
+      }
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [router]);
 
   // Derived totals — recompute on every mutation
   const projection = useMemo((): PracticePlan => {
@@ -574,6 +595,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       {sheet === "drills" && drillPickerBlock && (
         <DrillPickerSheet
           catalog={drillCatalog}
+          onBrowsePresets={browsePresets}
           onClose={() => {
             setSheet("none");
             setDrillPickerBlock(null);
@@ -1937,10 +1959,12 @@ function BlockLibrarySheet({
 
 function DrillPickerSheet({
   catalog,
+  onBrowsePresets,
   onClose,
   onPick,
 }: {
   catalog: DrillCatalogEntry[];
+  onBrowsePresets?: () => void;
   onClose: () => void;
   onPick: (d: DrillCatalogEntry) => void;
 }) {
@@ -1952,7 +1976,11 @@ function DrillPickerSheet({
   );
   return (
     <SheetShell width={560} anchor="right" onClose={onClose}>
-      <SheetHeader title="Add a drill" subtitle="Pick from your team library." onClose={onClose} />
+      <SheetHeader
+        title="Add a drill"
+        subtitle="Pick from your team library, or browse curated presets."
+        onClose={onClose}
+      />
       <div style={{ padding: "14px 20px", flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
         <div
           style={{
@@ -1982,6 +2010,29 @@ function DrillPickerSheet({
             placeholder="Search drills…"
           />
         </div>
+        {onBrowsePresets && (
+          <button
+            type="button"
+            onClick={onBrowsePresets}
+            style={{
+              padding: "11px 14px",
+              border: "1px dashed var(--uff-line)",
+              borderRadius: 10,
+              background: "transparent",
+              color: "var(--uff-orange)",
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <PIcon.template size={14} /> Browse preset library
+          </button>
+        )}
         {filtered.length === 0 && (
           <div style={{ fontSize: 12, color: "var(--uff-text-mute)", textAlign: "center", padding: "20px 0" }}>
             No drills match.
