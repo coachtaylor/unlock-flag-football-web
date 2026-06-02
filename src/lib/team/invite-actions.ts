@@ -19,6 +19,8 @@ export async function createInvite(input: {
   specialties?: string[];
   label?: string | null;
   expiresInDays?: number | null;
+  /** Link the invite to an existing player row (captain access invites). */
+  playerId?: string | null;
 }): Promise<CreateResult> {
   const supabase = await createClient();
   const {
@@ -39,6 +41,7 @@ export async function createInvite(input: {
     p_specialties: input.role === "assistant_coach" ? input.specialties ?? [] : [],
     p_label: input.label ?? null,
     p_expires_at: expiresAt,
+    p_player_id: input.playerId ?? null,
   });
 
   if (error) return { ok: false, error: error.message };

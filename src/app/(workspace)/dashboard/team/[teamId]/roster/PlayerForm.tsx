@@ -13,6 +13,7 @@ import { Icon } from "@/components/uff/icons";
 
 import { POSITION_IDS } from "@/lib/positions";
 import { fullName, capitalizeName } from "@/lib/format/name";
+import CaptainInvitePrompt from "./CaptainInvitePrompt";
 
 const POSITION_OPTIONS = POSITION_IDS;
 
@@ -57,6 +58,13 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // After saving a captain with full/view access, prompt to generate an
+  // access invite linked to their player row.
+  const [invitePrompt, setInvitePrompt] = useState<{
+    playerId: string;
+    access: "full" | "view";
+    destination: string;
+  } | null>(null);
 
   function togglePosition(pos: string) {
     setPositions((prev) =>
@@ -104,6 +112,9 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
       captain_access: isCaptain ? captainAccess : null,
     };
 
+    let savedId: string;
+    let destination: string;
+
     if (isEditing && initial) {
       const { error: updateErr } = await supabase
         .from("team_players")
@@ -114,20 +125,33 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
         setSubmitting(false);
         return;
       }
-      router.push(`${rosterBasePath}/${initial.id}`);
-      router.refresh();
+      savedId = initial.id;
+      destination = `${rosterBasePath}/${initial.id}`;
     } else {
-      const { error: insertErr } = await supabase
+      const { data: inserted, error: insertErr } = await supabase
         .from("team_players")
-        .insert({ ...payload, status: "active" });
-      if (insertErr) {
-        setError(insertErr.message);
+        .insert({ ...payload, status: "active" })
+        .select("id")
+        .single();
+      if (insertErr || !inserted) {
+        setError(insertErr?.message ?? "Couldn't add player.");
         setSubmitting(false);
         return;
       }
-      router.push(rosterBasePath);
-      router.refresh();
+      savedId = inserted.id as string;
+      destination = rosterBasePath;
     }
+
+    // A captain with full/view access needs a login → offer an invite linked
+    // to this player row before leaving the form.
+    if (isCaptain && (captainAccess === "full" || captainAccess === "view")) {
+      setInvitePrompt({ playerId: savedId, access: captainAccess, destination });
+      setSubmitting(false);
+      return;
+    }
+
+    router.push(destination);
+    router.refresh();
   }
 
   const backHref =
@@ -412,6 +436,21 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
           </button>
         </div>
       </form>
+
+      {invitePrompt && (
+        <CaptainInvitePrompt
+          teamId={teamId}
+          playerId={invitePrompt.playerId}
+          playerName={fullName(firstName, lastName)}
+          access={invitePrompt.access}
+          onClose={() => {
+            const dest = invitePrompt.destination;
+            setInvitePrompt(null);
+            router.push(dest);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
