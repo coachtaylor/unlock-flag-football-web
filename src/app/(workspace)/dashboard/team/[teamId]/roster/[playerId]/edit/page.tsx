@@ -39,7 +39,7 @@ export default async function EditPlayerPage({
       supabase
         .from("team_players")
         .select(
-          "id, team_id, player_name, positions, jersey_number, notes, is_captain"
+          "id, team_id, player_name, positions, jersey_number, notes, is_captain, captain_access"
         )
         .eq("id", playerId)
         .maybeSingle(),
@@ -103,6 +103,8 @@ export default async function EditPlayerPage({
               jerseyNumber: (player.jersey_number as string | null) ?? "",
               notes: (player.notes as string | null) ?? "",
               isCaptain: (player.is_captain as boolean) ?? false,
+              captainAccess:
+                (player.captain_access as "full" | "view" | "none" | null) ?? null,
             }}
           />
         </div>

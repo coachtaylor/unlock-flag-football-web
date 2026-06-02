@@ -10,19 +10,19 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/uff/icons";
 import { createInvite } from "@/lib/team/invite-actions";
 import {
-  INVITE_ROLES,
-  inviteRoleLabel,
-  inviteRoleHint,
-  inviteRoleAccessLabel,
+  STAFF_ROLES,
+  STAFF_ROLE_META,
   SPECIALTY_LABELS,
   type InviteRole,
 } from "@/lib/team/staff-roles";
 
-const ROLE_OPTIONS = INVITE_ROLES.map((id) => ({
-  id,
-  label: inviteRoleLabel(id),
-  hint: inviteRoleHint(id),
-  access: inviteRoleAccessLabel(id),
+// Invites cover coaching staff only — captains are added through the player
+// flow (with their own permission tier), not invited as a role here.
+const ROLE_OPTIONS = STAFF_ROLES.map((id) => ({
+  id: id as InviteRole,
+  label: STAFF_ROLE_META[id].label,
+  hint: STAFF_ROLE_META[id].hint,
+  access: STAFF_ROLE_META[id].accessLabel,
 }));
 
 const EXPIRY_OPTIONS: { label: string; days: number | null }[] = [

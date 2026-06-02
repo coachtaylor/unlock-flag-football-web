@@ -15,6 +15,14 @@ import { POSITION_IDS } from "@/lib/positions";
 
 const POSITION_OPTIONS = POSITION_IDS;
 
+export type CaptainAccess = "full" | "view" | "none";
+
+const CAPTAIN_ACCESS_OPTIONS: { id: CaptainAccess; label: string; hint: string }[] = [
+  { id: "full", label: "Full access", hint: "Plan practices, log benchmarks, edit the roster." },
+  { id: "view", label: "View only", hint: "Can see everything, can't make changes." },
+  { id: "none", label: "No access", hint: "A captain in name only — no app login." },
+];
+
 export type PlayerFormInitial = {
   id: string;
   playerName: string;
@@ -22,6 +30,7 @@ export type PlayerFormInitial = {
   jerseyNumber: string;
   notes: string;
   isCaptain: boolean;
+  captainAccess: CaptainAccess | null;
 };
 
 type Props = {
@@ -39,6 +48,9 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
   const [jerseyNumber, setJerseyNumber] = useState(initial?.jerseyNumber ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [isCaptain, setIsCaptain] = useState(initial?.isCaptain ?? false);
+  const [captainAccess, setCaptainAccess] = useState<CaptainAccess>(
+    initial?.captainAccess ?? "full"
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -79,6 +91,8 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
       jersey_number: jerseyNumber.trim() || null,
       notes: notes.trim() || null,
       is_captain: isCaptain,
+      // Permission tier only applies to captains; cleared otherwise.
+      captain_access: isCaptain ? captainAccess : null,
     };
 
     if (isEditing && initial) {
@@ -250,8 +264,78 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
             checked={isCaptain}
             onChange={setIsCaptain}
             label="Captain"
-            description="Captains can plan practices and log benchmarks."
+            description="Player-leader. Badged on the roster; choose their app access below."
           />
+
+          {isCaptain && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--uff-text-mute)",
+                }}
+              >
+                Captain access
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {CAPTAIN_ACCESS_OPTIONS.map((opt) => {
+                  const on = captainAccess === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCaptainAccess(opt.id)}
+                      aria-pressed={on}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        textAlign: "left",
+                        padding: "9px 12px",
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        background: on
+                          ? "color-mix(in srgb, var(--uff-orange) 10%, transparent)"
+                          : "var(--uff-surface-2)",
+                        border: on
+                          ? "1px solid var(--uff-orange)"
+                          : "1px solid var(--uff-line-soft)",
+                        color: "inherit",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          flexShrink: 0,
+                          border: on
+                            ? "5px solid var(--uff-orange)"
+                            : "2px solid var(--uff-text-mute)",
+                          background: on ? "var(--uff-bg-1)" : "transparent",
+                        }}
+                      />
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--uff-text)" }}>
+                          {opt.label}
+                        </span>
+                        <span style={{ display: "block", fontSize: 11.5, color: "var(--uff-text-mute)", marginTop: 2 }}>
+                          {opt.hint}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ margin: 0, fontSize: 11.5, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
+                Full or view access requires the captain to have an account —
+                send them an invite from the roster to set up their login.
+              </p>
+            </div>
+          )}
         </Section>
 
         <Section title="Notes" subtitle="Optional, private to your team.">
