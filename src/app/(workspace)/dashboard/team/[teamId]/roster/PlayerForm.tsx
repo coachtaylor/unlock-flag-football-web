@@ -280,7 +280,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
               >
                 Captain access
               </span>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {CAPTAIN_ACCESS_OPTIONS.map((opt) => {
                   const on = captainAccess === opt.id;
                   return (
@@ -290,11 +290,13 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
                       onClick={() => setCaptainAccess(opt.id)}
                       aria-pressed={on}
                       style={{
+                        flex: "1 1 0",
+                        minWidth: 130,
                         display: "flex",
-                        alignItems: "center",
-                        gap: 10,
+                        flexDirection: "column",
+                        gap: 4,
                         textAlign: "left",
-                        padding: "9px 12px",
+                        padding: "11px 12px",
                         borderRadius: 10,
                         cursor: "pointer",
                         background: on
@@ -308,23 +310,15 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
                     >
                       <span
                         style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: "50%",
-                          flexShrink: 0,
-                          border: on
-                            ? "5px solid var(--uff-orange)"
-                            : "2px solid var(--uff-text-mute)",
-                          background: on ? "var(--uff-bg-1)" : "transparent",
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          color: on ? "var(--uff-orange)" : "var(--uff-text)",
                         }}
-                      />
-                      <span style={{ minWidth: 0 }}>
-                        <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--uff-text)" }}>
-                          {opt.label}
-                        </span>
-                        <span style={{ display: "block", fontSize: 11.5, color: "var(--uff-text-mute)", marginTop: 2 }}>
-                          {opt.hint}
-                        </span>
+                      >
+                        {opt.label}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: "var(--uff-text-mute)", lineHeight: 1.4 }}>
+                        {opt.hint}
                       </span>
                     </button>
                   );
