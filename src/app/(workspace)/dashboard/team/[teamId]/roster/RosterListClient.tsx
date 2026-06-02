@@ -253,10 +253,10 @@ export default function RosterListClient({
           style={{ padding: 0, overflow: "hidden" }}
         >
           <div className="roster-row-grid roster-head">
+            <span style={{ textAlign: "center" }}>#</span>
             <span />
             <span>Player</span>
             <span>Positions</span>
-            <span style={{ textAlign: "center" }}>#</span>
             <span>Status</span>
             <span>Last benchmark</span>
             <span />
@@ -292,7 +292,7 @@ export default function RosterListClient({
       <style>{`
         .roster-row-grid {
           display: grid;
-          grid-template-columns: 44px 1.6fr 1.4fr 60px 110px 1.8fr 44px;
+          grid-template-columns: 52px 44px 1.6fr 1.4fr 110px 1.8fr 44px;
           align-items: center;
           gap: 14px;
           padding: 12px 18px;
@@ -351,6 +351,18 @@ function RosterRow({
 
   return (
     <Link href={href} className={`roster-row roster-row-grid ${stripe ? "stripe" : ""}`}>
+      <span
+        style={{
+          textAlign: "center",
+          fontFamily: "var(--font-mono)",
+          fontSize: 14,
+          fontWeight: 700,
+          color: p.jerseyNumber ? "var(--uff-text-dim)" : "var(--uff-text-mute)",
+        }}
+      >
+        {p.jerseyNumber ? `#${p.jerseyNumber}` : "—"}
+      </span>
+
       <Avatar player={p} size={32} fontSize={11} />
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -380,18 +392,6 @@ function RosterRow({
           <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>—</span>
         )}
       </div>
-
-      <span
-        style={{
-          textAlign: "center",
-          fontFamily: "var(--font-mono)",
-          fontSize: 14,
-          fontWeight: 700,
-          color: p.jerseyNumber ? "var(--uff-text-dim)" : "var(--uff-text-mute)",
-        }}
-      >
-        {p.jerseyNumber ? `#${p.jerseyNumber}` : "—"}
-      </span>
 
       <StatusPill
         status={p.status}
