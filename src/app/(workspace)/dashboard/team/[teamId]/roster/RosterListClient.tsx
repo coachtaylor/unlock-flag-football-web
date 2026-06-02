@@ -21,6 +21,7 @@ export type RosterPlayer = {
   isInjured: boolean;
   injuryNote: string | null;
   colorIndex: number;
+  attendancePct: number | null;
   lastBench: {
     drillName: string;
     benchmarkType: string | null;
@@ -263,6 +264,7 @@ export default function RosterListClient({
             </span>
             <span>Positions</span>
             <span>Status</span>
+            <span>Attendance</span>
             <span>Last benchmark</span>
             <span />
           </div>
@@ -298,10 +300,10 @@ export default function RosterListClient({
         .roster-row-grid {
           display: grid;
           /* Identity (# + avatar + name) is ONE cell with tight internal
-             spacing — the only visually-close group. The remaining columns
-             share even fluid widths; Status is max-content so the pill
-             defines its own width instead of reserving a fixed column. */
-          grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) max-content minmax(0, 1.2fr) 28px;
+             spacing — the only visually-close group. The four data columns
+             (positions / status / attendance / last benchmark) get equal
+             widths so they read as evenly spaced. */
+          grid-template-columns: minmax(0, 1.4fr) 1fr 1fr 1fr 1fr 28px;
           align-items: center;
           gap: 24px;
           padding: 12px 18px;
@@ -418,6 +420,8 @@ function RosterRow({
         injured={p.isInjured}
         onToggle={canManage ? handleToggleInjury : undefined}
       />
+
+      <AttendanceCell pct={p.attendancePct} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         {p.lastBench ? (
@@ -634,6 +638,51 @@ function StatusPill({
       />
       {label}
     </button>
+  );
+}
+
+function AttendanceCell({ pct }: { pct: number | null }) {
+  if (pct == null) {
+    return (
+      <span style={{ fontSize: 11.5, color: "var(--uff-text-mute)", fontStyle: "italic" }}>
+        No practices yet
+      </span>
+    );
+  }
+  // Green good / neutral mid / red low — same positive/negative signal
+  // language as the status pill.
+  const color =
+    pct >= 75 ? "var(--uff-lime)" : pct >= 50 ? "var(--uff-text-dim)" : "var(--uff-red)";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, maxWidth: 96 }}>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 13,
+          fontWeight: 700,
+          color,
+        }}
+      >
+        {pct}%
+      </span>
+      <div
+        style={{
+          height: 4,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.08)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${pct}%`,
+            height: "100%",
+            borderRadius: 999,
+            background: color,
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

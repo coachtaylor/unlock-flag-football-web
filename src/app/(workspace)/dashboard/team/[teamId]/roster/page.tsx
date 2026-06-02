@@ -180,6 +180,31 @@ export default async function TeamRosterPage({
     }
   }
 
+  // Attendance %: a player's attended count over the team's completed
+  // practices (mirrors the dashboard's attended===true definition). Null
+  // until the team has logged at least one completed practice.
+  const { data: completedPlans } = await supabase
+    .from("practice_plans")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("status", "completed");
+  const totalCompleted = (completedPlans ?? []).length;
+  const attendedByPlayer = new Map<string, number>();
+  if (totalCompleted > 0 && playerIds.length > 0) {
+    const { data: att } = await supabase
+      .from("practice_plan_attendees")
+      .select("player_id, attended, practice_plan_id")
+      .in(
+        "practice_plan_id",
+        (completedPlans ?? []).map((p) => p.id as string)
+      )
+      .eq("attended", true);
+    for (const r of att ?? []) {
+      const pid = r.player_id as string;
+      attendedByPlayer.set(pid, (attendedByPlayer.get(pid) ?? 0) + 1);
+    }
+  }
+
   const rosterPlayers: RosterPlayer[] = (players ?? []).map((p) => {
     const bench = recentByPlayer.get(p.id as string);
     const drillJoin = bench?.team_drills;
@@ -203,6 +228,12 @@ export default async function TeamRosterPage({
       isInjured: (p.is_injured as boolean) ?? false,
       injuryNote: (p.injury_note as string | null) ?? null,
       colorIndex: (p.color_index as number) ?? 0,
+      attendancePct:
+        totalCompleted > 0
+          ? Math.round(
+              ((attendedByPlayer.get(p.id as string) ?? 0) / totalCompleted) * 100
+            )
+          : null,
       lastBench,
     };
   });
