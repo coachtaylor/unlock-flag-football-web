@@ -253,9 +253,14 @@ export default function RosterListClient({
           style={{ padding: 0, overflow: "hidden" }}
         >
           <div className="roster-row-grid roster-head">
-            <span style={{ textAlign: "center" }}>#</span>
-            <span />
-            <span>Player</span>
+            <span className="roster-identity">
+              <span className="roster-jersey" style={{ fontWeight: 700 }}>
+                #
+              </span>
+              {/* spacer matching the row avatar so "Player" sits over names */}
+              <span style={{ width: 32, flexShrink: 0 }} />
+              <span>Player</span>
+            </span>
             <span>Positions</span>
             <span>Status</span>
             <span>Last benchmark</span>
@@ -292,10 +297,29 @@ export default function RosterListClient({
       <style>{`
         .roster-row-grid {
           display: grid;
-          grid-template-columns: 52px 44px 1.6fr 1.4fr 110px 1.8fr 44px;
+          /* Identity (# + avatar + name) is ONE cell with tight internal
+             spacing — the only visually-close group. The remaining columns
+             share even fluid widths; Status is max-content so the pill
+             defines its own width instead of reserving a fixed column. */
+          grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) max-content minmax(0, 1.2fr) 28px;
           align-items: center;
-          gap: 14px;
+          gap: 24px;
           padding: 12px 18px;
+        }
+        /* Tight internal rhythm for the identity cluster (#, avatar, name). */
+        .roster-identity {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          min-width: 0;
+        }
+        .roster-jersey {
+          width: 30px;
+          text-align: center;
+          flex-shrink: 0;
+          font-family: var(--font-mono);
+          font-size: 14px;
+          font-weight: 700;
         }
         .roster-head {
           padding: 10px 18px;
@@ -351,21 +375,17 @@ function RosterRow({
 
   return (
     <Link href={href} className={`roster-row roster-row-grid ${stripe ? "stripe" : ""}`}>
-      <span
-        style={{
-          textAlign: "center",
-          fontFamily: "var(--font-mono)",
-          fontSize: 14,
-          fontWeight: 700,
-          color: p.jerseyNumber ? "var(--uff-text-dim)" : "var(--uff-text-mute)",
-        }}
-      >
-        {p.jerseyNumber ? `#${p.jerseyNumber}` : "—"}
-      </span>
-
-      <Avatar player={p} size={32} fontSize={11} />
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span className="roster-identity">
+        <span
+          className="roster-jersey"
+          style={{
+            color: p.jerseyNumber ? "var(--uff-text-dim)" : "var(--uff-text-mute)",
+          }}
+        >
+          {p.jerseyNumber ? `#${p.jerseyNumber}` : "—"}
+        </span>
+        <Avatar player={p} size={32} fontSize={11} />
+        <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <span
             style={{
               fontSize: 14,
@@ -381,8 +401,8 @@ function RosterRow({
           </span>
           {p.isCaptain && <CaptainPip />}
           {p.isInjured && <InjuredPip />}
-        </div>
-      </div>
+        </span>
+      </span>
 
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {p.positions.map((pos) => (
