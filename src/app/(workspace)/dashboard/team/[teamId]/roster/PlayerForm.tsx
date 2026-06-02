@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Icon } from "@/components/uff/icons";
 
 import { POSITION_IDS } from "@/lib/positions";
+import { fullName } from "@/lib/format/name";
 
 const POSITION_OPTIONS = POSITION_IDS;
 
@@ -25,7 +26,8 @@ const CAPTAIN_ACCESS_OPTIONS: { id: CaptainAccess; label: string; hint: string }
 
 export type PlayerFormInitial = {
   id: string;
-  playerName: string;
+  firstName: string;
+  lastName: string;
   positions: string[];
   jerseyNumber: string;
   notes: string;
@@ -43,7 +45,8 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
   const router = useRouter();
   const isEditing = !!initial;
 
-  const [playerName, setPlayerName] = useState(initial?.playerName ?? "");
+  const [firstName, setFirstName] = useState(initial?.firstName ?? "");
+  const [lastName, setLastName] = useState(initial?.lastName ?? "");
   const [positions, setPositions] = useState<string[]>(initial?.positions ?? []);
   const [jerseyNumber, setJerseyNumber] = useState(initial?.jerseyNumber ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
@@ -73,11 +76,13 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!playerName.trim()) {
-      setError("Player name is required.");
+    if (!firstName.trim()) {
+      setError("First name is required.");
       return;
     }
     setSubmitting(true);
+
+    const displayName = fullName(firstName, lastName);
 
     // NOTE: is_injured + injury_note are intentionally NOT in this
     // payload. Injury status is captured via the InjuryModal on the
@@ -86,7 +91,11 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     // field. See MOBILE_APP_REFERENCE §6.5.
     const payload = {
       team_id: teamId,
-      player_name: playerName.trim(),
+      // player_name stays the canonical display field (= first [+ last]);
+      // first_name/last_name add the structured form.
+      player_name: displayName,
+      first_name: firstName.trim(),
+      last_name: lastName.trim() || null,
       positions,
       jersey_number: jerseyNumber.trim() || null,
       notes: notes.trim() || null,
@@ -148,17 +157,39 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
         style={{ display: "flex", flexDirection: "column", gap: 14 }}
       >
         <Section title="Identity">
-          <Field label="Player name" htmlFor="playerName" required>
-            <input
-              id="playerName"
-              type="text"
-              required
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="e.g., Jordan Reyes"
-              style={inputStyle}
-            />
-          </Field>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <Field label="First name" htmlFor="firstName" required>
+                <input
+                  id="firstName"
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Jordan"
+                  style={inputStyle}
+                />
+              </Field>
+            </div>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <Field label="Last name" htmlFor="lastName">
+                <input
+                  id="lastName"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Reyes (optional)"
+                  style={inputStyle}
+                />
+              </Field>
+            </div>
+          </div>
 
           <Field label="Jersey number" htmlFor="jerseyNumber">
             <input

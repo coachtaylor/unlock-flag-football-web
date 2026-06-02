@@ -5,6 +5,7 @@ import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerForm from "../../PlayerForm";
+import { splitName } from "@/lib/format/name";
 
 export default async function EditPlayerPage({
   params,
@@ -39,7 +40,7 @@ export default async function EditPlayerPage({
       supabase
         .from("team_players")
         .select(
-          "id, team_id, player_name, positions, jersey_number, notes, is_captain, captain_access"
+          "id, team_id, player_name, first_name, last_name, positions, jersey_number, notes, is_captain, captain_access"
         )
         .eq("id", playerId)
         .maybeSingle(),
@@ -98,7 +99,15 @@ export default async function EditPlayerPage({
             rosterBasePath={rosterBase}
             initial={{
               id: player.id as string,
-              playerName: (player.player_name as string) ?? "",
+              // Prefer the structured columns; fall back to splitting the
+              // display name for rows that predate the split or were created
+              // by an RPC (first/last null).
+              firstName:
+                (player.first_name as string | null) ??
+                splitName(player.player_name as string | null).first,
+              lastName:
+                (player.last_name as string | null) ??
+                splitName(player.player_name as string | null).last,
               positions: (player.positions as string[] | null) ?? [],
               jerseyNumber: (player.jersey_number as string | null) ?? "",
               notes: (player.notes as string | null) ?? "",

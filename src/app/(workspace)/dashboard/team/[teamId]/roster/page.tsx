@@ -10,6 +10,7 @@ import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { lastNameSortKey } from "@/lib/format/name";
 import RosterListClient, { type RosterPlayer } from "./RosterListClient";
 import CoachingStaffTable, { type StaffMember } from "./CoachingStaffTable";
 import SectionLabel from "./SectionLabel";
@@ -145,16 +146,31 @@ export default async function TeamRosterPage({
   // roster. team_managers are view-only (mirrors get_my_writable_team_ids()).
   const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
 
-  // Captains surface above regular players (then alphabetical within each
-  // group). The new roster stacks coaches → captains → players.
-  const { data: players } = await supabase
+  // Captains surface above regular players, each group ordered by last name
+  // (sorted in JS via lastNameSortKey so null first/last fall back to the
+  // display name). The roster stacks coaches → captains → players.
+  const { data: playerRows } = await supabase
     .from("team_players")
     .select(
-      "id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes"
+      "id, player_name, first_name, last_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes"
     )
-    .eq("team_id", teamId)
-    .order("is_captain", { ascending: false })
-    .order("player_name", { ascending: true });
+    .eq("team_id", teamId);
+  const players = [...(playerRows ?? [])].sort((a, b) => {
+    const ac = a.is_captain ? 0 : 1;
+    const bc = b.is_captain ? 0 : 1;
+    if (ac !== bc) return ac - bc;
+    return lastNameSortKey(
+      a.first_name as string | null,
+      a.last_name as string | null,
+      a.player_name as string | null
+    ).localeCompare(
+      lastNameSortKey(
+        b.first_name as string | null,
+        b.last_name as string | null,
+        b.player_name as string | null
+      )
+    );
+  });
 
   // Coaching staff (head/assistant coaches + managers) for the top table.
   // Names come from a SECURITY DEFINER RPC because profiles RLS is self-only.
