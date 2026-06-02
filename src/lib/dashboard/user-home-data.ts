@@ -155,6 +155,27 @@ export async function getUserHomeData(): Promise<UserHomeData | null> {
     })
   );
 
+  // A user who is a captain-player on a team should read as "captain" here,
+  // even when their app-access role is team_manager (a view-only captain).
+  // Their captain identity lives on team_players.is_captain.
+  if (teams.length > 0) {
+    const { data: capRows } = await supabase
+      .from("team_players")
+      .select("team_id")
+      .eq("user_id", user.id)
+      .eq("is_captain", true)
+      .in(
+        "team_id",
+        teams.map((t) => t.id)
+      );
+    const captainTeamIds = new Set(
+      (capRows ?? []).map((r) => r.team_id as string)
+    );
+    for (const t of teams) {
+      if (captainTeamIds.has(t.id)) t.role = "captain";
+    }
+  }
+
   return {
     user: {
       id: user.id,

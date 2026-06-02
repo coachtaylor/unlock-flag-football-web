@@ -410,7 +410,7 @@ function TeamCard({ team }: { team: UserTeam }) {
                   color: roleFg,
                 }}
               >
-                {team.role.toUpperCase()}
+                {team.role.replace(/_/g, " ").toUpperCase()}
               </span>
             </div>
             <div
@@ -530,7 +530,7 @@ function LeaguesOnlyHint() {
         <Icon.pin size={13} />
       </span>
       <span style={{ flex: 1, minWidth: 200 }}>
-        Teams inside your leagues live on each league's dashboard — open a
+        Teams inside your leagues live on each league&rsquo;s dashboard — open a
         league to manage them. Standalone teams (not part of any league) would
         show up here.
       </span>
