@@ -19,6 +19,7 @@ import Link from "next/link";
 
 import { loadTeamDashboard, loadTeamSkillRadar } from "@/lib/dashboard/team-home-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { isFullAccess } from "@/lib/team/staff-roles";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
 import NextPracticeCard from "@/components/dashboard/widgets/NextPracticeCard";
 import PinnedPulsesStrip from "@/components/dashboard/widgets/PinnedPulsesStrip";
@@ -92,7 +93,9 @@ export default async function TeamDashboardPage({
     .eq("team_id", teamId)
     .maybeSingle();
 
+  const membershipRole = (membership?.role as string | null) ?? null;
   let canView = !!membership;
+  let isLeagueAdmin = false;
   if (!canView && team.league_id) {
     const { data: leagueMember } = await supabase
       .from("league_members")
@@ -101,9 +104,15 @@ export default async function TeamDashboardPage({
       .eq("league_id", team.league_id)
       .eq("role", "league_admin")
       .maybeSingle();
-    canView = !!leagueMember;
+    isLeagueAdmin = !!leagueMember;
+    canView = isLeagueAdmin;
   }
   if (!canView) notFound();
+
+  // Full-access viewers (coaches, full-access captains, league admins) get
+  // the coach console + write actions. A view-only captain (team_manager
+  // role) is locked to their player view — no coach toggle, no write CTAs.
+  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
 
   // Load all widget data in one pass.
   const [data, sidebarWorkspaces, skillRadar] = await Promise.all([
@@ -112,7 +121,12 @@ export default async function TeamDashboardPage({
     loadTeamSkillRadar(supabase, teamId),
   ]);
 
-  const playerView = sp.view === "player" && data.isCurrentUserCaptain;
+  // A view-only captain is locked to player view; a full-access captain
+  // toggles between coach + player views via ?view=player.
+  const lockedToPlayerView = data.isCurrentUserCaptain && !canManage;
+  const playerView =
+    data.isCurrentUserCaptain &&
+    (lockedToPlayerView || sp.view === "player");
   // Captain view re-loads the player-scoped slice so pulses + attendance
   // reflect just this captain's data. The rest of the data object is
   // unchanged (team-wide).
@@ -175,13 +189,21 @@ export default async function TeamDashboardPage({
           userInitials={initials}
           actions={
             <>
-              <CaptainViewToggle isCaptain={data.isCurrentUserCaptain} />
-              <Link href="/practice/new" className="wbtn">
-                <Icon.plus size={13} /> Plan practice
-              </Link>
-              <Link href="/benchmarks" className="wbtn primary">
-                Run benchmark
-              </Link>
+              {/* Coach/player toggle only for full-access captains; a
+                  view-only captain stays in player view. */}
+              {canManage && (
+                <CaptainViewToggle isCaptain={data.isCurrentUserCaptain} />
+              )}
+              {canManage && (
+                <>
+                  <Link href="/practice/new" className="wbtn">
+                    <Icon.plus size={13} /> Plan practice
+                  </Link>
+                  <Link href="/benchmarks" className="wbtn primary">
+                    Run benchmark
+                  </Link>
+                </>
+              )}
             </>
           }
         />
