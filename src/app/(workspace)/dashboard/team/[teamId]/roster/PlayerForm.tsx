@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Icon } from "@/components/uff/icons";
 
 import { POSITION_IDS } from "@/lib/positions";
-import { fullName } from "@/lib/format/name";
+import { fullName, capitalizeName } from "@/lib/format/name";
 
 const POSITION_OPTIONS = POSITION_IDS;
 
@@ -171,7 +171,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
                   type="text"
                   required
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e) => setFirstName(capitalizeName(e.target.value))}
                   placeholder="Jordan"
                   style={inputStyle}
                 />
@@ -183,7 +183,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
                   id="lastName"
                   type="text"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => setLastName(capitalizeName(e.target.value))}
                   placeholder="Reyes (optional)"
                   style={inputStyle}
                 />

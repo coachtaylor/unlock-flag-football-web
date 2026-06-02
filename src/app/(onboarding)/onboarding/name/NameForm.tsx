@@ -11,6 +11,7 @@ import {
   OnbError,
 } from "@/components/onboarding/shell";
 import { submitName } from "./actions";
+import { capitalizeName } from "@/lib/format/name";
 
 export default function NameForm({
   initialFirst,
@@ -53,7 +54,7 @@ export default function NameForm({
                 className="fr-input"
                 placeholder="e.g., Taylor"
                 value={first}
-                onChange={(e) => setFirst(e.target.value)}
+                onChange={(e) => setFirst(capitalizeName(e.target.value))}
                 autoFocus
                 maxLength={50}
               />
@@ -63,7 +64,7 @@ export default function NameForm({
                 className="fr-input"
                 placeholder="e.g., Rivera"
                 value={last}
-                onChange={(e) => setLast(e.target.value)}
+                onChange={(e) => setLast(capitalizeName(e.target.value))}
                 maxLength={50}
               />
             </OnbField>

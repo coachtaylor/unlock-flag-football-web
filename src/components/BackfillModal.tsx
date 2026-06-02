@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { OnbField, OnbError } from "@/components/onboarding/shell";
 import { Icon } from "@/components/uff/icons";
 import { submitBackfill } from "./BackfillModal.actions";
+import { capitalizeName } from "@/lib/format/name";
 
 export default function BackfillModal() {
   const router = useRouter();
@@ -137,7 +138,7 @@ export default function BackfillModal() {
               placeholder="e.g., Taylor"
               autoFocus
               value={first}
-              onChange={(e) => setFirst(e.target.value)}
+              onChange={(e) => setFirst(capitalizeName(e.target.value))}
               maxLength={50}
             />
           </OnbField>
@@ -146,7 +147,7 @@ export default function BackfillModal() {
               className="fr-input"
               placeholder="e.g., Rivera"
               value={last}
-              onChange={(e) => setLast(e.target.value)}
+              onChange={(e) => setLast(capitalizeName(e.target.value))}
               maxLength={50}
             />
           </OnbField>
@@ -170,7 +171,7 @@ export default function BackfillModal() {
               flex: 1,
             }}
           >
-            We won't ask again. Your existing teams and history stay intact.
+            We won&rsquo;t ask again. Your existing teams and history stay intact.
           </span>
           <button
             type="submit"

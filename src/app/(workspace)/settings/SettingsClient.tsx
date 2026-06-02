@@ -11,6 +11,7 @@ import UserSidebar, { type WorkspaceItem } from "@/components/dashboard/UserSide
 import SignOutButton from "@/components/dashboard/SignOutButton";
 import { Icon } from "@/components/uff/icons";
 import { submitBackfill } from "@/components/BackfillModal.actions";
+import { capitalizeName } from "@/lib/format/name";
 import type { UserHomeData } from "@/lib/dashboard/user-home-data";
 
 export default function SettingsClient({ data }: { data: UserHomeData }) {
@@ -120,7 +121,7 @@ function ProfileSection({
             className="fr-input"
             value={first}
             onChange={(e) => {
-              setFirst(e.target.value);
+              setFirst(capitalizeName(e.target.value));
               setSaved(false);
             }}
             placeholder="Taylor"
@@ -132,7 +133,7 @@ function ProfileSection({
             className="fr-input"
             value={last}
             onChange={(e) => {
-              setLast(e.target.value);
+              setLast(capitalizeName(e.target.value));
               setSaved(false);
             }}
             placeholder="Pangilinan"

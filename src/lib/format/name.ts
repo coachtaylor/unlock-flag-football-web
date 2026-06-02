@@ -14,6 +14,15 @@ export function splitName(full: string | null | undefined): {
   return { first: t, last: "" };
 }
 
+// Auto-capitalize a name as it's typed: uppercase the first letter of each
+// whitespace-separated word, leaving the rest of each word as entered (so
+// "mcdonald" → "Mcdonald", but a deliberate "McDonald" is preserved).
+// Length-preserving, so it's safe to apply on every keystroke without
+// disturbing the caret.
+export function capitalizeName(value: string): string {
+  return value.replace(/(^|\s)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
+}
+
 // Compose a display name from parts — last name is optional.
 export function fullName(
   first: string | null | undefined,
