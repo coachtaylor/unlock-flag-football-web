@@ -15,6 +15,7 @@ import {
   teamColorHex,
 } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { isFullAccess } from "@/lib/team/staff-roles";
 import PlayerHistory, {
   type PlayerHistoryDrill,
   type PlayerHistoryLocked,
@@ -193,7 +194,9 @@ export default async function PlayerDetailPage({
 
   if (!team) notFound();
 
+  const membershipRole = (membership?.role as string | null) ?? null;
   let canView = !!membership;
+  let isLeagueAdmin = false;
   if (!canView && team.league_id) {
     const { data: leagueMember } = await supabase
       .from("league_members")
@@ -202,9 +205,14 @@ export default async function PlayerDetailPage({
       .eq("league_id", team.league_id)
       .eq("role", "league_admin")
       .maybeSingle();
-    canView = !!leagueMember;
+    isLeagueAdmin = !!leagueMember;
+    canView = isLeagueAdmin;
   }
   if (!canView) notFound();
+
+  // View-only members (team_manager / view-only captains) can read this
+  // page but get no edit / benchmark / injury / quick-action controls.
+  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
 
   const [
     { data: player },
@@ -430,22 +438,24 @@ export default async function PlayerDetailPage({
           showSearch={false}
           userInitials={userInitials}
           actions={
-            <>
-              <Link
-                href={`${rosterBase}/${playerId}/edit`}
-                className="wbtn"
-                style={{ height: 38 }}
-              >
-                <DashIcon.gear size={13} /> Edit
-              </Link>
-              <Link
-                href="/benchmarks"
-                className="wbtn primary"
-                style={{ height: 38 }}
-              >
-                Run benchmark
-              </Link>
-            </>
+            canManage ? (
+              <>
+                <Link
+                  href={`${rosterBase}/${playerId}/edit`}
+                  className="wbtn"
+                  style={{ height: 38 }}
+                >
+                  <DashIcon.gear size={13} /> Edit
+                </Link>
+                <Link
+                  href="/benchmarks"
+                  className="wbtn primary"
+                  style={{ height: 38 }}
+                >
+                  Run benchmark
+                </Link>
+              </>
+            ) : undefined
           }
         />
 
@@ -572,15 +582,17 @@ export default async function PlayerDetailPage({
                 </div>
               )}
 
-              <div>
-                <InjuryModal
-                  playerId={playerId}
-                  teamId={teamId}
-                  playerName={playerName}
-                  currentlyInjured={isInjured}
-                  currentNote={injuryNote}
-                />
-              </div>
+              {canManage && (
+                <div>
+                  <InjuryModal
+                    playerId={playerId}
+                    teamId={teamId}
+                    playerName={playerName}
+                    currentlyInjured={isInjured}
+                    currentNote={injuryNote}
+                  />
+                </div>
+              )}
 
               <div
                 style={{
@@ -614,35 +626,37 @@ export default async function PlayerDetailPage({
               </div>
             </div>
 
-            <div className="w-card" style={{ padding: 14 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--uff-text-mute)",
-                  marginBottom: 8,
-                }}
-              >
-                Quick actions
+            {canManage && (
+              <div className="w-card" style={{ padding: 14 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "var(--uff-text-mute)",
+                    marginBottom: 8,
+                  }}
+                >
+                  Quick actions
+                </div>
+                <QuickRow
+                  href="/benchmarks"
+                  label="Run a benchmark"
+                  meta="Pick a drill"
+                />
+                <QuickRow
+                  href="/practice"
+                  label="Mark attendance"
+                  meta="Next practice"
+                />
+                <QuickRow
+                  href={`${rosterBase}/${playerId}/edit`}
+                  label="Edit player"
+                  meta={isInjured ? "Update injury" : "Update profile"}
+                />
               </div>
-              <QuickRow
-                href="/benchmarks"
-                label="Run a benchmark"
-                meta="Pick a drill"
-              />
-              <QuickRow
-                href="/practice"
-                label="Mark attendance"
-                meta="Next practice"
-              />
-              <QuickRow
-                href={`${rosterBase}/${playerId}/edit`}
-                label="Edit player"
-                meta={isInjured ? "Update injury" : "Update profile"}
-              />
-            </div>
+            )}
 
             <PlayerSkillProfileCard skills={skillProfile} playerName={playerName} />
 
