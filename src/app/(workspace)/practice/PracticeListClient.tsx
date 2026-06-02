@@ -6,7 +6,7 @@
 // reads at a glance.
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { createContext, useContext, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PlanSummary, PlanStatus } from "@/lib/practice/plan-data";
 import { blockColor } from "@/lib/practice/block-colors";
@@ -122,6 +122,10 @@ function ManageGlyphButton({
 // can be Unarchived or permanently Deleted (delete goes through a type-the-
 // name confirm in the parent). data-stop-card-nav so clicks don't also fire
 // the card's navigation.
+// View-only members get no archive/unarchive/delete controls anywhere in
+// the list. Provided once at the top of the client; sub-components read it.
+const CanManageContext = createContext(true);
+
 function ManageIconButton({
   plan,
   onManage,
@@ -129,6 +133,7 @@ function ManageIconButton({
   plan: PlanSummary;
   onManage: (action: ManageAction) => void;
 }) {
+  if (!useContext(CanManageContext)) return null;
   if (plan.archived) {
     return (
       <>
@@ -146,6 +151,7 @@ type RsvpBreakdown = { qb: number; off: number; def: number };
 export type ListProps = {
   teamId: string;
   teamName: string;
+  canManage: boolean;
   plans: PlanSummary[];
   rosterSize: number;
   rosterByPlan: Record<string, ConfirmedAvatar[]>;
@@ -162,6 +168,7 @@ export type ListProps = {
 
 export default function PracticeListClient({
   teamId,
+  canManage,
   plans,
   rosterSize,
   rosterByPlan,
@@ -212,11 +219,13 @@ export default function PracticeListClient({
 
   if (plans.length === 0) {
     return (
-      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <EmptyListState teamId={teamId} />
+      <CanManageContext.Provider value={canManage}>
+        <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <EmptyListState teamId={teamId} />
+          </div>
         </div>
-      </div>
+      </CanManageContext.Provider>
     );
   }
 
@@ -250,6 +259,7 @@ export default function PracticeListClient({
   const thisWeek = remaining.slice(1);
 
   return (
+    <CanManageContext.Provider value={canManage}>
     <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <StatsRow
@@ -412,6 +422,7 @@ export default function PracticeListClient({
         }}
       />
     </div>
+    </CanManageContext.Provider>
   );
 }
 
@@ -641,6 +652,7 @@ function FeaturedPlanCard({
   onManage: (action: ManageAction) => void;
 }) {
   const router = useRouter();
+  const canManage = useContext(CanManageContext);
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -677,33 +689,37 @@ function FeaturedPlanCard({
             <PracticeStatusPill status={plan.status} mini />
             {isPlanPastDue(plan.practice_date, plan.start_time, plan.status) && <PastDueChip />}
             <span style={{ flex: 1 }} />
-            <Link
-              href={`/practice/${plan.id}/edit`}
-              data-stop-card-nav
-              className="icon-btn"
-              title="Edit plan"
-              style={{
-                width: 26,
-                height: 26,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <EditIcon size={12} />
-            </Link>
-            <button
-              type="button"
-              data-stop-card-nav
-              className="icon-btn"
-              title="Duplicate plan"
-              style={{ width: 26, height: 26 }}
-              onClick={onDuplicate}
-              disabled={isPending}
-            >
-              <PIcon.copy size={12} />
-            </button>
+            {canManage && (
+              <>
+                <Link
+                  href={`/practice/${plan.id}/edit`}
+                  data-stop-card-nav
+                  className="icon-btn"
+                  title="Edit plan"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <EditIcon size={12} />
+                </Link>
+                <button
+                  type="button"
+                  data-stop-card-nav
+                  className="icon-btn"
+                  title="Duplicate plan"
+                  style={{ width: 26, height: 26 }}
+                  onClick={onDuplicate}
+                  disabled={isPending}
+                >
+                  <PIcon.copy size={12} />
+                </button>
+              </>
+            )}
             <ManageIconButton plan={plan} onManage={onManage} />
           </div>
           {/* Title row: title fills, attendance inline on a single line —
@@ -1145,6 +1161,7 @@ function CompactDate({ iso, pastDue }: { iso: string; pastDue?: boolean }) {
 
 function EmptyListState({ teamId }: { teamId: string }) {
   const [isPending, startTransition] = useTransition();
+  const canManage = useContext(CanManageContext);
   return (
     <div
       style={{
@@ -1179,16 +1196,18 @@ function EmptyListState({ teamId }: { teamId: string }) {
           Build your first plan from blocks — warm-up, install, scrimmage — and reuse them across the season.
         </div>
       </div>
-      <form
-        action={(fd) => {
-          startTransition(() => newPlanAndRedirect(fd));
-        }}
-      >
-        <input type="hidden" name="teamId" value={teamId} />
-        <button type="submit" className="wbtn primary" disabled={isPending}>
-          <PIcon.plus size={14} /> New practice plan
-        </button>
-      </form>
+      {canManage && (
+        <form
+          action={(fd) => {
+            startTransition(() => newPlanAndRedirect(fd));
+          }}
+        >
+          <input type="hidden" name="teamId" value={teamId} />
+          <button type="submit" className="wbtn primary" disabled={isPending}>
+            <PIcon.plus size={14} /> New practice plan
+          </button>
+        </form>
+      )}
     </div>
   );
 }

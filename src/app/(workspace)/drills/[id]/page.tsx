@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActorNames } from "@/lib/activity";
 import EntityHistory from "@/components/activity/EntityHistory";
-import { getAccessibleTeamIds } from "@/lib/access/teams";
+import { getAccessibleTeams, canManageTeam } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
 import DiagramRenderer from "@/components/DiagramRenderer";
 import DashTopBar from "@/components/dashboard/DashTopBar";
@@ -84,8 +84,9 @@ export default async function DrillDetailPage({ params }: Props) {
   // Source of truth for "can this user see this drill" is the drill's own
   // team_id checked against the user's accessible team set (direct member +
   // league admin), NOT the first row of team_members.
-  const accessibleTeamIds = await getAccessibleTeamIds(supabase, user.id);
-  if (accessibleTeamIds.length === 0) redirect("/onboarding/scope");
+  const accessibleTeams = await getAccessibleTeams(supabase, user.id);
+  if (accessibleTeams.length === 0) redirect("/onboarding/scope");
+  const accessibleTeamIds = accessibleTeams.map((t) => t.id);
 
   const { data: drill } = await supabase
     .from("team_drills")
@@ -99,6 +100,9 @@ export default async function DrillDetailPage({ params }: Props) {
     notFound();
   }
   const teamId = drill.team_id as string;
+  const canManage = canManageTeam(
+    accessibleTeams.find((t) => t.id === teamId),
+  );
 
   const [
     { data: team },
@@ -331,27 +335,29 @@ export default async function DrillDetailPage({ params }: Props) {
           userInitials={initials}
           showSearch={false}
           actions={
-            <>
-              {canBenchmark && (
-                <Link
-                  href={`/benchmarks?drill=${drill.id}`}
-                  className="wbtn"
-                >
-                  Run benchmark
+            canManage ? (
+              <>
+                {canBenchmark && (
+                  <Link
+                    href={`/benchmarks?drill=${drill.id}`}
+                    className="wbtn"
+                  >
+                    Run benchmark
+                  </Link>
+                )}
+                <PinButton
+                  drillId={drill.id as string}
+                  teamId={team.id as string}
+                  benchmarkTypes={types}
+                  currentPins={currentPins}
+                  positionOptions={positionOptions}
+                  totalTeamPins={totalTeamPins ?? 0}
+                />
+                <Link href={`/drills/${drill.id}/edit`} className="wbtn">
+                  Edit drill
                 </Link>
-              )}
-              <PinButton
-                drillId={drill.id as string}
-                teamId={team.id as string}
-                benchmarkTypes={types}
-                currentPins={currentPins}
-                positionOptions={positionOptions}
-                totalTeamPins={totalTeamPins ?? 0}
-              />
-              <Link href={`/drills/${drill.id}/edit`} className="wbtn">
-                Edit drill
-              </Link>
-            </>
+              </>
+            ) : undefined
           }
         />
 
@@ -739,11 +745,13 @@ export default async function DrillDetailPage({ params }: Props) {
                 memberCount={memberCount ?? 0}
                 totalRuns={totalRuns}
                 drillId={drill.id as string}
+                canManage={canManage}
               />
               <BenchmarkSnapshotCard
                 types={types}
                 snapshot={snapshot}
                 drillId={drill.id as string}
+                canManage={canManage}
               />
             </div>
           </div>
@@ -1005,6 +1013,7 @@ function MetaCard({
   memberCount,
   totalRuns,
   drillId,
+  canManage,
 }: {
   creatorName: string;
   editorName: string;
@@ -1015,6 +1024,7 @@ function MetaCard({
   memberCount: number;
   totalRuns: number;
   drillId: string;
+  canManage: boolean;
 }) {
   return (
     <div
@@ -1069,6 +1079,7 @@ function MetaCard({
       />
       <KV k="Times run" v={String(totalRuns)} mono />
 
+      {canManage && (
       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
         <form action={duplicateDrill} style={{ flex: 1 }}>
           <input type="hidden" name="drillId" value={drillId} />
@@ -1100,6 +1111,7 @@ function MetaCard({
           </button>
         </form>
       </div>
+      )}
     </div>
   );
 }
@@ -1154,10 +1166,12 @@ function BenchmarkSnapshotCard({
   types,
   snapshot,
   drillId,
+  canManage,
 }: {
   types: BenchKind[];
   snapshot: SnapshotRow[];
   drillId: string;
+  canManage: boolean;
 }) {
   if (types.length === 0) {
     return (
@@ -1191,13 +1205,15 @@ function BenchmarkSnapshotCard({
           No benchmark types are set on this drill. Add one to start capturing
           player results during practice.
         </div>
-        <Link
-          href={`/drills/${drillId}/edit`}
-          className="wbtn primary"
-          style={{ alignSelf: "flex-start", height: 32, fontSize: 12.5 }}
-        >
-          Add benchmarks
-        </Link>
+        {canManage && (
+          <Link
+            href={`/drills/${drillId}/edit`}
+            className="wbtn primary"
+            style={{ alignSelf: "flex-start", height: 32, fontSize: 12.5 }}
+          >
+            Add benchmarks
+          </Link>
+        )}
       </div>
     );
   }

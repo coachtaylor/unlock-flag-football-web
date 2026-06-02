@@ -12,6 +12,7 @@
 // order-by.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isFullAccess } from "@/lib/team/staff-roles";
 
 export type AccessibleTeam = {
   id: string;
@@ -19,6 +20,14 @@ export type AccessibleTeam = {
   role: string | null;
   leagueId: string | null;
 };
+
+// Can this user mutate the team? League admins always can; direct members
+// only with a full-access role (view-only team_managers cannot). Mirrors
+// get_my_writable_team_ids() in migration 79.
+export function canManageTeam(t: AccessibleTeam | undefined | null): boolean {
+  if (!t) return false;
+  return t.via === "league_admin" || isFullAccess(t.role);
+}
 
 export async function getAccessibleTeams(
   supabase: SupabaseClient,

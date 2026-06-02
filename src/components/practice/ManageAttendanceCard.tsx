@@ -31,6 +31,8 @@ type Props = {
   dateLabel: string;
   roster: RsvpPlayer[];
   initialAttendees: Record<string, boolean | null>;
+  /** View-only members see the roll-up but no Manage control. */
+  canManage?: boolean;
 };
 
 export default function ManageAttendanceCard({
@@ -38,6 +40,7 @@ export default function ManageAttendanceCard({
   dateLabel,
   roster,
   initialAttendees,
+  canManage = true,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -76,14 +79,16 @@ export default function ManageAttendanceCard({
             <span className="tk" />
             Who&rsquo;s coming
           </div>
-          <button
-            type="button"
-            className="wbtn ghost"
-            style={{ height: 28, fontSize: 11, padding: "0 10px" }}
-            onClick={() => setOpen(true)}
-          >
-            Manage
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              className="wbtn ghost"
+              style={{ height: 28, fontSize: 11, padding: "0 10px" }}
+              onClick={() => setOpen(true)}
+            >
+              Manage
+            </button>
+          )}
         </div>
         <RsvpBar i={inN} m={0} o={outN} total={roster.length} />
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>

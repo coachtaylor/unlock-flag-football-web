@@ -8,7 +8,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAccessibleTeams } from "@/lib/access/teams";
+import { getAccessibleTeams, canManageTeam } from "@/lib/access/teams";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { Icon } from "@/components/uff/icons";
@@ -74,6 +74,7 @@ export default async function DrillsPage() {
   const team = teamsById.get(primary.id);
   if (!team) redirect("/dashboard");
   const teamId = team.id;
+  const canManage = canManageTeam(primary);
 
   const [{ data: categories }, { data: drills }] = await Promise.all([
     supabase
@@ -305,9 +306,11 @@ export default async function DrillsPage() {
               <Link href="/drills/library" className="wbtn">
                 <Icon.search size={13} /> Browse library
               </Link>
-              <Link href="/drills/new" className="wbtn primary">
-                <Icon.plus size={13} /> New drill
-              </Link>
+              {canManage && (
+                <Link href="/drills/new" className="wbtn primary">
+                  <Icon.plus size={13} /> New drill
+                </Link>
+              )}
             </>
           }
         />

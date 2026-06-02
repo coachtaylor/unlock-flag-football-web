@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { BenchKind } from "@/components/uff-web/drills/atoms";
+import { isFullAccess } from "@/lib/team/staff-roles";
 import BenchmarksHubClient from "./BenchmarksHubClient";
 
 type SearchParams = Promise<{ drill?: string }>;
@@ -47,12 +48,33 @@ export default async function BenchmarksHubPage({
 
   const { data: membership } = await supabase
     .from("team_members")
-    .select("team_id")
+    .select("team_id, role")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
   if (!membership) redirect("/team-setup");
   const teamId = membership.team_id;
+
+  // Benchmarking is a write flow — view-only members get a notice.
+  if (!isFullAccess(membership.role as string | null)) {
+    return (
+      <div className="pt-3xl" style={{ maxWidth: 560 }}>
+        <h1 className="text-title font-medium" style={{ color: "var(--color-text-primary)" }}>
+          Benchmarks
+        </h1>
+        <div
+          className="mt-2xl p-lg rounded-lg"
+          style={{ backgroundColor: "var(--color-surface-raised)" }}
+        >
+          <p className="text-body" style={{ color: "var(--color-text-muted)" }}>
+            You have view-only access to this team, so you can&rsquo;t run
+            benchmark assessments. A coach or full-access captain can log
+            results; you&rsquo;ll see them on player and dashboard views.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const [{ data: drills }, { data: players }] = await Promise.all([
     supabase

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAccessibleTeams } from "@/lib/access/teams";
+import { getAccessibleTeams, canManageTeam } from "@/lib/access/teams";
 import { teamColorHex, playerColorForIndex } from "@/components/uff/team-colors";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
@@ -54,6 +54,9 @@ export default async function PracticeDetailPage({
 
   const accessibleTeams = await getAccessibleTeams(supabase, user.id);
   if (!accessibleTeams.some((t) => t.id === plan.team_id)) notFound();
+  const canManage = canManageTeam(
+    accessibleTeams.find((t) => t.id === plan.team_id),
+  );
 
   const [{ data: team }, { data: players }, { data: profile }] = await Promise.all([
     supabase
@@ -133,6 +136,7 @@ export default async function PracticeDetailPage({
           userInitials={initials}
           showSearch={false}
           actions={
+            !canManage ? undefined : (
             <>
               <form action={duplicatePlanAndRedirect}>
                 <input type="hidden" name="planId" value={plan.id} />
@@ -172,6 +176,7 @@ export default async function PracticeDetailPage({
                 title={plan.title}
               />
             </>
+            )
           }
         />
 
@@ -314,6 +319,7 @@ export default async function PracticeDetailPage({
                 dateLabel={formatDateLabel(plan.practice_date)}
                 roster={roster}
                 initialAttendees={initialAttendees}
+                canManage={canManage}
               />
 
               <div className="w-card subdued" style={{ padding: 16 }}>

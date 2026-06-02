@@ -8,11 +8,14 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { isFullAccess } from "@/lib/team/staff-roles";
 
 export type TeamContextValue = {
   teamId: string | null;
   teamName: string | null;
   userRole: string | null;
+  /** True for full-access roles; false for view-only (team_manager). */
+  canManage: boolean;
   loading: boolean;
 };
 
@@ -20,6 +23,7 @@ const TeamContext = createContext<TeamContextValue>({
   teamId: null,
   teamName: null,
   userRole: null,
+  canManage: false,
   loading: true,
 });
 
@@ -84,7 +88,15 @@ export function TeamProvider({
   }, [initialTeamId]);
 
   return (
-    <TeamContext.Provider value={{ teamId, teamName, userRole, loading }}>
+    <TeamContext.Provider
+      value={{
+        teamId,
+        teamName,
+        userRole,
+        canManage: isFullAccess(userRole),
+        loading,
+      }}
+    >
       {children}
     </TeamContext.Provider>
   );

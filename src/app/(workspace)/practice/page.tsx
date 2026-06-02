@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAccessibleTeams } from "@/lib/access/teams";
+import { getAccessibleTeams, canManageTeam } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { playerColorForIndex } from "@/components/uff/team-colors";
 import { primarySide } from "@/lib/positions";
@@ -52,6 +52,7 @@ export default async function PracticeListPage() {
     .maybeSingle();
   if (!team) redirect("/dashboard");
   const teamId = team.id as string;
+  const canManage = canManageTeam(primary);
 
   const [plans, { data: players }] = await Promise.all([
     fetchPlanSummaries(supabase, teamId),
@@ -68,8 +69,8 @@ export default async function PracticeListPage() {
 
   // Map confirmed attendees per plan → list of avatar items, plus a
   // position breakdown (QB / Offense / Defense) of the same set.
-  let rosterByPlan: Record<string, { initials: string; color: string }[]> = {};
-  let breakdownByPlan: Record<string, { qb: number; off: number; def: number }> = {};
+  const rosterByPlan: Record<string, { initials: string; color: string }[]> = {};
+  const breakdownByPlan: Record<string, { qb: number; off: number; def: number }> = {};
   if (plans.length > 0) {
     const planIds = plans.map((p) => p.id);
     const { data: attendees } = await supabase
@@ -171,15 +172,18 @@ export default async function PracticeListPage() {
           userInitials={initials}
           showSearch={false}
           actions={
-            <Link href="/practice/new" className="wbtn primary">
-              <Icon.plus size={13} /> New plan
-            </Link>
+            canManage ? (
+              <Link href="/practice/new" className="wbtn primary">
+                <Icon.plus size={13} /> New plan
+              </Link>
+            ) : undefined
           }
         />
         <div className="page" style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }}>
           <PracticeListClient
             teamId={teamId}
             teamName={team.team_name as string}
+            canManage={canManage}
             plans={plans}
             rosterSize={(players ?? []).length}
             rosterByPlan={rosterByPlan}
