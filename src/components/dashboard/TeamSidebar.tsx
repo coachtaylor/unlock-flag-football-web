@@ -60,7 +60,6 @@ export default function TeamSidebar({
     { id: "drills", label: "Drills", href: "/drills", icon: DashIcon.drills },
     { id: "practice", label: "Practice", href: "/practice", icon: DashIcon.practice },
     { id: "benchmarks", label: "Benchmarks", href: "/benchmarks", icon: DashIcon.rules },
-    { id: "settings", label: "Settings", href: "/settings", icon: DashIcon.gear },
   ];
 
   return (

@@ -4,6 +4,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import Link from "next/link";
 import { DashIcon } from "@/components/uff/icons";
 
 type Crumb = { label: string; href?: string };
@@ -178,9 +179,15 @@ export default function DashTopBar({
           <DashIcon.bell size={16} />
           <span className="dot" />
         </button>
-        <div className="avatar" style={{ background: userAccent }}>
+        <Link
+          href="/settings"
+          className="avatar"
+          style={{ background: userAccent, textDecoration: "none" }}
+          aria-label="Account settings"
+          title="Account settings"
+        >
           {userInitials}
-        </div>
+        </Link>
       </div>
     </div>
   );
