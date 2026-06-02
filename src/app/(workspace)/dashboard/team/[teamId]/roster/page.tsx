@@ -77,6 +77,13 @@ function shapePendingInvites(rows: InviteRpcRow[] | null): PendingInvite[] {
     }));
 }
 
+// Parse a jersey number for sorting. Non-numeric / blank → null (sorts to
+// the bottom). "00" → 0, "12" → 12.
+function jerseyNumber(raw: string | null): number | null {
+  const n = parseInt(String(raw ?? "").trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 function relativeWhen(iso: string): string {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
@@ -146,9 +153,9 @@ export default async function TeamRosterPage({
   // roster. team_managers are view-only (mirrors get_my_writable_team_ids()).
   const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
 
-  // Captains surface above regular players, each group ordered by last name
-  // (sorted in JS via lastNameSortKey so null first/last fall back to the
-  // display name). The roster stacks coaches → captains → players.
+  // Captains surface above regular players; within each group, ordered by
+  // jersey number ascending with un-numbered players sent to the bottom
+  // (last name breaks ties). The roster stacks coaches → captains → players.
   const { data: playerRows } = await supabase
     .from("team_players")
     .select(
@@ -158,7 +165,14 @@ export default async function TeamRosterPage({
   const players = [...(playerRows ?? [])].sort((a, b) => {
     const ac = a.is_captain ? 0 : 1;
     const bc = b.is_captain ? 0 : 1;
-    if (ac !== bc) return ac - bc;
+    if (ac !== bc) return ac - bc; // captains first
+    const an = jerseyNumber(a.jersey_number as string | null);
+    const bn = jerseyNumber(b.jersey_number as string | null);
+    if (an !== bn) {
+      if (an == null) return 1; // no number → bottom
+      if (bn == null) return -1;
+      return an - bn; // least → greatest
+    }
     return lastNameSortKey(
       a.first_name as string | null,
       a.last_name as string | null,
