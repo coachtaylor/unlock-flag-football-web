@@ -26,8 +26,14 @@ export type StaffMember = {
 
 export default function CoachingStaffTable({
   staff,
+  action,
+  footer,
 }: {
   staff: StaffMember[];
+  /** Header-right slot (e.g. the Invite button) — full-access members only. */
+  action?: React.ReactNode;
+  /** Rendered after the table, inside the section (e.g. pending invites). */
+  footer?: React.ReactNode;
 }) {
   // Count head coaches so a lone head reads "Head coach" but multiple read
   // "Co-head coaches".
@@ -35,14 +41,25 @@ export default function CoachingStaffTable({
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <SectionLabel
-        label="Coaching staff"
-        note={
-          staff.length === 0
-            ? "none yet"
-            : `${staff.length} ${staff.length === 1 ? "person" : "people"}`
-        }
-      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <SectionLabel
+          label="Coaching staff"
+          note={
+            staff.length === 0
+              ? "none yet"
+              : `${staff.length} ${staff.length === 1 ? "person" : "people"}`
+          }
+        />
+        {action}
+      </div>
 
       {staff.length === 0 ? (
         <div
@@ -73,6 +90,8 @@ export default function CoachingStaffTable({
           ))}
         </div>
       )}
+
+      {footer}
 
       <style>{`
         .staff-row-grid {

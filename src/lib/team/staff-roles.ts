@@ -93,3 +93,36 @@ export const SPECIALTY_LABELS: Record<string, string> = {
 export function specialtyLabel(s: string): string {
   return SPECIALTY_LABELS[s] ?? s;
 }
+
+// ── Invite roles ──────────────────────────────────────────────────────
+// Invites can grant any staff role OR captain (a player-leader added to the
+// roster). One source of truth for the invite picker + the pending list.
+
+export type InviteRole = StaffRole | "captain";
+
+export const INVITE_ROLES: InviteRole[] = [...STAFF_ROLES, "captain"];
+
+const CAPTAIN_INVITE_META = {
+  label: "Captain",
+  accessLabel: "Full access",
+  access: "full" as AccessTier,
+  hint: "Player-leader. Full access; also added to the roster as a player.",
+};
+
+export function inviteRoleLabel(role: InviteRole): string {
+  return role === "captain" ? CAPTAIN_INVITE_META.label : STAFF_ROLE_META[role].label;
+}
+
+export function inviteRoleAccess(role: InviteRole): AccessTier {
+  return role === "captain" ? CAPTAIN_INVITE_META.access : STAFF_ROLE_META[role].access;
+}
+
+export function inviteRoleAccessLabel(role: InviteRole): string {
+  return role === "captain"
+    ? CAPTAIN_INVITE_META.accessLabel
+    : STAFF_ROLE_META[role].accessLabel;
+}
+
+export function inviteRoleHint(role: InviteRole): string {
+  return role === "captain" ? CAPTAIN_INVITE_META.hint : STAFF_ROLE_META[role].hint;
+}

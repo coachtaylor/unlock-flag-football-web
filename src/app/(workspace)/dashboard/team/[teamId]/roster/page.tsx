@@ -13,7 +13,14 @@ import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import RosterListClient, { type RosterPlayer } from "./RosterListClient";
 import CoachingStaffTable, { type StaffMember } from "./CoachingStaffTable";
 import SectionLabel from "./SectionLabel";
-import { STAFF_ROLES, type StaffRole } from "@/lib/team/staff-roles";
+import InviteModal from "./InviteModal";
+import PendingInvites, { type PendingInvite } from "./PendingInvites";
+import {
+  STAFF_ROLES,
+  isFullAccess,
+  type StaffRole,
+  type InviteRole,
+} from "@/lib/team/staff-roles";
 
 type BenchmarkJoin = {
   player_id: string;
@@ -43,6 +50,30 @@ function formatBenchValue(b: BenchmarkJoin, drillType: string | null): string {
   if (b.time_seconds != null) return `${Number(b.time_seconds).toFixed(2)}s`;
   if (b.rating != null) return `${b.rating} / 5`;
   return "—";
+}
+
+// Shape + drop-expired for pending invites. Module-scoped (not in the
+// component body) so the Date.now() call stays out of render.
+type InviteRpcRow = {
+  id: string;
+  token: string;
+  role: string;
+  coach_specialties: string[] | null;
+  invitee_label: string | null;
+  expires_at: string | null;
+};
+function shapePendingInvites(rows: InviteRpcRow[] | null): PendingInvite[] {
+  const now = Date.now();
+  return (rows ?? [])
+    .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now)
+    .map((r) => ({
+      id: r.id,
+      token: r.token,
+      role: r.role as InviteRole,
+      specialties: r.coach_specialties ?? [],
+      label: r.invitee_label ?? null,
+      expiresAt: r.expires_at ?? null,
+    }));
 }
 
 function relativeWhen(iso: string): string {
@@ -94,7 +125,9 @@ export default async function TeamRosterPage({
   if (!team) notFound();
 
   // Access: direct team_member OR league_admin on the team's league.
+  const membershipRole = (membership?.role as string | null) ?? null;
   let canView = !!membership;
+  let isLeagueAdmin = false;
   if (!canView && team.league_id) {
     const { data: leagueMember } = await supabase
       .from("league_members")
@@ -103,9 +136,14 @@ export default async function TeamRosterPage({
       .eq("league_id", team.league_id)
       .eq("role", "league_admin")
       .maybeSingle();
-    canView = !!leagueMember;
+    isLeagueAdmin = !!leagueMember;
+    canView = isLeagueAdmin;
   }
   if (!canView) notFound();
+
+  // Full-access members (+ league admins) can invite, revoke, and edit the
+  // roster. team_managers are view-only (mirrors get_my_writable_team_ids()).
+  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
 
   // Captains surface above regular players (then alphabetical within each
   // group). The new roster stacks coaches → captains → players.
@@ -196,6 +234,20 @@ export default async function TeamRosterPage({
       };
     });
 
+  // Pending (not accepted, not revoked, not expired) invite links — only
+  // full-access members manage them, so only they pay for the query.
+  let pendingInvites: PendingInvite[] = [];
+  if (canManage) {
+    const { data: inviteRows } = await supabase
+      .from("team_invites")
+      .select("id, token, role, coach_specialties, invitee_label, expires_at")
+      .eq("team_id", teamId)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .order("created_at", { ascending: false });
+    pendingInvites = shapePendingInvites(inviteRows as InviteRpcRow[] | null);
+  }
+
   const captainCount = rosterPlayers.filter((p) => p.isCaptain).length;
   const playerNote = [
     captainCount > 0
@@ -243,7 +295,19 @@ export default async function TeamRosterPage({
           className="page"
           style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}
         >
-          <CoachingStaffTable staff={staff} />
+          <CoachingStaffTable
+            staff={staff}
+            action={
+              canManage ? (
+                <InviteModal teamId={teamId} teamName={team.team_name} />
+              ) : null
+            }
+            footer={
+              canManage ? (
+                <PendingInvites teamId={teamId} invites={pendingInvites} />
+              ) : null
+            }
+          />
 
           <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <SectionLabel label="Players" note={playerNote || undefined} />
@@ -251,6 +315,7 @@ export default async function TeamRosterPage({
               teamId={teamId}
               teamName={team.team_name}
               players={rosterPlayers}
+              canManage={canManage}
             />
           </section>
         </div>

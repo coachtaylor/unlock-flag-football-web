@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { decideOnboarding, isOnboardingPath } from "@/lib/onboarding/state";
+import { INVITE_COOKIE } from "@/lib/team/invite-cookie";
 
 // Public paths: every signed-out user is allowed in.
 const PUBLIC_PATHS = new Set<string>([
@@ -24,13 +25,35 @@ const LEGACY_REDIRECTS: Record<string, string> = {
 const SKIP_PROFILE_CHECK = (path: string) =>
   PUBLIC_PATHS.has(path) ||
   path.startsWith("/auth/") ||
+  path.startsWith("/join/") ||
   path.startsWith("/_next/") ||
   path === "/favicon.ico";
 
 function isPublic(path: string) {
   if (PUBLIC_PATHS.has(path)) return true;
   if (path.startsWith("/auth/")) return true;
+  // Invite links are reachable signed-out (the join page prompts auth).
+  if (path.startsWith("/join/")) return true;
   return false;
+}
+
+// One-shot invite resume: a signed-in, onboarded user who stashed an invite
+// token (while signed out) gets sent to /join/<token> to finish accepting.
+// We clear the cookie on the redirect so an invalid/expired invite can't
+// trap them in a loop. Never fires on /join itself (that path is skipped
+// before we get here).
+function inviteResumeRedirect(
+  request: NextRequest,
+  path: string
+): NextResponse | null {
+  const token = request.cookies.get(INVITE_COOKIE)?.value;
+  if (!token || path.startsWith("/join/")) return null;
+  const url = request.nextUrl.clone();
+  url.pathname = `/join/${token}`;
+  url.search = "";
+  const res = NextResponse.redirect(url);
+  res.cookies.delete(INVITE_COOKIE);
+  return res;
 }
 
 export async function proxy(request: NextRequest) {
@@ -94,7 +117,7 @@ export async function proxy(request: NextRequest) {
   // redirect (above) or by signing out (cookies flushed).
   const onbCookie = request.cookies.get("uff_onb")?.value;
   if (onbCookie === "done" && !isOnboardingPath(path)) {
-    return supabaseResponse;
+    return inviteResumeRedirect(request, path) ?? supabaseResponse;
   }
 
   const { data: profile } = await supabase
@@ -115,8 +138,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Onboarding complete. Re-entering /onboarding/* is a defensive no-op
-  // (each onboarding page does its own redirect to /dashboard).
+  // Onboarding complete. If they have a stashed invite (e.g. a brand-new
+  // user who just finished onboarding), send them to accept it first.
+  const resume = inviteResumeRedirect(request, path);
+  if (resume) return resume;
+
+  // Re-entering /onboarding/* is a defensive no-op (each onboarding page
+  // does its own redirect to /dashboard).
   // Set the short-circuit cookie so future requests skip the DB hit.
   supabaseResponse.cookies.set("uff_onb", "done", {
     path: "/",

@@ -24,7 +24,7 @@ Mobile-first responsive UX is non-negotiable: every build must work on a phone-s
 - 🔶 In progress
 - ✅ Shipped
 
-Build status as of 2026-06-01: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 14.5, 15 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 16, 17 ⏳. (Build 15 — drill library card parity + sort + pin-to-preview — shipped on both web + mobile 2026-06-01; the originally-planned polish pass + prod prep slid to 16 + 17.) (Build 14 mobile-parity epic shipped 14a–14f. Build 14.5 — Coach attribution & activity tracking — shipped on both web + mobile 2026-06-01; the existing Recent Activity feed had mis-attributed the actor, which this corrects.)
+Build status as of 2026-06-02: 1, 2, 2.5, 3, 4, 5.5, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 14.5, 15, 16.5 ✅ · 5, 6 🔶 (remaining items skipped, see each build's section) · 16, 17 ⏳. (Build 16.5 — coach/captain invites + roster coaching-staff table + view-only role model — shipped web 2026-06-02; migrations 78–81.) (Build 15 — drill library card parity + sort + pin-to-preview — shipped on both web + mobile 2026-06-01; the originally-planned polish pass + prod prep slid to 16 + 17.) (Build 14 mobile-parity epic shipped 14a–14f. Build 14.5 — Coach attribution & activity tracking — shipped on both web + mobile 2026-06-01; the existing Recent Activity feed had mis-attributed the actor, which this corrects.)
 
 ---
 
@@ -1149,6 +1149,30 @@ A consistency pass so the team drill library reads like the preset library, plus
 ### Notes / known divergences
 - Web drill cards drop the old table's click-to-sort column heads (cards have none); the SortMenu replaces them. Category/type/status are filter-rail concerns, not sort axes.
 - Mobile keeps the phase sections + scoreboard hero — only the row rendering changed to cards.
+
+---
+
+## Build 16.5 — Coach/captain invites & roster staff ✅
+
+### Shipped (2026-06-02)
+A coaching-staff role model + per-recipient invite links. Two slices, each its own branch off the prior. Migrations 78–81 live in `qb_supabase_full_package/sql` (applied 2026-06-02; not git-tracked, per repo topology).
+
+**16.5a — Roster staff table + view-only roles** (branch `build-16.5a-coach-roles`, web `f315ea3`)
+- `team_members.role` widened to `head_coach` / `assistant_coach` / `team_manager` (+ legacy `captain`/`coach`/`assistant` kept valid). `coach_specialties[]` (offense/defense) added. Backfill `coach→head_coach`, `assistant→assistant_coach`. `create_team_with_member` maps a creating "coach" → head_coach. (mig 78)
+- View-only enforced in DB: `get_my_writable_team_ids()` (full-access roles + league admins); every team-scoped WRITE policy swapped to it, SELECT policies unchanged. `team_manager` reads everything, writes nothing. (mig 79)
+- `get_team_staff()` SECURITY DEFINER RPC resolves staff names past self-only `profiles` RLS, gated on team membership. (mig 80)
+- Roster → two tables: **Coaching staff** (head → assistant → manager, co-head-coach labels when >1, offense/defense focus chips, Full / View-only access badge) above **Players** (captains surfaced first). Player-table writes (Add player, injury toggle) gated on full access.
+- Shared `lib/team/staff-roles.ts` (taxonomy SoT), `lib/format/initials.ts` (deduped), `SectionLabel`.
+
+**16.5b — Invite links** (branch `build-16.5b-invites`)
+- `team_invites` table (token, role, specialties, label, expiry, accepted/revoked) + SECURITY DEFINER RPCs: `create_team_invite` / `get_invite_preview` / `redeem_team_invite` / `revoke_team_invite`. Create + revoke gated to full-access; preview/redeem authorize via the token (invitee isn't a member yet). Captain invites also create the `team_players` row. (mig 81)
+- `InviteModal` (role picker incl. captain, offense/defense for assistant, optional label + expiry, copyable link) in the staff header; `PendingInvites` list (copy / revoke) under the staff table. Both full-access only.
+- `/join/[token]` public route: signed-in → Accept → team dashboard; signed-out → preview + sign-in/sign-up with a `uff_invite` resume cookie. Login (existing users) and the proxy (new users, one-shot + cookie-cleared) both honor the cookie so accepting survives auth/onboarding.
+- The legacy `/teams/join` (paste-UUID) path is kept as a fallback.
+
+### Notes / follow-ups
+- **Pin-RPC gap:** the SECURITY DEFINER pin RPCs bypass RLS, so a `team_manager` could still pin via direct RPC. UI hides pin controls; a role guard inside those RPCs is a follow-up (documented in mig 79).
+- Mobile parity for the staff table + invites is not done — web-only for now.
 
 ---
 

@@ -37,10 +37,14 @@ export default function RosterListClient({
   teamId,
   teamName,
   players,
+  canManage,
 }: {
   teamId: string;
   teamName: string;
   players: RosterPlayer[];
+  // View-only members (team_manager) get no Add-player button and a
+  // non-interactive status pill — mirrors the write-side RLS.
+  canManage: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -78,7 +82,13 @@ export default function RosterListClient({
   const rosterBasePath = `/dashboard/team/${teamId}/roster`;
 
   if (players.length === 0) {
-    return <EmptyRoster teamName={teamName} newHref={`${rosterBasePath}/new`} />;
+    return (
+      <EmptyRoster
+        teamName={teamName}
+        newHref={`${rosterBasePath}/new`}
+        canManage={canManage}
+      />
+    );
   }
 
   return (
@@ -145,13 +155,15 @@ export default function RosterListClient({
             </button>
           )}
         </div>
-        <Link
-          href={`${rosterBasePath}/new`}
-          className="wbtn primary"
-          style={{ height: 38, marginLeft: "auto" }}
-        >
-          <Icon.plus size={13} /> Add player
-        </Link>
+        {canManage && (
+          <Link
+            href={`${rosterBasePath}/new`}
+            className="wbtn primary"
+            style={{ height: 38, marginLeft: "auto" }}
+          >
+            <Icon.plus size={13} /> Add player
+          </Link>
+        )}
       </div>
 
       {/* Filter row */}
@@ -256,6 +268,7 @@ export default function RosterListClient({
               p={p}
               href={`${rosterBasePath}/${p.id}`}
               stripe={i % 2 === 1}
+              canManage={canManage}
               onRequestInjury={() => setInjuryTarget(p)}
             />
           ))}
@@ -318,11 +331,13 @@ function RosterRow({
   p,
   href,
   stripe,
+  canManage,
   onRequestInjury,
 }: {
   p: RosterPlayer;
   href: string;
   stripe: boolean;
+  canManage: boolean;
   onRequestInjury: () => void;
 }) {
   function handleToggleInjury(e: React.MouseEvent) {
@@ -381,7 +396,7 @@ function RosterRow({
       <StatusPill
         status={p.status}
         injured={p.isInjured}
-        onToggle={handleToggleInjury}
+        onToggle={canManage ? handleToggleInjury : undefined}
       />
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
@@ -605,9 +620,11 @@ function StatusPill({
 function EmptyRoster({
   teamName,
   newHref,
+  canManage,
 }: {
   teamName: string;
   newHref: string;
+  canManage: boolean;
 }) {
   return (
     <div
@@ -658,18 +675,24 @@ function EmptyRoster({
         gets a color, a status, and a benchmark history that shows up here as
         you log assessments.
       </p>
-      <Link
-        href={newHref}
-        className="wbtn primary"
-        style={{
-          marginTop: 4,
-          height: 44,
-          fontSize: 14,
-          padding: "0 22px",
-        }}
-      >
-        Add players <Icon.arrowRight size={14} />
-      </Link>
+      {canManage ? (
+        <Link
+          href={newHref}
+          className="wbtn primary"
+          style={{
+            marginTop: 4,
+            height: 44,
+            fontSize: 14,
+            padding: "0 22px",
+          }}
+        >
+          Add players <Icon.arrowRight size={14} />
+        </Link>
+      ) : (
+        <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--uff-text-mute)" }}>
+          Only coaches and captains can add players.
+        </p>
+      )}
     </div>
   );
 }

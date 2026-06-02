@@ -4,6 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 import AuthField from "@/components/auth/AuthField";
+import { INVITE_COOKIE } from "@/lib/team/invite-cookie";
+
+function readCookie(name: string): string | null {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -30,6 +36,13 @@ export default function LoginPage() {
     if (!data.session) {
       setError("Sign in succeeded but no session was returned. Try again.");
       setSubmitting(false);
+      return;
+    }
+
+    // Arrived from an invite link while signed out? Finish accepting it.
+    const inviteToken = readCookie(INVITE_COOKIE);
+    if (inviteToken) {
+      window.location.assign(`/join/${inviteToken}`);
       return;
     }
 
