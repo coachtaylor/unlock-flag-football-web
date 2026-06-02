@@ -297,7 +297,7 @@ export default function InviteModal({
                     className="fr-input"
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
-                    placeholder="e.g. Marcus (D-line coach)"
+                    placeholder="e.g. WR coach"
                     style={{ fontSize: 13 }}
                   />
                 </Field>
