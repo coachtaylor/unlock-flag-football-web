@@ -1,10 +1,12 @@
 // /join/[token] — accept a team invite (Build 16.5b).
 //
-// Public route (see proxy): a signed-out recipient can land here, see what
-// they're being invited to, and is prompted to sign in / sign up. A
-// signed-in recipient gets an Accept button that redeems the invite and
-// drops them on the team dashboard. The preview comes from the
-// get_invite_preview RPC (the token is the authorization — no membership).
+// Lives in the (auth) route group so it inherits the branded auth chrome
+// (accent glow + BrandLockup header + mono footer + centered main). Public
+// route (the proxy treats /join/* as public by prefix): a signed-out
+// recipient sees what they're invited to and is prompted to sign in / sign
+// up; a signed-in recipient gets an Accept button. The preview comes from
+// the get_invite_preview RPC (the token is the authorization — no
+// membership), so it renders for non-members too.
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -62,17 +64,5 @@ export default async function JoinPage({
     };
   }
 
-  return (
-    <div
-      className="uff-web"
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "48px 20px",
-      }}
-    >
-      <JoinInviteClient token={token} signedIn={!!user} preview={preview} />
-    </div>
-  );
+  return <JoinInviteClient token={token} signedIn={!!user} preview={preview} />;
 }

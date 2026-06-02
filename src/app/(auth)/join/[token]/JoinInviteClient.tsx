@@ -1,8 +1,10 @@
 "use client";
 
-// Client half of the join-invite page. Renders the invite preview and the
-// right action for the visitor's state: Accept (signed in) or sign in /
-// sign up (signed out, with a resume cookie so they come back here).
+// Client half of the join-invite page, styled in the .uff auth design
+// language (card-canonical + btn-* + pill-*), so it reads as a sibling of
+// the login/signup screens. Renders the invite preview and the right action
+// for the visitor: Accept (signed in) or sign in / sign up (signed out, with
+// a resume cookie so they come back here after auth).
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
@@ -20,7 +22,10 @@ export type InvitePreview = {
   status: "pending" | "revoked" | "expired" | "accepted";
 };
 
-const INVALID_COPY: Record<string, { kicker: string; title: string; body: string }> = {
+const TERMINAL_COPY: Record<
+  string,
+  { kicker: string; title: string; body: string }
+> = {
   invalid: {
     kicker: "Invite not found",
     title: "This invite link isn't valid.",
@@ -58,8 +63,8 @@ export default function JoinInviteClient({
 
   const isPending = preview?.status === "pending";
 
-  // Signed-out + a live invite → stash the token so login/proxy can bring
-  // the visitor back here after they authenticate.
+  // Signed-out + a live invite → stash the token so login/proxy bring the
+  // visitor back here after they authenticate.
   useEffect(() => {
     if (!signedIn && isPending) {
       document.cookie = `${INVITE_COOKIE}=${token}; path=/; max-age=1800; samesite=lax`;
@@ -81,20 +86,17 @@ export default function JoinInviteClient({
 
   // Invalid token or non-pending status → terminal message.
   if (!preview || preview.status !== "pending") {
-    const key = !preview ? "invalid" : preview.status;
-    const copy = INVALID_COPY[key] ?? INVALID_COPY.invalid;
+    const copy = TERMINAL_COPY[!preview ? "invalid" : preview.status] ?? TERMINAL_COPY.invalid;
     return (
       <Card>
-        <Kicker>{copy.kicker}</Kicker>
+        <Kicker tone="muted">{copy.kicker}</Kicker>
         <Title>{copy.title}</Title>
         <Body>{copy.body}</Body>
-        <Link
-          href="/"
-          className="wbtn ghost"
-          style={{ justifyContent: "center", marginTop: 4 }}
-        >
-          Back to home
-        </Link>
+        <div style={{ marginTop: 8 }}>
+          <Link href="/" className="btn btn-ghost">
+            Back to home
+          </Link>
+        </div>
       </Card>
     );
   }
@@ -109,18 +111,13 @@ export default function JoinInviteClient({
         {preview.inviterName} invited you to help run {preview.teamName}.
       </Body>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          padding: "12px 0 4px",
-        }}
-      >
-        <Pill>{preview.roleLabel}</Pill>
-        <Pill>{preview.accessLabel}</Pill>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 2 }}>
+        <span className="pill pill-orange">{preview.roleLabel}</span>
+        <span className="pill pill-ghost">{preview.accessLabel}</span>
         {preview.specialties.map((s) => (
-          <Pill key={s}>{s}</Pill>
+          <span key={s} className="pill pill-ghost">
+            {s}
+          </span>
         ))}
       </div>
 
@@ -143,32 +140,28 @@ export default function JoinInviteClient({
       {signedIn ? (
         <button
           type="button"
-          className="wbtn primary"
-          style={{ justifyContent: "center", height: 44, opacity: pending ? 0.6 : 1 }}
+          className="btn btn-primary btn-lg"
+          style={{ width: "100%" }}
           onClick={accept}
           disabled={pending}
         >
           {pending ? "Joining…" : `Accept & join ${preview.teamName}`}
         </button>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ margin: 0, fontSize: 12.5, color: "var(--uff-text-mute)", lineHeight: 1.5 }}>
-            Sign in or create an account to accept. We&rsquo;ll bring you right
-            back here.
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Body>
+            Sign in or create an account to accept — we&rsquo;ll bring you
+            right back here.
+          </Body>
+          <div style={{ display: "flex", gap: 10 }}>
             <Link
               href="/signup"
-              className="wbtn ghost"
-              style={{ flex: 1, justifyContent: "center", height: 44 }}
+              className="btn btn-secondary"
+              style={{ flex: 1 }}
             >
               Create account
             </Link>
-            <Link
-              href="/login"
-              className="wbtn primary"
-              style={{ flex: 1, justifyContent: "center", height: 44 }}
-            >
+            <Link href="/login" className="btn btn-primary" style={{ flex: 1 }}>
               Sign in to accept
             </Link>
           </div>
@@ -181,14 +174,14 @@ export default function JoinInviteClient({
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="w-card"
+      className="card-canonical"
       style={{
         width: "100%",
-        maxWidth: 460,
-        padding: 28,
+        maxWidth: 440,
+        padding: 32,
         display: "flex",
         flexDirection: "column",
-        gap: 14,
+        gap: 16,
       }}
     >
       {children}
@@ -196,16 +189,22 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Kicker({ children }: { children: React.ReactNode }) {
+function Kicker({
+  children,
+  tone = "accent",
+}: {
+  children: React.ReactNode;
+  tone?: "accent" | "muted";
+}) {
   return (
     <span
+      className="mono"
       style={{
-        fontFamily: "var(--font-mono)",
         fontSize: 11,
-        color: "var(--uff-lime)",
-        letterSpacing: ".08em",
-        fontWeight: 700,
+        fontWeight: 600,
+        letterSpacing: 2,
         textTransform: "uppercase",
+        color: tone === "muted" ? "var(--text-muted)" : "var(--uff-lime-400)",
       }}
     >
       {children}
@@ -218,11 +217,11 @@ function Title({ children }: { children: React.ReactNode }) {
     <h1
       style={{
         margin: 0,
-        fontSize: 24,
-        fontWeight: 700,
-        letterSpacing: "-0.02em",
-        color: "var(--uff-text)",
-        lineHeight: 1.15,
+        fontSize: 30,
+        fontWeight: 600,
+        letterSpacing: "-0.5px",
+        lineHeight: 1.12,
+        color: "var(--text-primary)",
       }}
     >
       {children}
@@ -232,28 +231,15 @@ function Title({ children }: { children: React.ReactNode }) {
 
 function Body({ children }: { children: React.ReactNode }) {
   return (
-    <p style={{ margin: 0, fontSize: 13, color: "var(--uff-text-mute)", lineHeight: 1.5 }}>
-      {children}
-    </p>
-  );
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span
+    <p
       style={{
-        fontSize: 10.5,
-        fontWeight: 700,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-        padding: "4px 10px",
-        borderRadius: 999,
-        background: "var(--uff-surface-2)",
-        border: "1px solid var(--uff-line-soft)",
-        color: "var(--uff-text-dim)",
+        margin: 0,
+        fontSize: 14,
+        color: "var(--text-secondary)",
+        lineHeight: 1.55,
       }}
     >
       {children}
-    </span>
+    </p>
   );
 }
