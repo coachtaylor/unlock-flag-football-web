@@ -582,16 +582,6 @@ function StatusPill({
     : isActive
       ? "var(--uff-lime)"
       : "var(--uff-text-mute)";
-  const bg = injured
-    ? "rgba(255,77,77,0.10)"
-    : isActive
-      ? "rgba(194,255,61,0.10)"
-      : "rgba(255,255,255,0.04)";
-  const border = injured
-    ? "1px solid rgba(255,77,77,0.30)"
-    : isActive
-      ? "1px solid rgba(194,255,61,0.30)"
-      : "1px solid var(--uff-line-soft)";
   const interactive = typeof onToggle === "function";
   return (
     <button
@@ -609,7 +599,7 @@ function StatusPill({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
+        gap: 7,
         fontFamily: "inherit",
         fontSize: compact ? 10 : 10.5,
         fontWeight: 700,
@@ -617,10 +607,9 @@ function StatusPill({
         textTransform: "uppercase",
         lineHeight: 1,
         margin: 0,
-        padding: compact ? "4px 8px" : "5px 10px",
-        borderRadius: 999,
-        background: bg,
-        border,
+        padding: 0,
+        background: "transparent",
+        border: 0,
         color,
         whiteSpace: "nowrap",
         flexShrink: 0,
@@ -634,6 +623,7 @@ function StatusPill({
           height: 6,
           borderRadius: "50%",
           background: color,
+          flexShrink: 0,
         }}
       />
       {label}
