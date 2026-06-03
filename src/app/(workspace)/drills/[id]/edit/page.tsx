@@ -16,6 +16,10 @@ import {
   loadDrillSkills,
   toPickerInitial,
 } from "@/lib/drills/skills-data";
+import {
+  parseBenchmarkConfig,
+  webEntriesFromConfig,
+} from "@/lib/benchmarks/config";
 
 export const dynamic = "force-dynamic";
 
@@ -140,11 +144,13 @@ export default async function EditDrillPage({ params }: Props) {
       )
     : [];
 
-  const benchmarkConfig =
-    (drill.benchmark_config as Record<
-      BenchKind,
-      { target?: string; better?: "lower" | "higher" }
-    > | null) ?? {};
+  // Parse the canonical (scope-grouped) config and flatten it into web's
+  // scope-less per-type {target, better} for the form. The raw canonical
+  // config rides along so a web save preserves scope + mobile-only knobs.
+  const benchmarkConfigRaw = parseBenchmarkConfig(drill.benchmark_config);
+  const benchmarkConfig = benchmarkConfigRaw
+    ? webEntriesFromConfig(benchmarkConfigRaw).perType
+    : {};
 
   const initial: DrillFormInitial = {
     id: drill.id as string,
@@ -155,6 +161,7 @@ export default async function EditDrillPage({ params }: Props) {
     skills: toPickerInitial(drillSkillsMap[id] ?? []),
     benchmarkTypes,
     benchmarkConfig,
+    benchmarkConfigRaw,
     defaultDurationMin: (drill.default_duration_min as number | null) ?? 10,
     defaultReps: (drill.default_reps as number | null) ?? 5,
     otherEquipment,

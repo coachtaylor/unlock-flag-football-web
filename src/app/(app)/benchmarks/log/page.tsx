@@ -6,6 +6,10 @@ import BenchmarkLogClient, {
   type BenchConfigEntry,
   type SkillTagGroup,
 } from "./BenchmarkLogClient";
+import {
+  parseBenchmarkConfig,
+  webEntriesFromConfig,
+} from "@/lib/benchmarks/config";
 
 type SearchParams = Promise<{ drill?: string; players?: string }>;
 
@@ -77,8 +81,13 @@ export default async function BenchmarkLogPage({
   );
   if (types.length === 0) redirect("/benchmarks");
 
-  const config =
-    (drill.benchmark_config as Partial<Record<BenchKind, BenchConfigEntry>> | null) ?? {};
+  // Parse the canonical (scope-grouped) config and flatten it to web's
+  // per-type {target, better} so the capture widgets show the right pass-mark
+  // + direction regardless of which platform authored the drill (TD-1).
+  const parsedConfig = parseBenchmarkConfig(drill.benchmark_config);
+  const config: Partial<Record<BenchKind, BenchConfigEntry>> = parsedConfig
+    ? webEntriesFromConfig(parsedConfig).perType
+    : {};
 
   // Skill tags grouped by skill — surfaces the chip library tied to the
   // drill's drill_skills rows. Build 11 replaces the hardcoded QUICK_TAGS

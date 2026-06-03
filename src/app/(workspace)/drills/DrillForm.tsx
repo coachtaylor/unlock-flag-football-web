@@ -40,6 +40,10 @@ import SkillPicker, {
   type SkillPickerValue,
 } from "@/components/uff-web/drills/SkillPicker";
 import { allowedSkillGroupsForPhases } from "@/lib/drills/skill-groups";
+import {
+  applyWebEdits,
+  type BenchmarkConfig as CanonicalBenchmarkConfig,
+} from "@/lib/benchmarks/config";
 import type {
   DrillSkillLink,
   DrillSkillWeight,
@@ -74,7 +78,11 @@ export type DrillFormInitial = {
   // preset drills and for drills that have been hand-tagged.
   skills: DrillSkillLink[];
   benchmarkTypes: BenchKind[];
+  // Web form per-type targets (flattened from the canonical config for the
+  // scope-less web UI). `benchmarkConfigRaw` carries the full canonical config
+  // so a web save preserves scope + mobile-only per-type knobs (TD-1).
   benchmarkConfig: BenchConfig;
+  benchmarkConfigRaw: CanonicalBenchmarkConfig | null;
   defaultDurationMin: number;
   defaultReps: number;
   otherEquipment: string[];
@@ -374,21 +382,14 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       }) ?? orderedCatIds[0];
 
     const types = Array.from(benchTypes);
-    // Trim benchmark_config to only the selected types and to filled targets.
-    const trimmedConfig: BenchConfig = {};
-    for (const t of types) {
-      const cfg = benchConfig[t] ?? DEFAULT_TARGETS[t];
-      const entry: BenchConfigEntry = {};
-      if (cfg?.target != null && String(cfg.target).trim() !== "") {
-        entry.target = String(cfg.target).trim();
-      }
-      // Only persist `better` overrides for types where the design exposes a
-      // direction toggle (timed / drops). Other types keep the catalog default.
-      if ((t === "timed" || t === "drops") && cfg?.better) {
-        entry.better = cfg.better;
-      }
-      trimmedConfig[t] = entry;
-    }
+    // Build the canonical scope-grouped config (the one shape mobile + the
+    // capture flow read — see TD-1). Web edits as a flat type list; this maps
+    // web's per-type {target, better} into the existing scope's group(s) while
+    // preserving the original scope and any mobile-only per-type knobs.
+    const canonicalConfig: CanonicalBenchmarkConfig | null =
+      usesBench && types.length > 0
+        ? applyWebEdits(initial?.benchmarkConfigRaw ?? null, types, benchConfig)
+        : null;
 
     // Legacy single-string benchmark_type — keep populated for any read path
     // that hasn't migrated to benchmark_types[]. Falls back to the first of
@@ -405,7 +406,8 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       source_url: sourceUrl.trim() || null,
       benchmark_type: legacyBenchType,
       benchmark_types: usesBench ? types : [],
-      benchmark_config: usesBench && types.length > 0 ? trimmedConfig : null,
+      benchmark_config: canonicalConfig,
+      benchmark_scope: canonicalConfig?.scope ?? null,
       is_dashboard_pinned: pinned,
       dashboard_pinned_at:
         pinned && !initial?.isDashboardPinned ? new Date().toISOString() : null,

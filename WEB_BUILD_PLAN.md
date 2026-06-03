@@ -18,6 +18,8 @@ Hand one build at a time to Claude Code, in order. Don't skip ahead — each bui
 
 Mobile-first responsive UX is non-negotiable: every build must work on a phone-sized browser AND on desktop. Builds that introduce desktop layouts must explicitly include the mobile fallback.
 
+> **Open tech debt:** see [`TECH_DEBT.md`](./TECH_DEBT.md). TD-1 (`benchmark_config` shape mismatch) is ✅ resolved 2026-06-03 — converged web onto the canonical scope-grouped shape; **run migration `91_normalize_benchmark_config.sql`** to migrate existing rows. No open items right now.
+
 ## Status legend
 
 - ⏳ Not started
