@@ -246,6 +246,11 @@ export function OnbCard({
       style={{
         width: "100%",
         maxWidth: withSummary ? width + 304 : width,
+        // Center within a full-width parent (e.g. the width:100% <form> the
+        // name / new-team / create-league steps wrap OnbCard in). Without
+        // this the card hugs the left edge and leaves a dead void on the
+        // right; scope/role render OnbCard directly so they're unaffected.
+        marginInline: "auto",
         display: "grid",
         gridTemplateColumns: withSummary ? `minmax(0, ${width}px) 280px` : "1fr",
         gap: 24,

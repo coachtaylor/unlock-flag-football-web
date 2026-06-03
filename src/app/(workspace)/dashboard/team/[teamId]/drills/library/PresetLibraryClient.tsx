@@ -60,6 +60,8 @@ export default function PresetLibraryClient({
   //           import-churn commit.
 
   const router = useRouter();
+  // Team-scoped drills base (Build 8): /dashboard/team/<id>/drills.
+  const base = `/dashboard/team/${teamId}/drills`;
 
   const [search, setSearch] = useState("");
   const [activeGroups, setActiveGroups] = useState<Set<SkillGroup>>(new Set());
@@ -166,7 +168,8 @@ export default function PresetLibraryClient({
                   key={p.id}
                   preset={p}
                   teamId={teamId}
-                  onCloned={(drillId) => router.push(`/drills/${drillId}`)}
+                  base={base}
+                  onCloned={(drillId) => router.push(`${base}/${drillId}`)}
                 />
               ))}
             </div>
@@ -604,10 +607,12 @@ function FilterRow({
 function PresetCard({
   preset,
   teamId,
+  base,
   onCloned,
 }: {
   preset: PresetDrillWithSkills;
   teamId: string;
+  base: string;
   onCloned: (drillId: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -636,7 +641,7 @@ function PresetCard({
     if (!preset.clonedDrillId) return;
     setRemoveError(null);
     startRemoveTransition(async () => {
-      const result = await removeClonedDrill(preset.clonedDrillId!);
+      const result = await removeClonedDrill(preset.clonedDrillId!, teamId);
       // On success the server action revalidates /drills/library, so the
       // refreshed props flip this card back to "Add to team".
       if (result.ok) setConfirmOpen(false);
@@ -785,6 +790,7 @@ function PresetCard({
         </div>
         <CloneButton
           preset={preset}
+          base={base}
           isPending={isPending}
           onClick={handleClone}
         />
@@ -948,17 +954,19 @@ function MetaPill({ label, dim }: { label: string; dim?: boolean }) {
 
 function CloneButton({
   preset,
+  base,
   isPending,
   onClick,
 }: {
   preset: PresetDrillWithSkills;
+  base: string;
   isPending: boolean;
   onClick: () => void;
 }) {
   if (preset.alreadyCloned && preset.clonedDrillId) {
     return (
       <Link
-        href={`/drills/${preset.clonedDrillId}`}
+        href={`${base}/${preset.clonedDrillId}`}
         style={{
           fontSize: 11,
           fontWeight: 600,

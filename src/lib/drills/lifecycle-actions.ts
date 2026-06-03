@@ -50,6 +50,7 @@ function friendlyRemoveCloneError(error: {
 // the caller belongs to the drill's team.
 export async function deleteTeamDrill(
   drillId: string,
+  teamId?: string,
 ): Promise<DeleteDrillResult> {
   if (!drillId) return { ok: false, error: "Missing drillId." };
   const supabase = await createClient();
@@ -61,8 +62,7 @@ export async function deleteTeamDrill(
   const { error } = await supabase.from("team_drills").delete().eq("id", drillId);
   if (error) return { ok: false, error: friendlyRemoveCloneError(error) };
 
-  revalidatePath("/drills");
-  revalidatePath("/drills/library");
+  revalidateDrills(teamId, drillId);
   return { ok: true };
 }
 
@@ -70,6 +70,7 @@ export async function deleteTeamDrill(
 // status='published' picker. Data (benchmark_results, etc.) is untouched.
 export async function archiveTeamDrill(
   drillId: string,
+  teamId?: string,
 ): Promise<DeleteDrillResult> {
   if (!drillId) return { ok: false, error: "Missing drillId." };
   const supabase = await createClient();
@@ -84,8 +85,7 @@ export async function archiveTeamDrill(
     .eq("id", drillId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/drills");
-  revalidatePath(`/drills/${drillId}`);
+  revalidateDrills(teamId, drillId);
   return { ok: true };
 }
 
@@ -93,6 +93,7 @@ export async function archiveTeamDrill(
 // the coach re-reviews before it re-enters the shared library + pickers.
 export async function unarchiveTeamDrill(
   drillId: string,
+  teamId?: string,
 ): Promise<DeleteDrillResult> {
   if (!drillId) return { ok: false, error: "Missing drillId." };
   const supabase = await createClient();
@@ -107,7 +108,17 @@ export async function unarchiveTeamDrill(
     .eq("id", drillId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/drills");
-  revalidatePath(`/drills/${drillId}`);
+  revalidateDrills(teamId, drillId);
   return { ok: true };
+}
+
+// Revalidate the team-scoped drills routes (Build 8). teamId optional so any
+// not-yet-migrated caller still triggers a safe no-op rather than throwing.
+function revalidateDrills(teamId: string | undefined, drillId: string) {
+  if (teamId) {
+    const base = `/dashboard/team/${teamId}/drills`;
+    revalidatePath(base);
+    revalidatePath(`${base}/library`);
+    revalidatePath(`${base}/${drillId}`);
+  }
 }

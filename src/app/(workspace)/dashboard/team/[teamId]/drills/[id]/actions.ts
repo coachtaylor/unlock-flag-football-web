@@ -10,18 +10,34 @@ import {
   deleteTeamDrill,
 } from "@/lib/drills/lifecycle-actions";
 
+// Resolve a drill's owning team so redirects/revalidation stay team-scoped
+// (Build 8). Internal helper — a "use server" file may only export async fns.
+async function drillTeamId(drillId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("team_drills")
+    .select("team_id")
+    .eq("id", drillId)
+    .maybeSingle();
+  return (data?.team_id as string | null) ?? null;
+}
+
 export async function archiveDrill(formData: FormData) {
   const drillId = String(formData.get("drillId") ?? "");
   if (!drillId) return;
-  await archiveTeamDrill(drillId);
-  redirect(`/drills`);
+  const teamId = await drillTeamId(drillId);
+  await archiveTeamDrill(drillId, teamId ?? undefined);
+  redirect(teamId ? `/dashboard/team/${teamId}/drills` : "/dashboard");
 }
 
 export async function unarchiveDrill(formData: FormData) {
   const drillId = String(formData.get("drillId") ?? "");
   if (!drillId) return;
-  await unarchiveTeamDrill(drillId);
-  redirect(`/drills/${drillId}`);
+  const teamId = await drillTeamId(drillId);
+  await unarchiveTeamDrill(drillId, teamId ?? undefined);
+  redirect(
+    teamId ? `/dashboard/team/${teamId}/drills/${drillId}` : "/dashboard",
+  );
 }
 
 // Preset clones use this to leave the team library; the global preset stays
@@ -30,8 +46,9 @@ export async function unarchiveDrill(formData: FormData) {
 export async function removeDrill(formData: FormData) {
   const drillId = String(formData.get("drillId") ?? "");
   if (!drillId) return;
-  await deleteTeamDrill(drillId);
-  redirect(`/drills`);
+  const teamId = await drillTeamId(drillId);
+  await deleteTeamDrill(drillId, teamId ?? undefined);
+  redirect(teamId ? `/dashboard/team/${teamId}/drills` : "/dashboard");
 }
 
 export async function duplicateDrill(formData: FormData) {
@@ -106,6 +123,7 @@ export async function duplicateDrill(formData: FormData) {
     );
   }
 
-  revalidatePath(`/drills`);
-  redirect(`/drills/${inserted.id}/edit`);
+  const teamId = original.team_id as string;
+  revalidatePath(`/dashboard/team/${teamId}/drills`);
+  redirect(`/dashboard/team/${teamId}/drills/${inserted.id}/edit`);
 }

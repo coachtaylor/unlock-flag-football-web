@@ -40,8 +40,9 @@ export async function clonePresetDrill(
 
   // Library page shows "Already added" pills; both pages need to re-render
   // to reflect the new team drill + its skill tags.
-  revalidatePath("/drills");
-  revalidatePath("/drills/library");
+  const base = `/dashboard/team/${teamId}/drills`;
+  revalidatePath(base);
+  revalidatePath(`${base}/library`);
 
   return { ok: true, drillId };
 }
@@ -57,6 +58,7 @@ export type RemoveCloneResult = { ok: true } | { ok: false; error: string };
 // one source of truth.
 export async function removeClonedDrill(
   drillId: string,
+  teamId?: string,
 ): Promise<RemoveCloneResult> {
-  return deleteTeamDrill(drillId);
+  return deleteTeamDrill(drillId, teamId);
 }

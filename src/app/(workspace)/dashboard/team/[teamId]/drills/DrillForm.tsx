@@ -147,6 +147,8 @@ const BENCH_SAMPLE: Record<BenchKind, string> = {
 export default function DrillForm({ team, user, categories, skills, initial, sidebarWorkspaces }: Props) {
   const router = useRouter();
   const isEditing = !!initial;
+  // Team-scoped drills base (Build 8): /dashboard/team/<id>/drills.
+  const base = `/dashboard/team/${team.id}/drills`;
 
   const [returnTo, setReturnTo] = useState<string | null>(null);
   useEffect(() => {
@@ -511,12 +513,12 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
 
     router.refresh();
     if (isEditing) {
-      router.push(`/drills/${drillId}`);
+      router.push(`${base}/${drillId}`);
     } else {
       const returnUrl = buildReturnUrl(
         targetStatus === "published" ? drillId : undefined,
       );
-      router.push(returnUrl ?? `/drills/${drillId}`);
+      router.push(returnUrl ?? `${base}/${drillId}`);
     }
   }
 
@@ -532,10 +534,10 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     : "CREATE";
 
   const backHref = returnTo
-    ? buildReturnUrl() ?? "/drills"
+    ? buildReturnUrl() ?? base
     : isEditing && initial
-      ? `/drills/${initial.id}`
-      : "/drills";
+      ? `${base}/${initial.id}`
+      : base;
 
   return (
     <div className="uff-web">

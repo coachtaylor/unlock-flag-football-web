@@ -32,10 +32,10 @@ const ALLOWED_BENCH: BenchKind[] = [
   "drops",
 ];
 
-type Props = { params: Promise<{ id: string }> };
+type Props = { params: Promise<{ teamId: string; id: string }> };
 
 export default async function EditDrillPage({ params }: Props) {
-  const { id } = await params;
+  const { teamId: routeTeamId, id } = await params;
   const supabase = await createClient();
 
   const {
@@ -63,6 +63,8 @@ export default async function EditDrillPage({ params }: Props) {
     notFound();
   }
   const teamId = drill.team_id as string;
+  // The URL's team must match the drill's owning team.
+  if (teamId !== routeTeamId) notFound();
 
   const [
     { data: team },

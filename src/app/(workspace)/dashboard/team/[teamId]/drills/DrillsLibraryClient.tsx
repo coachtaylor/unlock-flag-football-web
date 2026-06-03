@@ -120,9 +120,14 @@ type DrillManageAction = "archive" | "unarchive" | "delete" | "remove";
 export default function DrillsLibraryClient({
   drills,
   canManage,
+  base,
+  teamId,
 }: {
   drills: DrillRow[];
   canManage: boolean;
+  // Team-scoped base path, e.g. /dashboard/team/<id>/drills (Build 8).
+  base: string;
+  teamId: string;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -151,7 +156,7 @@ export default function DrillsLibraryClient({
       )
         return;
       startTransition(async () => {
-        const r = await deleteTeamDrill(d.id);
+        const r = await deleteTeamDrill(d.id, teamId);
         if (!r.ok) alert(r.error);
         router.refresh();
       });
@@ -159,7 +164,7 @@ export default function DrillsLibraryClient({
     }
     if (action === "unarchive") {
       startTransition(async () => {
-        const r = await unarchiveTeamDrill(d.id);
+        const r = await unarchiveTeamDrill(d.id, teamId);
         if (!r.ok) alert(r.error);
         router.refresh();
       });
@@ -173,7 +178,7 @@ export default function DrillsLibraryClient({
     )
       return;
     startTransition(async () => {
-      const r = await archiveTeamDrill(d.id);
+      const r = await archiveTeamDrill(d.id, teamId);
       if (!r.ok) alert(r.error);
       router.refresh();
     });
@@ -185,7 +190,7 @@ export default function DrillsLibraryClient({
     setDeleteBusy(true);
     setDeleteError(null);
     startTransition(async () => {
-      const r = await deleteTeamDrill(target.id);
+      const r = await deleteTeamDrill(target.id, teamId);
       setDeleteBusy(false);
       if (!r.ok) {
         setDeleteError(r.error);
@@ -337,13 +342,14 @@ export default function DrillsLibraryClient({
 
         <div className="drill-lib-cards">
           {rows.length === 0 ? (
-            <EmptyState onClear={clearAll} />
+            <EmptyState onClear={clearAll} base={base} />
           ) : (
             <div className="drill-card-grid">
               {rows.map((d) => (
                 <DrillCard
                   key={d.id}
                   d={d}
+                  base={base}
                   showTeam={showTeam}
                   canManage={canManage}
                   onManage={(action) => manageDrill(d, action)}
@@ -1157,11 +1163,13 @@ function DrillCardMenu({
 
 function DrillCard({
   d,
+  base,
   showTeam,
   canManage,
   onManage,
 }: {
   d: DrillRow;
+  base: string;
   showTeam: boolean;
   canManage: boolean;
   onManage: (action: DrillManageAction) => void;
@@ -1176,7 +1184,7 @@ function DrillCard({
 
   return (
     <Link
-      href={`/drills/${d.id}`}
+      href={`${base}/${d.id}`}
       className="w-card drill-card"
       style={
         {
@@ -1340,7 +1348,7 @@ function DrillCard({
 }
 
 // ── Empty state ───────────────────────────────────────────────────────
-function EmptyState({ onClear }: { onClear: () => void }) {
+function EmptyState({ onClear, base }: { onClear: () => void; base: string }) {
   return (
     <div
       className="w-card"
@@ -1373,7 +1381,7 @@ function EmptyState({ onClear }: { onClear: () => void }) {
           Clear filters
         </button>
         <Link
-          href="/drills/new"
+          href={`${base}/new`}
           style={{
             color: "var(--uff-orange)",
             textDecoration: "none",

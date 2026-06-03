@@ -140,8 +140,12 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
   const presetRefreshArmedRef = useRef(false);
   const browsePresets = useCallback(() => {
     presetRefreshArmedRef.current = true;
-    window.open("/drills/library", "_blank", "noopener,noreferrer");
-  }, []);
+    window.open(
+      `/dashboard/team/${plan.teamId}/drills/library`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }, [plan.teamId]);
   useEffect(() => {
     function onFocus() {
       if (presetRefreshArmedRef.current) {
@@ -1198,6 +1202,8 @@ function DrillEditRow({
             </div>
             {d.drill_id && (
               <Link
+                // Bare path → resolved to the team-scoped drill by the
+                // /drills/[id] redirect (Build 8); `plan` isn't in scope here.
                 href={`/drills/${d.drill_id}`}
                 style={{
                   background: "transparent",

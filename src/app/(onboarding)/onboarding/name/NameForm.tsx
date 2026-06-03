@@ -57,6 +57,8 @@ export default function NameForm({
                 onChange={(e) => setFirst(capitalizeName(e.target.value))}
                 autoFocus
                 maxLength={50}
+                name="firstName"
+                autoComplete="given-name"
               />
             </OnbField>
             <OnbField label="Last name">
@@ -66,6 +68,8 @@ export default function NameForm({
                 value={last}
                 onChange={(e) => setLast(capitalizeName(e.target.value))}
                 maxLength={50}
+                name="lastName"
+                autoComplete="family-name"
               />
             </OnbField>
           </div>
