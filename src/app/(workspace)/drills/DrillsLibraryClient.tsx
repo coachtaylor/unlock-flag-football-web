@@ -159,7 +159,8 @@ export default function DrillsLibraryClient({
     }
     if (action === "unarchive") {
       startTransition(async () => {
-        await unarchiveTeamDrill(d.id);
+        const r = await unarchiveTeamDrill(d.id);
+        if (!r.ok) alert(r.error);
         router.refresh();
       });
       return;
@@ -172,7 +173,8 @@ export default function DrillsLibraryClient({
     )
       return;
     startTransition(async () => {
-      await archiveTeamDrill(d.id);
+      const r = await archiveTeamDrill(d.id);
+      if (!r.ok) alert(r.error);
       router.refresh();
     });
   }

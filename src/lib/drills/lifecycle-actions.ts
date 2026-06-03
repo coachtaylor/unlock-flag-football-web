@@ -24,7 +24,9 @@ export type DeleteDrillResult = { ok: true } | { ok: false; error: string };
 // drill that has real data is blocked — tell the coach why instead of
 // leaking the raw constraint text. Kept in sync verbatim with the mobile
 // copy (unlock-mobile lib/preset-library.ts).
-export function friendlyRemoveCloneError(error: {
+// NOTE: module-private — a "use server" file may only *export* async
+// functions, and this helper is sync + only used by deleteTeamDrill below.
+function friendlyRemoveCloneError(error: {
   code?: string;
   message?: string;
   details?: string;
