@@ -4,33 +4,33 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleTeamIds } from "@/lib/access/teams";
+import {
+  archiveTeamDrill,
+  unarchiveTeamDrill,
+  deleteTeamDrill,
+} from "@/lib/drills/lifecycle-actions";
 
 export async function archiveDrill(formData: FormData) {
   const drillId = String(formData.get("drillId") ?? "");
   if (!drillId) return;
+  await archiveTeamDrill(drillId);
+  redirect(`/drills`);
+}
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+export async function unarchiveDrill(formData: FormData) {
+  const drillId = String(formData.get("drillId") ?? "");
+  if (!drillId) return;
+  await unarchiveTeamDrill(drillId);
+  redirect(`/drills/${drillId}`);
+}
 
-  const { data: drill } = await supabase
-    .from("team_drills")
-    .select("team_id")
-    .eq("id", drillId)
-    .maybeSingle();
-  if (!drill) return;
-
-  const accessibleTeamIds = await getAccessibleTeamIds(supabase, user.id);
-  if (!accessibleTeamIds.includes(drill.team_id as string)) return;
-
-  await supabase
-    .from("team_drills")
-    .update({ status: "archived" })
-    .eq("id", drillId);
-
-  revalidatePath(`/drills`);
+// Preset clones use this to leave the team library; the global preset stays
+// re-addable. (Custom drills are deleted from the archive on the list via the
+// type-the-name modal, not here.)
+export async function removeDrill(formData: FormData) {
+  const drillId = String(formData.get("drillId") ?? "");
+  if (!drillId) return;
+  await deleteTeamDrill(drillId);
   redirect(`/drills`);
 }
 

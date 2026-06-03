@@ -90,10 +90,13 @@ export default async function DrillsPage() {
     supabase
       .from("team_drills")
       .select(
-        "id, team_id, drill_name, description, status, benchmark_type, benchmark_types, default_duration_min, default_reps, is_dashboard_pinned, updated_at"
+        "id, team_id, drill_name, description, status, preset_drill_id, benchmark_type, benchmark_types, default_duration_min, default_reps, is_dashboard_pinned, updated_at"
       )
       .in("team_id", accessibleTeamIds)
-      .in("status", ["draft", "published"])
+      // Archived drills are loaded too so the "Archived" status filter can
+      // surface them for unarchive/delete; they're hidden by default in the
+      // client (DEFAULT_STATUSES excludes archived).
+      .in("status", ["draft", "published", "archived"])
       .order("updated_at", { ascending: false }),
   ]);
 
@@ -238,6 +241,9 @@ export default async function DrillsPage() {
       name: d.drill_name as string,
       description: (d.description as string | null) ?? null,
       status: d.status as DrillStatus,
+      // preset_drill_id set => this is a clone of a global preset (remove
+      // from library); null => a custom drill (archive, then delete).
+      isPreset: (d.preset_drill_id as string | null) != null,
       cats,
       skillGroups,
       skills,
@@ -319,7 +325,7 @@ export default async function DrillsPage() {
           className="page"
           style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }}
         >
-          <DrillsLibraryClient drills={drillRows} />
+          <DrillsLibraryClient drills={drillRows} canManage={canManage} />
         </div>
       </div>
     </div>

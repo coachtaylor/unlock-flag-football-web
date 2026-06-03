@@ -7,7 +7,8 @@
 // retired so the team library and the preset library read as one product.
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   BENCH_BY_ID,
   BENCH_TYPES,
@@ -25,6 +26,12 @@ import {
 import { SkillChip } from "@/components/uff-web/drills/SkillChip";
 import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
 import type { SkillGroup, TaggedSkill } from "@/lib/types/skills";
+import DeleteConfirmModal from "@/components/ui/DeleteConfirmModal";
+import {
+  archiveTeamDrill,
+  unarchiveTeamDrill,
+  deleteTeamDrill,
+} from "@/lib/drills/lifecycle-actions";
 
 // Phase derivation — separate from pickPhaseCat (which falls back to any
 // cat) because the card treatment specifically wants to call out a missing
@@ -54,6 +61,9 @@ export type DrillRow = {
   name: string;
   description: string | null;
   status: DrillStatus;
+  // true => clone of a global preset (remove from library); false => custom
+  // drill (archive → delete lifecycle).
+  isPreset: boolean;
   cats: CatSlug[];
   // Skill groups the drill develops (from the skill taxonomy), in canonical
   // radar order. Drives the skill-group filter — see DrillsFilterRail.
@@ -101,7 +111,89 @@ const SORT_DEFAULT_DIR: Record<SortKey, "asc" | "desc"> = {
   runs: "desc",
 };
 
-export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) {
+// A drill lifecycle action triggered from a card's manage menu. "remove" is
+// the preset-clone hard delete; "archive"/"unarchive"/"delete" are the
+// custom-drill lifecycle (delete is only reachable once archived, behind a
+// type-the-name confirm).
+type DrillManageAction = "archive" | "unarchive" | "delete" | "remove";
+
+export default function DrillsLibraryClient({
+  drills,
+  canManage,
+}: {
+  drills: DrillRow[];
+  canManage: boolean;
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  // The archived drill a coach is confirming a permanent delete on. Delete is
+  // only reachable from the archive, behind a type-the-name confirm modal —
+  // mirrors the practice list.
+  const [deleteTarget, setDeleteTarget] = useState<DrillRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Manage a drill from its card menu. Custom drills are archived (data is
+  // always kept), then can be unarchived or permanently deleted. Preset
+  // clones are removed straight from the library (the global preset stays
+  // browsable / re-addable).
+  function manageDrill(d: DrillRow, action: DrillManageAction) {
+    if (action === "delete") {
+      setDeleteError(null);
+      setDeleteTarget(d);
+      return;
+    }
+    if (action === "remove") {
+      if (
+        !confirm(
+          `"${d.name}" will be removed from your team library. The preset stays available to add again.`,
+        )
+      )
+        return;
+      startTransition(async () => {
+        const r = await deleteTeamDrill(d.id);
+        if (!r.ok) alert(r.error);
+        router.refresh();
+      });
+      return;
+    }
+    if (action === "unarchive") {
+      startTransition(async () => {
+        await unarchiveTeamDrill(d.id);
+        router.refresh();
+      });
+      return;
+    }
+    // archive
+    if (
+      !confirm(
+        "Archive this drill? It moves to your Archived list — all data is kept, and you can unarchive it later.",
+      )
+    )
+      return;
+    startTransition(async () => {
+      await archiveTeamDrill(d.id);
+      router.refresh();
+    });
+  }
+
+  function confirmDelete() {
+    const target = deleteTarget;
+    if (!target) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    startTransition(async () => {
+      const r = await deleteTeamDrill(target.id);
+      setDeleteBusy(false);
+      if (!r.ok) {
+        setDeleteError(r.error);
+        return;
+      }
+      setDeleteTarget(null);
+      router.refresh();
+    });
+  }
+
   // Show a per-card team chip only when the user has drills across more than
   // one team. Single-team users (the common case) get a clean list.
   const showTeam = useMemo(
@@ -247,12 +339,28 @@ export default function DrillsLibraryClient({ drills }: { drills: DrillRow[] }) 
           ) : (
             <div className="drill-card-grid">
               {rows.map((d) => (
-                <DrillCard key={d.id} d={d} showTeam={showTeam} />
+                <DrillCard
+                  key={d.id}
+                  d={d}
+                  showTeam={showTeam}
+                  canManage={canManage}
+                  onManage={(action) => manageDrill(d, action)}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      <DeleteConfirmModal
+        open={!!deleteTarget}
+        name={deleteTarget?.name ?? null}
+        noun="drill"
+        busy={deleteBusy}
+        error={deleteError}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
 
       <style>{`
         .drill-lib { display: flex; flex-direction: column; gap: 16px; }
@@ -911,7 +1019,151 @@ function TeamChip({ team }: { team: { name: string; color: string } }) {
 // and a bottom meta row. The bottom row carries the team-drill payload that
 // presets don't have — benchmark types on the left, latest result + trend
 // on the right (presets put their clone action there instead).
-function DrillCard({ d, showTeam }: { d: DrillRow; showTeam: boolean }) {
+// Per-card manage menu (kebab). The card itself is a <Link>, so every
+// interactive handler here stops propagation + prevents default so a click
+// manages the drill instead of navigating to its detail page.
+function DrillCardMenu({
+  d,
+  onManage,
+}: {
+  d: DrillRow;
+  onManage: (action: DrillManageAction) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Contextual actions: preset clones are removed from the library; custom
+  // drills archive → (unarchive | delete).
+  const actions: { key: DrillManageAction; label: string; danger?: boolean }[] =
+    d.isPreset
+      ? [{ key: "remove", label: "Remove from library", danger: true }]
+      : d.status === "archived"
+      ? [
+          { key: "unarchive", label: "Unarchive" },
+          { key: "delete", label: "Delete permanently", danger: true },
+        ]
+      : [{ key: "archive", label: "Archive" }];
+
+  const stop = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        type="button"
+        aria-label="Manage drill"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          stop(e);
+          setOpen((v) => !v);
+        }}
+        style={{
+          width: 26,
+          height: 26,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          border: 0,
+          background: open ? "rgba(255,255,255,0.06)" : "transparent",
+          color: "var(--uff-text-mute)",
+          cursor: "pointer",
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="12" cy="5" r="1.6" />
+          <circle cx="12" cy="12" r="1.6" />
+          <circle cx="12" cy="19" r="1.6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          onClick={stop}
+          style={{
+            position: "absolute",
+            top: 30,
+            right: 0,
+            zIndex: 40,
+            minWidth: 184,
+            background: "var(--uff-surface-raised, var(--uff-surface))",
+            border: "1px solid var(--uff-line)",
+            borderRadius: 10,
+            padding: 5,
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
+          }}
+        >
+          {actions.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                stop(e);
+                setOpen(false);
+                onManage(a.key);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "8px 9px",
+                borderRadius: 6,
+                background: "transparent",
+                border: 0,
+                color: a.danger ? "#FF4D4D" : "var(--uff-text-dim)",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                fontWeight: 500,
+                textAlign: "left",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DrillCard({
+  d,
+  showTeam,
+  canManage,
+  onManage,
+}: {
+  d: DrillRow;
+  showTeam: boolean;
+  canManage: boolean;
+  onManage: (action: DrillManageAction) => void;
+}) {
   const phase = rowPhase(d.cats);
   const primary = d.primaryType ? BENCH_BY_ID[d.primaryType] : null;
   // Category label for the subline — the phase if tagged, else the first
@@ -990,13 +1242,20 @@ function DrillCard({ d, showTeam }: { d: DrillRow; showTeam: boolean }) {
             </div>
           )}
         </div>
-        {/* Status pill top-right — only when not published, to keep the
-            common case clean (mirrors the table treatment). */}
-        {d.status !== "published" && (
-          <span style={{ flexShrink: 0 }}>
-            <StatusPill status={d.status} />
-          </span>
-        )}
+        {/* Status pill + manage menu, top-right. Pill only renders when not
+            published (keeps the common case clean); the kebab is full-access
+            only. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            flexShrink: 0,
+          }}
+        >
+          {d.status !== "published" && <StatusPill status={d.status} />}
+          {canManage && <DrillCardMenu d={d} onManage={onManage} />}
+        </div>
       </div>
 
       {/* Description — 3-line clamp, matching the preset card. */}

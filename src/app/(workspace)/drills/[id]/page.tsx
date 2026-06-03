@@ -32,7 +32,7 @@ import {
   type DrillStatus,
 } from "@/components/uff-web/drills/atoms";
 import type { DiagramData } from "@/types/diagram";
-import { archiveDrill, duplicateDrill } from "./actions";
+import { archiveDrill, unarchiveDrill, removeDrill, duplicateDrill } from "./actions";
 import PinButton from "@/components/dashboard/widgets/PinButton";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +91,7 @@ export default async function DrillDetailPage({ params }: Props) {
   const { data: drill } = await supabase
     .from("team_drills")
     .select(
-      "id, team_id, drill_name, description, source_url, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by, updated_by"
+      "id, team_id, drill_name, description, source_url, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, preset_drill_id, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by, updated_by"
     )
     .eq("id", id)
     .maybeSingle();
@@ -746,6 +746,8 @@ export default async function DrillDetailPage({ params }: Props) {
                 totalRuns={totalRuns}
                 drillId={drill.id as string}
                 canManage={canManage}
+                isPreset={(drill.preset_drill_id as string | null) != null}
+                status={status}
               />
               <BenchmarkSnapshotCard
                 types={types}
@@ -1014,6 +1016,8 @@ function MetaCard({
   totalRuns,
   drillId,
   canManage,
+  isPreset,
+  status,
 }: {
   creatorName: string;
   editorName: string;
@@ -1025,6 +1029,8 @@ function MetaCard({
   totalRuns: number;
   drillId: string;
   canManage: boolean;
+  isPreset: boolean;
+  status: DrillStatus;
 }) {
   return (
     <div
@@ -1086,30 +1092,49 @@ function MetaCard({
           <button
             type="submit"
             className="wbtn"
-            style={{
-              width: "100%",
-              height: 34,
-              fontSize: 12.5,
-            }}
+            style={{ width: "100%", height: 34, fontSize: 12.5 }}
           >
             Duplicate
           </button>
         </form>
-        <form action={archiveDrill} style={{ flex: 1 }}>
-          <input type="hidden" name="drillId" value={drillId} />
-          <button
-            type="submit"
-            className="wbtn"
-            style={{
-              width: "100%",
-              height: 34,
-              fontSize: 12.5,
-              color: "#FF4D4D",
-            }}
-          >
-            Archive
-          </button>
-        </form>
+        {/* Lifecycle action mirrors the drill cards: preset clones are
+            removed from the library; custom drills archive, then (once
+            archived) unarchive. Permanent delete of a custom drill happens
+            from the library archive behind a type-the-name confirm. */}
+        {isPreset ? (
+          <form action={removeDrill} style={{ flex: 1 }}>
+            <input type="hidden" name="drillId" value={drillId} />
+            <button
+              type="submit"
+              className="wbtn"
+              style={{ width: "100%", height: 34, fontSize: 12.5, color: "#FF4D4D" }}
+            >
+              Remove
+            </button>
+          </form>
+        ) : status === "archived" ? (
+          <form action={unarchiveDrill} style={{ flex: 1 }}>
+            <input type="hidden" name="drillId" value={drillId} />
+            <button
+              type="submit"
+              className="wbtn"
+              style={{ width: "100%", height: 34, fontSize: 12.5 }}
+            >
+              Unarchive
+            </button>
+          </form>
+        ) : (
+          <form action={archiveDrill} style={{ flex: 1 }}>
+            <input type="hidden" name="drillId" value={drillId} />
+            <button
+              type="submit"
+              className="wbtn"
+              style={{ width: "100%", height: 34, fontSize: 12.5, color: "#FF4D4D" }}
+            >
+              Archive
+            </button>
+          </form>
+        )}
       </div>
       )}
     </div>
