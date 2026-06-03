@@ -4,6 +4,7 @@ import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
+import { memberCanManage } from "@/lib/team/staff-roles";
 import PlayerForm from "../PlayerForm";
 
 export default async function NewPlayerPage({
@@ -32,14 +33,34 @@ export default async function NewPlayerPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
     ]);
 
   if (!team) notFound();
-  if (!membership) notFound();
+
+  // Access: full-access member OR league admin of the team's league (mirrors
+  // the roster + edit pages). Without the league-admin fallback a league
+  // admin 404s on Add player even though they manage the roster.
+  let isLeagueAdmin = false;
+  if (!membership && team.league_id) {
+    const { data: leagueMember } = await supabase
+      .from("league_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("league_id", team.league_id)
+      .eq("role", "league_admin")
+      .maybeSingle();
+    isLeagueAdmin = !!leagueMember;
+  }
+  const canManage =
+    memberCanManage(
+      membership?.role as string | null,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
+  if (!canManage) redirect(`/dashboard/team/${teamId}/roster`);
 
   const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const teamColor = teamColorHex(team.team_color);

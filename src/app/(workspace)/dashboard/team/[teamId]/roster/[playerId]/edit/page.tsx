@@ -48,16 +48,31 @@ export default async function EditPlayerPage({
     ]);
 
   if (!team || !player) notFound();
-  if (!membership) notFound();
   if (player.team_id !== teamId) notFound();
-  // View-only members (managers / view-only captains) can't edit players —
-  // bounce to the read-only detail page.
-  if (
-    !memberCanManage(
-      membership.role as string | null,
-      membership.captain_view_only as boolean | null
-    )
-  ) {
+
+  // Access: a direct full-access member OR a league admin of the team's
+  // league. Mirrors the player detail + roster pages — those fall back to
+  // league_admin, so the edit page must too (otherwise a league admin can
+  // open the roster + player but 404s on edit).
+  let isLeagueAdmin = false;
+  if (!membership && team.league_id) {
+    const { data: leagueMember } = await supabase
+      .from("league_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("league_id", team.league_id)
+      .eq("role", "league_admin")
+      .maybeSingle();
+    isLeagueAdmin = !!leagueMember;
+  }
+  const canManage =
+    memberCanManage(
+      membership?.role as string | null,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
+  // Non-members and view-only members (managers / view-only captains) can't
+  // edit — bounce to the read-only detail page.
+  if (!canManage) {
     redirect(`/dashboard/team/${teamId}/roster/${playerId}`);
   }
 
