@@ -21,6 +21,8 @@ export async function createInvite(input: {
   expiresInDays?: number | null;
   /** Link the invite to an existing player row (captain access invites). */
   playerId?: string | null;
+  /** Captain-only: grant view-only access (role stays 'captain'). */
+  captainViewOnly?: boolean;
 }): Promise<CreateResult> {
   const supabase = await createClient();
   const {
@@ -42,6 +44,7 @@ export async function createInvite(input: {
     p_label: input.label ?? null,
     p_expires_at: expiresAt,
     p_player_id: input.playerId ?? null,
+    p_captain_view_only: input.role === "captain" && !!input.captainViewOnly,
   });
 
   if (error) return { ok: false, error: error.message };

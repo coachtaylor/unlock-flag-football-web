@@ -8,7 +8,7 @@ import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 import { loadTeamStaffMember } from "@/lib/team/staff-detail";
 import CoachForm from "../CoachForm";
 
@@ -38,7 +38,7 @@ export default async function CoachEditPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
@@ -61,7 +61,11 @@ export default async function CoachEditPage({
       .maybeSingle();
     isLeagueAdmin = !!leagueMember;
   }
-  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
+  const canManage =
+    memberCanManage(
+      membershipRole,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
   // View-only (and non-members) can't edit — bounce to the read-only page.
   if (!canManage) redirect(coachBase);
 

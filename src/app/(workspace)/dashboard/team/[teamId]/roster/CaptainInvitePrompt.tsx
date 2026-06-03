@@ -27,14 +27,16 @@ export default function CaptainInvitePrompt({
   const [pending, startTransition] = useTransition();
 
   const accessLabel = access === "full" ? "full access" : "view-only access";
-  const role = access === "full" ? "captain" : "team_manager";
 
   function generate() {
     setError(null);
     startTransition(async () => {
+      // A captain is always invited as role 'captain' — view-only rides on a
+      // separate flag, so they're never stored as (or shown as) a team manager.
       const res = await createInvite({
         teamId,
-        role,
+        role: "captain",
+        captainViewOnly: access === "view",
         label: playerName,
         playerId,
         expiresInDays: null,

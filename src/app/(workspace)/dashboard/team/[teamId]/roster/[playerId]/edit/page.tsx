@@ -6,6 +6,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import PlayerForm from "../../PlayerForm";
 import { splitName } from "@/lib/format/name";
+import { memberCanManage } from "@/lib/team/staff-roles";
 
 export default async function EditPlayerPage({
   params,
@@ -33,14 +34,14 @@ export default async function EditPlayerPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
       supabase
         .from("team_players")
         .select(
-          "id, team_id, player_name, first_name, last_name, positions, jersey_number, notes, is_captain, captain_access"
+          "id, team_id, player_name, first_name, last_name, positions, jersey_number, notes, is_captain, captain_access, user_id"
         )
         .eq("id", playerId)
         .maybeSingle(),
@@ -49,6 +50,16 @@ export default async function EditPlayerPage({
   if (!team || !player) notFound();
   if (!membership) notFound();
   if (player.team_id !== teamId) notFound();
+  // View-only members (managers / view-only captains) can't edit players —
+  // bounce to the read-only detail page.
+  if (
+    !memberCanManage(
+      membership.role as string | null,
+      membership.captain_view_only as boolean | null
+    )
+  ) {
+    redirect(`/dashboard/team/${teamId}/roster/${playerId}`);
+  }
 
   const sidebarWorkspaces = await loadSidebarWorkspaces(teamId, team.league_id);
   const teamColor = teamColorHex(team.team_color);
@@ -114,6 +125,7 @@ export default async function EditPlayerPage({
               isCaptain: (player.is_captain as boolean) ?? false,
               captainAccess:
                 (player.captain_access as "full" | "view" | "none" | null) ?? null,
+              accountLinked: !!(player.user_id as string | null),
             }}
           />
         </div>

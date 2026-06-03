@@ -18,7 +18,7 @@ import InviteModal from "./InviteModal";
 import PendingInvites, { type PendingInvite } from "./PendingInvites";
 import {
   STAFF_ROLES,
-  isFullAccess,
+  memberCanManage,
   type StaffRole,
   type InviteRole,
 } from "@/lib/team/staff-roles";
@@ -124,7 +124,7 @@ export default async function TeamRosterPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
@@ -150,8 +150,13 @@ export default async function TeamRosterPage({
   if (!canView) notFound();
 
   // Full-access members (+ league admins) can invite, revoke, and edit the
-  // roster. team_managers are view-only (mirrors get_my_writable_team_ids()).
-  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
+  // roster. team_managers and view-only captains are read-only (mirrors
+  // get_my_writable_team_ids()).
+  const canManage =
+    memberCanManage(
+      membershipRole,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
 
   // Captains surface above regular players; within each group, ordered by
   // jersey number ascending with un-numbered players sent to the bottom

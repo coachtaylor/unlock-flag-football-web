@@ -15,6 +15,8 @@ import { POSITION_IDS } from "@/lib/positions";
 import { fullName, capitalizeName } from "@/lib/format/name";
 import { FormSection, FormField, formInputStyle } from "@/components/ui/FormSection";
 import CaptainInvitePrompt from "./CaptainInvitePrompt";
+import CaptainRemovalModal from "./CaptainRemovalModal";
+import { revokeCaptainAccess } from "@/lib/roster/captain-actions";
 
 const POSITION_OPTIONS = POSITION_IDS;
 
@@ -35,6 +37,10 @@ export type PlayerFormInitial = {
   notes: string;
   isCaptain: boolean;
   captainAccess: CaptainAccess | null;
+  // True when this player is linked to a login account (team_players.user_id
+  // set) — i.e. an invited captain who accepted. Removing the captain tag
+  // from such a player revokes their access, so we confirm keep-vs-remove.
+  accountLinked: boolean;
 };
 
 type Props = {
@@ -66,6 +72,10 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     access: "full" | "view";
     destination: string;
   } | null>(null);
+  // When an invited captain has their tag removed, confirm whether to keep
+  // them as a player or remove them from the roster (their access is revoked
+  // either way).
+  const [captainRemoval, setCaptainRemoval] = useState(false);
 
   function togglePosition(pos: string) {
     setPositions((prev) =>
@@ -82,27 +92,16 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!firstName.trim()) {
-      setError("First name is required.");
-      return;
-    }
-    setSubmitting(true);
-
-    const displayName = fullName(firstName, lastName);
-
-    // NOTE: is_injured + injury_note are intentionally NOT in this
-    // payload. Injury status is captured via the InjuryModal on the
-    // player detail page (Build 6.5c). Including the fields here would
-    // overwrite the modal's writes whenever the captain edits any other
-    // field. See MOBILE_APP_REFERENCE §6.5.
-    const payload = {
+  // NOTE: is_injured + injury_note are intentionally NOT in this payload.
+  // Injury status is captured via the InjuryModal on the player detail page
+  // (Build 6.5c). Including the fields here would overwrite the modal's writes
+  // whenever the captain edits any other field. See MOBILE_APP_REFERENCE §6.5.
+  function buildPayload() {
+    return {
       team_id: teamId,
       // player_name stays the canonical display field (= first [+ last]);
       // first_name/last_name add the structured form.
-      player_name: displayName,
+      player_name: fullName(firstName, lastName),
       first_name: firstName.trim(),
       last_name: lastName.trim() || null,
       positions,
@@ -112,6 +111,76 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
       // Permission tier only applies to captains; cleared otherwise.
       captain_access: isCaptain ? captainAccess : null,
     };
+  }
+
+  // Keep the invited captain on the roster as a regular player: persist the
+  // edits (with is_captain off) then revoke their coach-side membership.
+  async function handleKeepAsPlayer() {
+    if (!initial) return;
+    setSubmitting(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("team_players")
+      .update(buildPayload())
+      .eq("id", initial.id);
+    if (updErr) {
+      setError(updErr.message);
+      setSubmitting(false);
+      return;
+    }
+    const res = await revokeCaptainAccess({
+      playerId: initial.id,
+      teamId,
+      deletePlayer: false,
+    });
+    if (!res.ok) {
+      setError(res.error);
+      setSubmitting(false);
+      return;
+    }
+    setCaptainRemoval(false);
+    router.push(`${rosterBasePath}/${initial.id}`);
+    router.refresh();
+  }
+
+  // Remove the player from the roster entirely (revokes access + deletes row).
+  async function handleRemoveFromRoster() {
+    if (!initial) return;
+    setSubmitting(true);
+    setError(null);
+    const res = await revokeCaptainAccess({
+      playerId: initial.id,
+      teamId,
+      deletePlayer: true,
+    });
+    if (!res.ok) {
+      setError(res.error);
+      setSubmitting(false);
+      return;
+    }
+    setCaptainRemoval(false);
+    router.push(rosterBasePath);
+    router.refresh();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!firstName.trim()) {
+      setError("First name is required.");
+      return;
+    }
+
+    // Removing the captain tag from an invited captain revokes their access —
+    // confirm keep-vs-remove before saving.
+    if (isEditing && initial?.isCaptain && !isCaptain && initial.accountLinked) {
+      setCaptainRemoval(true);
+      return;
+    }
+
+    setSubmitting(true);
+
+    const payload = buildPayload();
 
     let savedId: string;
     let destination: string;
@@ -449,6 +518,24 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
             setInvitePrompt(null);
             router.push(dest);
             router.refresh();
+          }}
+        />
+      )}
+
+      {captainRemoval && (
+        <CaptainRemovalModal
+          playerName={fullName(firstName, lastName)}
+          pending={submitting}
+          error={error}
+          onKeep={handleKeepAsPlayer}
+          onRemove={handleRemoveFromRoster}
+          onCancel={() => {
+            if (submitting) return;
+            setCaptainRemoval(false);
+            // Re-check the captain box so the form matches saved state — they
+            // backed out of removing the tag.
+            setIsCaptain(true);
+            setError(null);
           }}
         />
       )}

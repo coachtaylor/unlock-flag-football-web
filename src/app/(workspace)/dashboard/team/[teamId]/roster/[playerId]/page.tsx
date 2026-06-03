@@ -15,7 +15,7 @@ import {
   teamColorHex,
 } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 import PlayerHistory, {
   type PlayerHistoryDrill,
   type PlayerHistoryLocked,
@@ -186,7 +186,7 @@ export default async function PlayerDetailPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
@@ -212,7 +212,11 @@ export default async function PlayerDetailPage({
 
   // View-only members (team_manager / view-only captains) can read this
   // page but get no edit / benchmark / injury / quick-action controls.
-  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
+  const canManage =
+    memberCanManage(
+      membershipRole,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
 
   const [
     { data: player },

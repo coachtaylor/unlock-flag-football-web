@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 
 export type TeamContextValue = {
   teamId: string | null;
@@ -43,6 +43,7 @@ export function TeamProvider({
   const [teamId, setTeamId] = useState<string | null>(initialTeamId);
   const [teamName, setTeamName] = useState<string | null>(initialTeamName);
   const [userRole, setUserRole] = useState<string | null>(initialUserRole);
+  const [captainViewOnly, setCaptainViewOnly] = useState(false);
   const [loading, setLoading] = useState(initialTeamId === null);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export function TeamProvider({
 
       const { data, error } = await supabase
         .from("team_members")
-        .select("team_id, role, teams(team_name)")
+        .select("team_id, role, captain_view_only, teams(team_name)")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
@@ -78,6 +79,7 @@ export function TeamProvider({
         setTeamId(data.team_id);
         setTeamName(name ?? null);
         setUserRole(data.role);
+        setCaptainViewOnly((data.captain_view_only as boolean | null) ?? false);
       }
       setLoading(false);
     })();
@@ -93,7 +95,7 @@ export function TeamProvider({
         teamId,
         teamName,
         userRole,
-        canManage: isFullAccess(userRole),
+        canManage: memberCanManage(userRole, captainViewOnly),
         loading,
       }}
     >

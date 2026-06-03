@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { BenchKind } from "@/components/uff-web/drills/atoms";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 import BenchmarksHubClient from "./BenchmarksHubClient";
 
 type SearchParams = Promise<{ drill?: string }>;
@@ -48,7 +48,7 @@ export default async function BenchmarksHubPage({
 
   const { data: membership } = await supabase
     .from("team_members")
-    .select("team_id, role")
+    .select("team_id, role, captain_view_only")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
@@ -56,7 +56,12 @@ export default async function BenchmarksHubPage({
   const teamId = membership.team_id;
 
   // Benchmarking is a write flow — view-only members get a notice.
-  if (!isFullAccess(membership.role as string | null)) {
+  if (
+    !memberCanManage(
+      membership.role as string | null,
+      membership.captain_view_only as boolean | null
+    )
+  ) {
     return (
       <div className="pt-3xl" style={{ maxWidth: 560 }}>
         <h1 className="text-title font-medium" style={{ color: "var(--color-text-primary)" }}>

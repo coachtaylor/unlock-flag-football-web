@@ -19,7 +19,7 @@ import Link from "next/link";
 
 import { loadTeamDashboard, loadTeamSkillRadar } from "@/lib/dashboard/team-home-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
 import NextPracticeCard from "@/components/dashboard/widgets/NextPracticeCard";
 import PinnedPulsesStrip from "@/components/dashboard/widgets/PinnedPulsesStrip";
@@ -88,7 +88,7 @@ export default async function TeamDashboardPage({
 
   const { data: membership } = await supabase
     .from("team_members")
-    .select("role")
+    .select("role, captain_view_only")
     .eq("user_id", user.id)
     .eq("team_id", teamId)
     .maybeSingle();
@@ -110,9 +110,13 @@ export default async function TeamDashboardPage({
   if (!canView) notFound();
 
   // Full-access viewers (coaches, full-access captains, league admins) get
-  // the coach console + write actions. A view-only captain (team_manager
-  // role) is locked to their player view — no coach toggle, no write CTAs.
-  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
+  // the coach console + write actions. A view-only captain is locked to their
+  // player view — no coach toggle, no write CTAs.
+  const canManage =
+    memberCanManage(
+      membershipRole,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
 
   // Load all widget data in one pass.
   const [data, sidebarWorkspaces, skillRadar] = await Promise.all([

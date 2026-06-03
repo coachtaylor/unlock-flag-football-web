@@ -17,9 +17,9 @@ import {
   STAFF_ROLE_META,
   staffRoleLabel,
   specialtyLabel,
-  isFullAccess,
+  memberCanManage,
 } from "@/lib/team/staff-roles";
-import { loadTeamStaff, shapeStaffRow } from "@/lib/team/staff-detail";
+import { loadTeamStaff, loadTeamStaffMember } from "@/lib/team/staff-detail";
 import RemoveStaffButton from "../RemoveStaffButton";
 
 export default async function CoachDetailPage({
@@ -48,7 +48,7 @@ export default async function CoachDetailPage({
         .maybeSingle(),
       supabase
         .from("team_members")
-        .select("role")
+        .select("role, captain_view_only")
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
@@ -72,11 +72,18 @@ export default async function CoachDetailPage({
   }
   if (!canView) notFound();
 
-  const canManage = isFullAccess(membershipRole) || isLeagueAdmin;
+  const canManage =
+    memberCanManage(
+      membershipRole,
+      membership?.captain_view_only as boolean | null
+    ) || isLeagueAdmin;
 
-  const staffRows = await loadTeamStaff(supabase, teamId);
-  const row = staffRows.find((r) => r.member_id === memberId);
-  const coach = row ? shapeStaffRow(row) : null;
+  // Resolve the target member via get_team_member (no captain exclusion) so a
+  // real member never 404s; loadTeamStaff is only for the head-coach count.
+  const [coach, staffRows] = await Promise.all([
+    loadTeamStaffMember(supabase, teamId, memberId),
+    loadTeamStaff(supabase, teamId),
+  ]);
   if (!coach) notFound();
 
   const headCount = staffRows.filter((r) => r.role === "head_coach").length;

@@ -12,21 +12,22 @@
 // order-by.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isFullAccess } from "@/lib/team/staff-roles";
+import { memberCanManage } from "@/lib/team/staff-roles";
 
 export type AccessibleTeam = {
   id: string;
   via: "team_member" | "league_admin";
   role: string | null;
+  captainViewOnly: boolean;
   leagueId: string | null;
 };
 
 // Can this user mutate the team? League admins always can; direct members
-// only with a full-access role (view-only team_managers cannot). Mirrors
-// get_my_writable_team_ids() in migration 79.
+// only with a full-access role — view-only team_managers AND view-only
+// captains cannot. Mirrors get_my_writable_team_ids() (migration 90).
 export function canManageTeam(t: AccessibleTeam | undefined | null): boolean {
   if (!t) return false;
-  return t.via === "league_admin" || isFullAccess(t.role);
+  return t.via === "league_admin" || memberCanManage(t.role, t.captainViewOnly);
 }
 
 export async function getAccessibleTeams(
@@ -36,7 +37,7 @@ export async function getAccessibleTeams(
   const [{ data: memberships }, { data: adminLeagues }] = await Promise.all([
     supabase
       .from("team_members")
-      .select("team_id, role, teams!inner(id, league_id)")
+      .select("team_id, role, captain_view_only, teams!inner(id, league_id)")
       .eq("user_id", userId),
     supabase
       .from("league_members")
@@ -58,6 +59,7 @@ export async function getAccessibleTeams(
       id: t.id,
       via: "team_member",
       role: (row.role as string | null) ?? null,
+      captainViewOnly: (row.captain_view_only as boolean | null) ?? false,
       leagueId: t.league_id,
     });
   }
@@ -78,6 +80,7 @@ export async function getAccessibleTeams(
         id,
         via: "league_admin",
         role: null,
+        captainViewOnly: false,
         leagueId: (t.league_id as string | null) ?? null,
       });
     }
