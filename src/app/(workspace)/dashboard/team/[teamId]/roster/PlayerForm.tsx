@@ -2,7 +2,7 @@
 
 // Add / edit player form for the workspace-scoped roster. UFF tokens,
 // section card layout per the design memory ("every form block wrapped
-// in <Section>"). Writes directly via the browser Supabase client; RLS
+// in <FormSection>"). Writes directly via the browser Supabase client; RLS
 // enforces team membership.
 
 import Link from "next/link";
@@ -13,6 +13,7 @@ import { Icon } from "@/components/uff/icons";
 
 import { POSITION_IDS } from "@/lib/positions";
 import { fullName, capitalizeName } from "@/lib/format/name";
+import { FormSection, FormField, formInputStyle } from "@/components/ui/FormSection";
 import CaptainInvitePrompt from "./CaptainInvitePrompt";
 
 const POSITION_OPTIONS = POSITION_IDS;
@@ -180,7 +181,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
         onSubmit={handleSubmit}
         style={{ display: "flex", flexDirection: "column", gap: 14 }}
       >
-        <Section title="Identity">
+        <FormSection title="Identity">
           <div
             style={{
               display: "flex",
@@ -189,7 +190,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
             }}
           >
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <Field label="First name" htmlFor="firstName" required>
+              <FormField label="First name" htmlFor="firstName" required>
                 <input
                   id="firstName"
                   type="text"
@@ -197,25 +198,25 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
                   value={firstName}
                   onChange={(e) => setFirstName(capitalizeName(e.target.value))}
                   placeholder="Jordan"
-                  style={inputStyle}
+                  style={formInputStyle}
                 />
-              </Field>
+              </FormField>
             </div>
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <Field label="Last name" htmlFor="lastName">
+              <FormField label="Last name" htmlFor="lastName">
                 <input
                   id="lastName"
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(capitalizeName(e.target.value))}
                   placeholder="Reyes (optional)"
-                  style={inputStyle}
+                  style={formInputStyle}
                 />
-              </Field>
+              </FormField>
             </div>
           </div>
 
-          <Field label="Jersey number" htmlFor="jerseyNumber">
+          <FormField label="Jersey number" htmlFor="jerseyNumber">
             <input
               id="jerseyNumber"
               type="text"
@@ -223,12 +224,12 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
               value={jerseyNumber}
               onChange={(e) => setJerseyNumber(e.target.value)}
               placeholder="12"
-              style={{ ...inputStyle, maxWidth: 120 }}
+              style={{ ...formInputStyle, maxWidth: 120 }}
             />
-          </Field>
-        </Section>
+          </FormField>
+        </FormSection>
 
-        <Section
+        <FormSection
           title="Positions"
           subtitle="Tap a position to add or remove. The first selected position is the player's primary."
         >
@@ -312,9 +313,9 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
               );
             })}
           </div>
-        </Section>
+        </FormSection>
 
-        <Section title="Roles">
+        <FormSection title="Roles">
           <ToggleRow
             checked={isCaptain}
             onChange={setIsCaptain}
@@ -385,17 +386,17 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
               </p>
             </div>
           )}
-        </Section>
+        </FormSection>
 
-        <Section title="Notes" subtitle="Optional, private to your team.">
+        <FormSection title="Notes" subtitle="Optional, private to your team.">
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Strengths, things to work on, anything else…"
             rows={4}
-            style={{ ...inputStyle, height: "auto", padding: 10, resize: "vertical" }}
+            style={{ ...formInputStyle, height: "auto", padding: 10, resize: "vertical" }}
           />
-        </Section>
+        </FormSection>
 
         {error && (
           <p
@@ -451,85 +452,6 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className="w-card"
-      style={{
-        padding: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: "var(--uff-text-mute)",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle && (
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--uff-text-dim)",
-              marginTop: 4,
-            }}
-          >
-            {subtitle}
-          </div>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  required,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label
-        htmlFor={htmlFor}
-        style={{
-          fontSize: 11.5,
-          fontWeight: 600,
-          color: "var(--uff-text-dim)",
-        }}
-      >
-        {label}
-        {required && (
-          <span style={{ color: "var(--uff-orange)", marginLeft: 4 }}>*</span>
-        )}
-      </label>
-      {children}
     </div>
   );
 }
@@ -609,15 +531,3 @@ function ToggleRow({
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  height: 40,
-  background: "var(--uff-surface-2)",
-  border: "1px solid var(--uff-line-soft)",
-  borderRadius: 8,
-  color: "var(--uff-text)",
-  fontFamily: "var(--font-sans)",
-  fontSize: 14,
-  padding: "0 12px",
-  outline: "none",
-};

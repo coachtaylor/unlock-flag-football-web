@@ -357,6 +357,7 @@ export default async function TeamRosterPage({
           style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}
         >
           <CoachingStaffTable
+            teamId={teamId}
             staff={staff}
             action={
               canManage ? (

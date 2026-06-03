@@ -3,10 +3,12 @@
 // the RPC (heads → assistants → managers). Captains are NOT here — they
 // render in the players table below via team_players.is_captain.
 //
-// Display-only in Build 16.5a. The "Invite coach" action + role management
-// land in 16.5b alongside the invite flow.
+// Each row links to that coach's profile (Build 16.5c), where full-access
+// members can edit the profile or remove the staff member.
 
+import Link from "next/link";
 import { initialsFor } from "@/lib/format/initials";
+import { Icon } from "@/components/uff/icons";
 import {
   STAFF_ROLE_META,
   staffRoleLabel,
@@ -25,10 +27,12 @@ export type StaffMember = {
 };
 
 export default function CoachingStaffTable({
+  teamId,
   staff,
   action,
   footer,
 }: {
+  teamId: string;
   staff: StaffMember[];
   /** Header-right slot (e.g. the Invite button) — full-access members only. */
   action?: React.ReactNode;
@@ -83,10 +87,17 @@ export default function CoachingStaffTable({
             <span>Role</span>
             <span>Focus</span>
             <span style={{ textAlign: "right" }}>Access</span>
+            <span />
           </div>
 
           {staff.map((m, i) => (
-            <StaffRow key={m.memberId} m={m} headCount={headCount} stripe={i % 2 === 1} />
+            <StaffRow
+              key={m.memberId}
+              teamId={teamId}
+              m={m}
+              headCount={headCount}
+              stripe={i % 2 === 1}
+            />
           ))}
         </div>
       )}
@@ -96,7 +107,7 @@ export default function CoachingStaffTable({
       <style>{`
         .staff-row-grid {
           display: grid;
-          grid-template-columns: 44px 1.7fr 1.2fr 1.1fr 120px;
+          grid-template-columns: 44px 1.7fr 1.2fr 1.1fr 120px 22px;
           align-items: center;
           gap: 14px;
           padding: 12px 18px;
@@ -114,11 +125,16 @@ export default function CoachingStaffTable({
         .staff-row {
           border-bottom: 1px solid var(--uff-line-soft);
           transition: background 120ms ease;
+          text-decoration: none;
+          color: inherit;
         }
         .staff-row:last-child { border-bottom: 0; }
         .staff-row.stripe { background: rgba(255,255,255,0.012); }
+        .staff-row:hover { background: rgba(255,255,255,0.04); }
+        .staff-chev { color: var(--uff-text-mute); }
+        .staff-row:hover .staff-chev { color: var(--uff-text); }
         @media (max-width: 720px) {
-          .staff-row-grid { grid-template-columns: 40px 1.4fr 1fr 110px; }
+          .staff-row-grid { grid-template-columns: 40px 1.4fr 1fr 110px 22px; }
           .staff-col-focus { display: none; }
         }
       `}</style>
@@ -127,17 +143,22 @@ export default function CoachingStaffTable({
 }
 
 function StaffRow({
+  teamId,
   m,
   headCount,
   stripe,
 }: {
+  teamId: string;
   m: StaffMember;
   headCount: number;
   stripe: boolean;
 }) {
   const meta = STAFF_ROLE_META[m.role];
   return (
-    <div className={`staff-row staff-row-grid ${stripe ? "stripe" : ""}`}>
+    <Link
+      href={`/dashboard/team/${teamId}/roster/coach/${m.memberId}`}
+      className={`staff-row staff-row-grid ${stripe ? "stripe" : ""}`}
+    >
       <StaffAvatar name={m.name} color={meta.color} />
 
       <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -171,7 +192,11 @@ function StaffRow({
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <AccessBadge tier={meta.access} label={meta.accessLabel} />
       </div>
-    </div>
+
+      <div className="staff-chev" style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Icon.chevR size={13} />
+      </div>
+    </Link>
   );
 }
 
