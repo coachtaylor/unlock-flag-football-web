@@ -650,7 +650,7 @@ export default async function PlayerDetailPage({
                   meta="Pick a drill"
                 />
                 <QuickRow
-                  href="/practice"
+                  href={`/dashboard/team/${teamId}/practice`}
                   label="Mark attendance"
                   meta="Next practice"
                 />

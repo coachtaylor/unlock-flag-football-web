@@ -79,6 +79,7 @@ export default function PostPracticeLogClient({
   initial,
 }: Props) {
   const router = useRouter();
+  const base = `/dashboard/team/${teamId}/practice`;
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -185,7 +186,7 @@ export default function PostPracticeLogClient({
         setError(result.error);
         return;
       }
-      router.push(`/practice/${planId}`);
+      router.push(`${base}/${planId}`);
       router.refresh();
     });
   }
@@ -618,7 +619,7 @@ export default function PostPracticeLogClient({
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button
               type="button"
-              onClick={() => router.push(`/practice/${planId}`)}
+              onClick={() => router.push(`${base}/${planId}`)}
               className="wbtn"
               disabled={pending}
             >

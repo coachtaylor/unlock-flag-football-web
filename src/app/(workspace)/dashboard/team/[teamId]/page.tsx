@@ -200,7 +200,7 @@ export default async function TeamDashboardPage({
               )}
               {canManage && (
                 <>
-                  <Link href="/practice/new" className="wbtn">
+                  <Link href={`/dashboard/team/${teamId}/practice/new`} className="wbtn">
                     <Icon.plus size={13} /> Plan practice
                   </Link>
                   <Link href="/benchmarks" className="wbtn primary">
@@ -216,6 +216,7 @@ export default async function TeamDashboardPage({
           {/* Hero + Next practice */}
           <div className="td-row td-row-hero">
             <HeroCard
+              teamId={teamId}
               greeting={greetingFor(profile?.first_name ?? null)}
               weekLabel={weekLabel()}
               practicesLogged={data.cadence.cells.filter((c) => c.intensity >= 2).length}
@@ -224,7 +225,7 @@ export default async function TeamDashboardPage({
               stats={data.hero}
               hasNextPractice={!!data.nextPractice}
             />
-            <NextPracticeCard practice={data.nextPractice} />
+            <NextPracticeCard practice={data.nextPractice} teamId={teamId} />
           </div>
 
           {/* Pinned pulses (KPI strip) */}

@@ -1,22 +1,10 @@
-// /practice/new — create a draft plan, then bounce to the editor.
+// Redirect resolver for the retired flat /practice/new (Build 8 pt 2). No team
+// in the URL to scope the new plan to, so bounce to the dashboard.
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getAccessibleTeams } from "@/lib/access/teams";
-import { createPlanDraft } from "@/lib/practice/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewPracticePlanPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const teams = await getAccessibleTeams(supabase, user.id);
-  if (teams.length === 0) redirect("/onboarding/scope");
-  const primary = teams.find((t) => t.via === "team_member") ?? teams[0];
-  const id = await createPlanDraft(primary.id);
-  redirect(`/practice/${id}/edit`);
+export default function LegacyPracticeNewRedirect() {
+  redirect("/dashboard");
 }

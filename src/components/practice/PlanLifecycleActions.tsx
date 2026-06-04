@@ -14,11 +14,14 @@ import DeletePlanModal from "@/components/practice/DeletePlanModal";
 
 export default function PlanLifecycleActions({
   planId,
+  teamId,
   status,
   archived,
   title,
 }: {
   planId: string;
+  /** Team this plan belongs to — scopes revalidation + post-delete redirect. */
+  teamId: string;
   status: PlanStatus;
   archived: boolean;
   /** Practice title — what the coach must re-type to confirm a delete. */
@@ -28,6 +31,7 @@ export default function PlanLifecycleActions({
   // branches on it (every active status archives the same way).
   void status;
   const router = useRouter();
+  const base = `/dashboard/team/${teamId}/practice`;
   const [pending, startTransition] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -41,7 +45,7 @@ export default function PlanLifecycleActions({
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await unarchivePlan(planId);
+                await unarchivePlan(planId, teamId);
                 router.refresh();
               })
             }
@@ -65,8 +69,8 @@ export default function PlanLifecycleActions({
           onCancel={() => setDeleteOpen(false)}
           onConfirm={() =>
             startTransition(async () => {
-              await deletePlan(planId);
-              router.push("/practice");
+              await deletePlan(planId, teamId);
+              router.push(base);
             })
           }
         />
@@ -87,8 +91,8 @@ export default function PlanLifecycleActions({
         )
           return;
         startTransition(async () => {
-          await archivePlan(planId);
-          router.push("/practice");
+          await archivePlan(planId, teamId);
+          router.push(base);
         });
       }}
     >

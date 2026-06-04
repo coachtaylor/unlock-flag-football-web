@@ -28,6 +28,8 @@ export type RsvpPlayer = {
 
 type Props = {
   planId: string;
+  /** Team this plan belongs to — scopes attendance revalidation. */
+  teamId: string;
   dateLabel: string;
   roster: RsvpPlayer[];
   initialAttendees: Record<string, boolean | null>;
@@ -37,6 +39,7 @@ type Props = {
 
 export default function ManageAttendanceCard({
   planId,
+  teamId,
   dateLabel,
   roster,
   initialAttendees,
@@ -61,7 +64,7 @@ export default function ManageAttendanceCard({
       .filter(([, v]) => v !== null)
       .map(([player_id, rsvp]) => ({ player_id, rsvp: rsvp as boolean }));
     startTransition(async () => {
-      const res = await saveAttendance(planId, rows);
+      const res = await saveAttendance(planId, rows, teamId);
       if (!res.ok) {
         setError(res.error);
         return;

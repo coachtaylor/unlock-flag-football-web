@@ -10,6 +10,26 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchPlanFull, DEFAULT_PLAN_TITLE } from "./plan-data";
 
+// Build the team-scoped practice base path (Build 8 pt 2). Practice now lives
+// under /dashboard/team/[teamId]/practice; every revalidate/redirect target is
+// derived from teamId so navigating back shows the right team's data.
+function planBase(teamId: string): string {
+  return `/dashboard/team/${teamId}/practice`;
+}
+
+// Revalidate the team-scoped list + (optionally) a single plan's detail/edit
+// paths. teamId is threaded from the caller (which always knows it); without it
+// we can't scope, so we no-op rather than touch the retired flat `/practice`.
+function revalidatePlan(teamId: string | null | undefined, planId?: string) {
+  if (!teamId) return;
+  const b = planBase(teamId);
+  revalidatePath(b);
+  if (planId) {
+    revalidatePath(`${b}/${planId}`);
+    revalidatePath(`${b}/${planId}/edit`);
+  }
+}
+
 export type SaveBlockInput = {
   template_id?: string | null;
   name: string;
@@ -44,7 +64,10 @@ export type SavePlanPayload = {
   breaks: SaveBreakInput[];
 };
 
-export async function savePlan(payload: SavePlanPayload): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function savePlan(
+  payload: SavePlanPayload,
+  teamId?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -73,8 +96,7 @@ export async function savePlan(payload: SavePlanPayload): Promise<{ ok: true } |
   });
   if (rpcErr) return { ok: false, error: rpcErr.message };
 
-  revalidatePath("/practice");
-  revalidatePath(`/practice/${payload.plan_id}`);
+  revalidatePlan(teamId, payload.plan_id);
   return { ok: true };
 }
 
@@ -111,8 +133,8 @@ export async function newPlanAndRedirect(formData: FormData) {
   const teamId = String(formData.get("teamId") ?? "");
   if (!teamId) throw new Error("Missing teamId");
   const id = await createPlanDraft(teamId);
-  revalidatePath("/practice");
-  redirect(`/practice/${id}/edit`);
+  revalidatePath(planBase(teamId));
+  redirect(`${planBase(teamId)}/${id}/edit`);
 }
 
 export async function duplicatePlan(planId: string): Promise<string> {
@@ -166,51 +188,51 @@ export async function duplicatePlan(planId: string): Promise<string> {
   });
   if (rpcErr) throw new Error(rpcErr.message);
 
-  revalidatePath("/practice");
+  revalidatePlan(source.team_id);
   return newPlan.id as string;
 }
 
 export async function duplicatePlanAndRedirect(formData: FormData) {
   const planId = String(formData.get("planId") ?? "");
+  const teamId = String(formData.get("teamId") ?? "");
   if (!planId) throw new Error("Missing planId");
   const newId = await duplicatePlan(planId);
-  redirect(`/practice/${newId}/edit`);
+  redirect(teamId ? `${planBase(teamId)}/${newId}/edit` : `/practice/${newId}/edit`);
 }
 
-export async function deletePlan(planId: string): Promise<void> {
+export async function deletePlan(planId: string, teamId?: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.from("practice_plans").delete().eq("id", planId);
   if (error) throw new Error(error.message);
-  revalidatePath("/practice");
+  revalidatePlan(teamId);
 }
 
 // Archive = soft delete. Live/completed practices can't be hard-deleted, only
 // archived (they keep their real status and drop out of the active lists).
-export async function archivePlan(planId: string): Promise<void> {
+export async function archivePlan(planId: string, teamId?: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase
     .from("practice_plans")
     .update({ archived_at: new Date().toISOString() })
     .eq("id", planId);
   if (error) throw new Error(error.message);
-  revalidatePath("/practice");
-  revalidatePath(`/practice/${planId}`);
+  revalidatePlan(teamId, planId);
 }
 
-export async function unarchivePlan(planId: string): Promise<void> {
+export async function unarchivePlan(planId: string, teamId?: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase
     .from("practice_plans")
     .update({ archived_at: null })
     .eq("id", planId);
   if (error) throw new Error(error.message);
-  revalidatePath("/practice");
-  revalidatePath(`/practice/${planId}`);
+  revalidatePlan(teamId, planId);
 }
 
 export async function saveAttendance(
   planId: string,
   rows: { player_id: string; rsvp: boolean | null }[],
+  teamId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   // Replace strategy: delete all rows then re-insert. The table has no
@@ -230,7 +252,6 @@ export async function saveAttendance(
     );
     if (insErr) return { ok: false, error: insErr.message };
   }
-  revalidatePath(`/practice/${planId}`);
-  revalidatePath(`/practice/${planId}/edit`);
+  revalidatePlan(teamId, planId);
   return { ok: true };
 }

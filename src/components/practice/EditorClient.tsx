@@ -137,6 +137,8 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
   // unsaved block/drill edits. When the user returns to this tab we refresh
   // the server data so any presets they just added show up in the catalog;
   // router.refresh() preserves this client component's in-progress state.
+  // Team-scoped practice base path (Build 8 pt 2).
+  const base = `/dashboard/team/${plan.teamId}/practice`;
   const presetRefreshArmedRef = useRef(false);
   const browsePresets = useCallback(() => {
     presetRefreshArmedRef.current = true;
@@ -387,13 +389,13 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       status: nextStatus,
       blocks: buildPayloadBlocks(),
       breaks: visibleBreaksPayload,
-    });
+    }, plan.teamId);
     if (!res.ok) {
       setError(res.error);
       return;
     }
     if (nextStatus === "scheduled") {
-      router.push(`/practice/${plan.id}`);
+      router.push(`${base}/${plan.id}`);
       return;
     }
     setStatus(nextStatus);
@@ -404,15 +406,15 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
     const rows = Object.entries(attendees)
       .filter(([, v]) => v !== null)
       .map(([player_id, rsvp]) => ({ player_id, rsvp: rsvp as boolean }));
-    const res = await saveAttendance(plan.id, rows);
+    const res = await saveAttendance(plan.id, rows, plan.teamId);
     if (!res.ok) setError(res.error);
     setSheet("none");
   }
 
   async function discardAndDelete() {
     if (!confirm("Discard this plan? This deletes the draft.")) return;
-    await deletePlan(plan.id);
-    router.push("/practice");
+    await deletePlan(plan.id, plan.teamId);
+    router.push(base);
   }
 
   return (
@@ -545,7 +547,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
               Discard
             </button>
             <span style={{ flex: 1 }} />
-            <Link href={`/practice/${plan.id}`} className="wbtn">
+            <Link href={`${base}/${plan.id}`} className="wbtn">
               Cancel
             </Link>
             <button

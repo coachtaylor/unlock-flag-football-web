@@ -20,7 +20,7 @@ type Variant = {
   secondaryHref: string;
 };
 
-function variantFor(status: PlanStatus, planId: string): Variant | null {
+function variantFor(status: PlanStatus, planId: string, base: string): Variant | null {
   if (status === "completed") return null;
   if (status === "draft") {
     return {
@@ -28,9 +28,9 @@ function variantFor(status: PlanStatus, planId: string): Variant | null {
       headline: "This draft never got finalized — and the date's passed.",
       sub: "Drafts can't be logged. Finalize the plan to keep it, or push the date out.",
       primaryLabel: "Finalize plan",
-      primaryHref: `/practice/${planId}/edit`,
+      primaryHref: `${base}/${planId}/edit`,
       secondaryLabel: "Move the date",
-      secondaryHref: `/practice/${planId}/edit`,
+      secondaryHref: `${base}/${planId}/edit`,
     };
   }
   if (status === "scheduled") {
@@ -39,9 +39,9 @@ function variantFor(status: PlanStatus, planId: string): Variant | null {
       headline: "Your scheduled practice is in the rearview — log it before it fades.",
       sub: "Mark drills done or skipped, capture observations, and set attendance while it's still fresh.",
       primaryLabel: "Log practice",
-      primaryHref: `/practice/${planId}/log`,
+      primaryHref: `${base}/${planId}/log`,
       secondaryLabel: "Reschedule",
-      secondaryHref: `/practice/${planId}/edit`,
+      secondaryHref: `${base}/${planId}/edit`,
     };
   }
   // live
@@ -50,27 +50,30 @@ function variantFor(status: PlanStatus, planId: string): Variant | null {
     headline: "This practice is still marked live — wrap it up.",
     sub: "You started it on the field but never logged the end. Close it out to clear it.",
     primaryLabel: "Wrap it up",
-    primaryHref: `/practice/${planId}/log`,
+    primaryHref: `${base}/${planId}/log`,
     secondaryLabel: "Reschedule",
-    secondaryHref: `/practice/${planId}/edit`,
+    secondaryHref: `${base}/${planId}/edit`,
   };
 }
 
 export default function PastDueBanner({
   status,
   planId,
+  base,
   isPastDue,
   showDraftBlockedNotice,
 }: {
   status: PlanStatus;
   planId: string;
+  // Team-scoped practice base path (`/dashboard/team/[teamId]/practice`).
+  base: string;
   isPastDue: boolean;
-  // True when the user just got redirected here from /practice/[id]/log
+  // True when the user just got redirected here from the log page
   // because their plan is still a draft. Renders an inline notice above
   // the banner regardless of past-due state.
   showDraftBlockedNotice?: boolean;
 }) {
-  const variant = isPastDue ? variantFor(status, planId) : null;
+  const variant = isPastDue ? variantFor(status, planId, base) : null;
   if (!variant && !showDraftBlockedNotice) return null;
 
   const accent =

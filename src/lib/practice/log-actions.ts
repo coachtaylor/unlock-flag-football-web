@@ -140,8 +140,11 @@ export async function savePracticeLog(
     .eq("id", payload.plan_id);
   if (planUpdErr) return { ok: false, error: planUpdErr.message };
 
-  revalidatePath("/practice");
-  revalidatePath(`/practice/${payload.plan_id}`);
-  revalidatePath(`/practice/${payload.plan_id}/log`);
+  // Team-scoped revalidation (Build 8 pt 2) — practice lives under
+  // /dashboard/team/[teamId]/practice. payload.team_id is always present.
+  const b = `/dashboard/team/${payload.team_id}/practice`;
+  revalidatePath(b);
+  revalidatePath(`${b}/${payload.plan_id}`);
+  revalidatePath(`${b}/${payload.plan_id}/log`);
   return { ok: true };
 }

@@ -22,7 +22,14 @@ function formatTime(t: string | null) {
   return `${h}:${String(mm).padStart(2, "0")} ${am ? "AM" : "PM"}`;
 }
 
-export default function NextPracticeCard({ practice }: { practice: NextPractice | null }) {
+export default function NextPracticeCard({
+  practice,
+  teamId,
+}: {
+  practice: NextPractice | null;
+  teamId: string;
+}) {
+  const practiceBase = `/dashboard/team/${teamId}/practice`;
   if (!practice) {
     return (
       <div className="w-card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -40,7 +47,7 @@ export default function NextPracticeCard({ practice }: { practice: NextPractice 
           No practice scheduled yet.
           <br />
           <Link
-            href="/practice/new"
+            href={`${practiceBase}/new`}
             className="wbtn primary"
             style={{ marginTop: 12, display: "inline-flex" }}
           >
@@ -128,7 +135,7 @@ export default function NextPracticeCard({ practice }: { practice: NextPractice 
           </span>
         </div>
         <Link
-          href={`/practice/${practice.id}`}
+          href={`${practiceBase}/${practice.id}`}
           className="wbtn primary"
           style={{ height: 32, padding: "0 12px", fontSize: 12 }}
         >

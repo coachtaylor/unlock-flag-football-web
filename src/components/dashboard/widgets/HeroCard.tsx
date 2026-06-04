@@ -3,6 +3,7 @@ import { Icon } from "@/components/uff/icons";
 import type { HeroStats } from "@/lib/dashboard/team-home-data";
 
 export default function HeroCard({
+  teamId,
   greeting,
   weekLabel,
   practicesLogged,
@@ -11,6 +12,7 @@ export default function HeroCard({
   stats,
   hasNextPractice,
 }: {
+  teamId: string;
   greeting: string;
   weekLabel: string;
   practicesLogged: number;
@@ -140,7 +142,11 @@ export default function HeroCard({
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
         <Link
-          href={hasNextPractice ? `/practice` : `/practice/new`}
+          href={
+            hasNextPractice
+              ? `/dashboard/team/${teamId}/practice`
+              : `/dashboard/team/${teamId}/practice/new`
+          }
           className="wbtn primary"
         >
           <Icon.bolt size={13} /> {hasNextPractice ? "Review tonight's practice" : "Build your first practice"}

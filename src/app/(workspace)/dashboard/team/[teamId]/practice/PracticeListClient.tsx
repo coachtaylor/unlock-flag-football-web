@@ -126,6 +126,15 @@ function ManageGlyphButton({
 // the list. Provided once at the top of the client; sub-components read it.
 const CanManageContext = createContext(true);
 
+// Team-scoped base path (`/dashboard/team/[teamId]/practice`). Provided once
+// at the top of the client so every plan link/router.push stays on this
+// team's URL instead of the legacy flat `/practice`.
+const BaseContext = createContext("/practice");
+const useBase = () => useContext(BaseContext);
+
+// Practice list tabs (Up next is featured above the tabs, not one of them).
+type TabId = "upcoming" | "attention" | "draft" | "recent" | "archive";
+
 function ManageIconButton({
   plan,
   onManage,
@@ -150,6 +159,7 @@ type RsvpBreakdown = { qb: number; off: number; def: number };
 
 export type ListProps = {
   teamId: string;
+  base: string;
   teamName: string;
   canManage: boolean;
   plans: PlanSummary[];
@@ -168,6 +178,7 @@ export type ListProps = {
 
 export default function PracticeListClient({
   teamId,
+  base,
   canManage,
   plans,
   rosterSize,
@@ -177,15 +188,9 @@ export default function PracticeListClient({
 }: ListProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  // Collapsed section keys (view-only state, not persisted).
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleSection = (key: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  // Which list tab is open. "Up next" lives above the tabs and always shows;
+  // the tabs default to Upcoming whenever the user lands on Practice.
+  const [activeTab, setActiveTab] = useState<TabId>("upcoming");
   // The archived plan a coach is confirming a permanent delete on. Delete is
   // only reachable from the archive, behind a type-the-name confirm modal.
   const [deleteTarget, setDeleteTarget] = useState<PlanSummary | null>(null);
@@ -200,7 +205,7 @@ export default function PracticeListClient({
     }
     if (action === "unarchive") {
       startTransition(async () => {
-        await unarchivePlan(plan.id);
+        await unarchivePlan(plan.id, teamId);
         router.refresh();
       });
       return;
@@ -212,53 +217,72 @@ export default function PracticeListClient({
     )
       return;
     startTransition(async () => {
-      await archivePlan(plan.id);
+      await archivePlan(plan.id, teamId);
       router.refresh();
     });
   };
 
   if (plans.length === 0) {
     return (
-      <CanManageContext.Provider value={canManage}>
-        <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <EmptyListState teamId={teamId} />
+      <BaseContext.Provider value={base}>
+        <CanManageContext.Provider value={canManage}>
+          <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <EmptyListState teamId={teamId} />
+            </div>
           </div>
-        </div>
-      </CanManageContext.Provider>
+        </CanManageContext.Provider>
+      </BaseContext.Provider>
     );
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  // Archived (soft-deleted) plans get their own bottom section and are
-  // excluded from every active group.
-  const activePlans = plans.filter((p) => !p.archived);
-  const archived = plans
-    .filter((p) => p.archived)
-    .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
-  const completed = activePlans
-    .filter((p) => p.status === "completed")
-    .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
-  const upcoming = activePlans
-    .filter((p) => p.status === "scheduled" || p.status === "live" || p.status === "draft" || p.practice_date >= todayIso)
-    .filter((p) => p.status !== "completed")
-    .sort((a, b) => (a.practice_date > b.practice_date ? 1 : -1));
+  const asc = (a: PlanSummary, b: PlanSummary) =>
+    a.practice_date > b.practice_date ? 1 : -1;
+  const desc = (a: PlanSummary, b: PlanSummary) =>
+    a.practice_date < b.practice_date ? 1 : -1;
 
-  // Stale scheduled/live practices (>6h past start) get pulled out of the
-  // upcoming groups into their own "Needs Attention" section.
-  const needsAttention = upcoming
-    .filter(
-      (p) =>
-        (p.status === "scheduled" || p.status === "live") &&
-        isPlanPastDue(p.practice_date, p.start_time, p.status),
-    )
-    .sort((a, b) => (a.practice_date < b.practice_date ? 1 : -1));
-  const naIds = new Set(needsAttention.map((p) => p.id));
-  const remaining = upcoming.filter((p) => !naIds.has(p.id));
-  const next = remaining[0];
-  const thisWeek = remaining.slice(1);
+  // Archived (soft-deleted) plans live in their own tab, excluded from the rest.
+  const activePlans = plans.filter((p) => !p.archived);
+  const archived = plans.filter((p) => p.archived).sort(desc);
+  const completed = activePlans.filter((p) => p.status === "completed").sort(desc);
+  const drafts = activePlans.filter((p) => p.status === "draft").sort(asc);
+
+  // Stale scheduled/live practices (>6h past start) split out as Needs
+  // Attention; the rest of the scheduled/live plans are Upcoming.
+  const liveScheduled = activePlans.filter(
+    (p) => p.status === "scheduled" || p.status === "live",
+  );
+  const needsAttention = liveScheduled
+    .filter((p) => isPlanPastDue(p.practice_date, p.start_time, p.status))
+    .sort(desc);
+  const upcomingAll = liveScheduled
+    .filter((p) => !isPlanPastDue(p.practice_date, p.start_time, p.status))
+    .sort(asc);
+
+  // "Up next" = the soonest plan a coach should act on (a draft or a scheduled
+  // plan, never a past-due or completed one). Always featured above the tabs.
+  const focusPool = activePlans
+    .filter((p) => p.status !== "completed")
+    .filter((p) => !isPlanPastDue(p.practice_date, p.start_time, p.status))
+    .sort(asc);
+  const next = focusPool[0];
+  const nextId = next?.id;
+
+  // Tabs exclude the featured "next" so it isn't listed twice.
+  const upcomingTab = upcomingAll.filter((p) => p.id !== nextId);
+  const draftTab = drafts.filter((p) => p.id !== nextId);
+
+  const tabs: { id: TabId; label: string; plans: PlanSummary[]; completed?: boolean }[] = [
+    { id: "upcoming", label: "Upcoming", plans: upcomingTab },
+    { id: "attention", label: "Needs Attention", plans: needsAttention },
+    { id: "draft", label: "Draft", plans: draftTab },
+    { id: "recent", label: "Recent", plans: completed, completed: true },
+    { id: "archive", label: "Archive", plans: archived, completed: true },
+  ];
+  const active = tabs.find((t) => t.id === activeTab) ?? tabs[0];
 
   return (
+    <BaseContext.Provider value={base}>
     <CanManageContext.Provider value={canManage}>
     <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -271,137 +295,46 @@ export default function PracticeListClient({
           avgDrills={stats.avgDrills}
         />
 
+        {/* Up next — the soonest plan to act on. Always shown above the tabs. */}
         {next && (
           <div>
             <SectionLabel
               label="Up next"
               right={<RelativeWhen iso={next.practice_date} />}
-              collapsible
-              collapsed={collapsed.has("upNext")}
-              onToggle={() => toggleSection("upNext")}
             />
-            {!collapsed.has("upNext") && (
-              <FeaturedPlanCard
-                plan={next}
-                avatars={rosterByPlan[next.id] ?? []}
-                breakdown={breakdownByPlan[next.id] ?? { qb: 0, off: 0, def: 0 }}
+            <FeaturedPlanCard
+              plan={next}
+              avatars={rosterByPlan[next.id] ?? []}
+              breakdown={breakdownByPlan[next.id] ?? { qb: 0, off: 0, def: 0 }}
+              rosterSize={rosterSize}
+              isPending={isPending}
+              onDuplicate={() => {
+                const fd = new FormData();
+                fd.set("planId", next.id);
+                startTransition(() => duplicatePlanAndRedirect(fd));
+              }}
+              onManage={(a) => managePlan(next, a)}
+            />
+          </div>
+        )}
+
+        {/* Tabs — Upcoming opens by default. */}
+        <TabBar tabs={tabs} active={activeTab} onSelect={setActiveTab} />
+        {active.plans.length === 0 ? (
+          <EmptyTabState label={active.label} />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {active.plans.map((p) => (
+              <PlanSummaryCard
+                key={p.id}
+                plan={p}
+                completed={active.completed}
+                avatars={rosterByPlan[p.id] ?? []}
+                breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
                 rosterSize={rosterSize}
-                isPending={isPending}
-                onDuplicate={() => {
-                  const fd = new FormData();
-                  fd.set("planId", next.id);
-                  startTransition(() => duplicatePlanAndRedirect(fd));
-                }}
-                onManage={(a) => managePlan(next, a)}
+                onManage={(a) => managePlan(p, a)}
               />
-            )}
-          </div>
-        )}
-
-        {thisWeek.length > 0 && (
-          <div>
-            <SectionLabel
-              label="This week"
-              count={thisWeek.length}
-              collapsible
-              collapsed={collapsed.has("thisWeek")}
-              onToggle={() => toggleSection("thisWeek")}
-            />
-            {!collapsed.has("thisWeek") && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {thisWeek.map((p) => (
-                  <PlanSummaryCard
-                    key={p.id}
-                    plan={p}
-                    avatars={rosterByPlan[p.id] ?? []}
-                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                    rosterSize={rosterSize}
-                    onManage={(a) => managePlan(p, a)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {needsAttention.length > 0 && (
-          <div>
-            <SectionLabel
-              label="Needs Attention!"
-              count={needsAttention.length}
-              tone="alert"
-              collapsible
-              collapsed={collapsed.has("needsAttention")}
-              onToggle={() => toggleSection("needsAttention")}
-            />
-            {!collapsed.has("needsAttention") && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {needsAttention.map((p) => (
-                  <PlanSummaryCard
-                    key={p.id}
-                    plan={p}
-                    avatars={rosterByPlan[p.id] ?? []}
-                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                    rosterSize={rosterSize}
-                    onManage={(a) => managePlan(p, a)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {completed.length > 0 && (
-          <div>
-            <SectionLabel
-              label="Recent"
-              count={completed.length}
-              collapsible
-              collapsed={collapsed.has("recent")}
-              onToggle={() => toggleSection("recent")}
-            />
-            {!collapsed.has("recent") && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {completed.map((p) => (
-                  <PlanSummaryCard
-                    key={p.id}
-                    plan={p}
-                    completed
-                    avatars={rosterByPlan[p.id] ?? []}
-                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                    rosterSize={rosterSize}
-                    onManage={(a) => managePlan(p, a)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {archived.length > 0 && (
-          <div>
-            <SectionLabel
-              label="Archived"
-              count={archived.length}
-              collapsible
-              collapsed={collapsed.has("archived")}
-              onToggle={() => toggleSection("archived")}
-            />
-            {!collapsed.has("archived") && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {archived.map((p) => (
-                  <PlanSummaryCard
-                    key={p.id}
-                    plan={p}
-                    completed
-                    avatars={rosterByPlan[p.id] ?? []}
-                    breakdown={breakdownByPlan[p.id] ?? { qb: 0, off: 0, def: 0 }}
-                    rosterSize={rosterSize}
-                    onManage={(a) => managePlan(p, a)}
-                  />
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -415,7 +348,7 @@ export default function PracticeListClient({
           const target = deleteTarget;
           if (!target) return;
           startTransition(async () => {
-            await deletePlan(target.id);
+            await deletePlan(target.id, teamId);
             setDeleteTarget(null);
             router.refresh();
           });
@@ -423,6 +356,97 @@ export default function PracticeListClient({
       />
     </div>
     </CanManageContext.Provider>
+    </BaseContext.Provider>
+  );
+}
+
+// ── Tab bar ────────────────────────────────────────────────────────────
+// Replaces the old collapsible sections. Active tab reads white with an
+// orange underline (selected-state accent); inactive tabs are gray. The
+// Needs Attention count stays red when it has items to preserve urgency.
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: { id: TabId; label: string; plans: PlanSummary[] }[];
+  active: TabId;
+  onSelect: (id: TabId) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 20,
+        alignItems: "center",
+        borderBottom: "1px solid var(--uff-line)",
+        flexWrap: "wrap",
+      }}
+    >
+      {tabs.map((t) => {
+        const isActive = t.id === active;
+        const isAlert = t.id === "attention" && t.plans.length > 0;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onSelect(t.id)}
+            style={{
+              appearance: "none",
+              background: "none",
+              border: "none",
+              borderBottom: isActive
+                ? "2px solid var(--uff-orange)"
+                : "2px solid transparent",
+              marginBottom: -1,
+              padding: "0 0 10px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              whiteSpace: "nowrap",
+              color: isActive ? "var(--uff-text)" : "var(--uff-text-mute)",
+              transition: "color .12s",
+            }}
+          >
+            {t.label}
+            {t.plans.length > 0 && (
+              <span
+                style={{
+                  fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  color: isAlert ? "var(--uff-red, #ff4d4d)" : "inherit",
+                  opacity: isAlert ? 1 : 0.55,
+                }}
+              >
+                {t.plans.length}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmptyTabState({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        padding: "28px 24px",
+        border: "1px dashed var(--uff-line)",
+        borderRadius: 12,
+        color: "var(--uff-text-mute)",
+        fontSize: 13,
+        textAlign: "center",
+      }}
+    >
+      No {label.toLowerCase()} practices.
+    </div>
   );
 }
 
@@ -566,7 +590,7 @@ function SectionLabel({
           fontSize: 10,
           fontWeight: 700,
           letterSpacing: ".14em",
-          color: tone === "alert" ? "var(--uff-red, #ff4d4d)" : "var(--uff-text-mute)",
+          color: tone === "alert" ? "var(--uff-red, #ff4d4d)" : "var(--uff-text)",
           textTransform: "uppercase",
         }}
       >
@@ -653,6 +677,7 @@ function FeaturedPlanCard({
 }) {
   const router = useRouter();
   const canManage = useContext(CanManageContext);
+  const base = useBase();
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -660,14 +685,14 @@ function FeaturedPlanCard({
         // Ignore clicks that originated on a nested interactive element
         // (edit/duplicate icon buttons). Those handle their own navigation.
         if ((e.target as HTMLElement).closest("[data-stop-card-nav]")) return;
-        router.push(`/practice/${plan.id}`);
+        router.push(`${base}/${plan.id}`);
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       role="link"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter") router.push(`/practice/${plan.id}`);
+        if (e.key === "Enter") router.push(`${base}/${plan.id}`);
       }}
       style={{
         background: hovered ? "#1a140e" : "#15110d",
@@ -692,7 +717,7 @@ function FeaturedPlanCard({
             {canManage && (
               <>
                 <Link
-                  href={`/practice/${plan.id}/edit`}
+                  href={`${base}/${plan.id}/edit`}
                   data-stop-card-nav
                   className="icon-btn"
                   title="Edit plan"
@@ -835,10 +860,11 @@ function PlanSummaryCard({
   onManage: (action: ManageAction) => void;
 }) {
   const router = useRouter();
+  const base = useBase();
   const hasAttendance =
     avatars.length > 0 || breakdown.qb + breakdown.off + breakdown.def > 0;
   const pastDue = isPlanPastDue(plan.practice_date, plan.start_time, plan.status);
-  const open = () => router.push(`/practice/${plan.id}`);
+  const open = () => router.push(`${base}/${plan.id}`);
   return (
     <div
       role="link"
@@ -880,8 +906,7 @@ function PlanSummaryCard({
           >
             {plan.title}
           </div>
-          {pastDue && <PastDueChip />}
-          <PracticeStatusPill status={plan.status} mini />
+          {pastDue ? <PastDueChip /> : <PracticeStatusPill status={plan.status} mini />}
           <ManageIconButton plan={plan} onManage={onManage} />
         </div>
         <div
