@@ -13,7 +13,7 @@ export default function DrillMixCard({
 }) {
   return (
     <div className="w-card">
-      <SectionHead label="Drill mix · last 4 weeks" meta={`${total} RUNS`} />
+      <SectionHead label="Drill mix" meta={`4 WK · ${total} RUNS`} />
       {total === 0 ? (
         <div
           style={{

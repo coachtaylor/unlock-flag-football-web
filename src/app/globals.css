@@ -806,6 +806,130 @@
 .uff-web .wbtn.ghost:hover { color: var(--uff-text); background: rgba(255, 255, 255, 0.03); }
 .uff-web .wbtn:disabled { cursor: not-allowed; opacity: 0.55; }
 
+/* "This week's focus" — gap meter + prescription action rows (Build 8.5).
+   Amber = the gap (caution), orange = the fix (action). */
+.uff-web .focus-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--uff-line-soft);
+  overflow: hidden;
+}
+.uff-web .focus-meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #B84200 0%, #FFB347 100%);
+  transition: width 0.4s ease;
+}
+/* Three weak-skill columns: stack on mobile, equal-width row on desktop. */
+.uff-web .focus-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.uff-web .focus-col {
+  min-width: 0;
+}
+@media (min-width: 980px) {
+  .uff-web .focus-grid {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .uff-web .focus-col {
+    flex: 1 1 0;
+    display: flex;
+  }
+  .uff-web .focus-col > * {
+    flex: 1;
+  }
+}
+
+/* Recommended drill — a clean hairline list, not a highlighted box.
+   Orange lives on the glyph only; the row itself is quiet. */
+.uff-web .focus-fix {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 2px;
+  color: var(--uff-text-dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--uff-line-soft);
+  transition: color 0.12s;
+}
+.uff-web .focus-fix:first-child {
+  padding-top: 0;
+}
+.uff-web .focus-fix:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.uff-web .focus-fix:hover {
+  color: var(--uff-text);
+}
+.uff-web .focus-fix:focus-visible {
+  outline: 2px solid var(--uff-orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+  color: var(--uff-text);
+}
+.uff-web .focus-fix .ic {
+  display: inline-flex;
+  align-items: center;
+  color: var(--uff-orange);
+  flex: none;
+}
+.uff-web .focus-fix .arrow {
+  margin-left: auto;
+  color: var(--uff-text-mute);
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s, transform 0.12s;
+}
+.uff-web .focus-fix:hover .arrow {
+  opacity: 0.8;
+  transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .uff-web .focus-meter > i,
+  .uff-web .focus-fix .arrow {
+    transition: none;
+  }
+}
+
+/* Unpin control on a pinned-pulse card — the corner pin marker doubles as the
+   remove affordance (hover = red). Absolute so it sits above the card's link. */
+.uff-web .pulse-unpin {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--uff-text-mute);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.uff-web button.pulse-unpin:hover {
+  color: var(--uff-red);
+  background: rgba(255, 77, 77, 0.1);
+  border-color: rgba(255, 77, 77, 0.3);
+}
+.uff-web button.pulse-unpin:focus-visible {
+  outline: none;
+  border-color: var(--uff-red);
+  box-shadow: 0 0 0 2px var(--uff-ink), 0 0 0 3px var(--uff-red);
+}
+.uff-web .pulse-unpin:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 /* Filter / range chip used in roster + history time-range rows */
 .uff-web .chip {
   display: inline-flex;

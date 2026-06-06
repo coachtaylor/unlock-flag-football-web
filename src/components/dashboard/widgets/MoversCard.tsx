@@ -20,7 +20,7 @@ export default function MoversCard({
   const prCount = movers.filter((m) => m.isPr).length;
   return (
     <div className="w-card">
-      <SectionHead label="Movers this period" meta={prCount ? `${prCount} PRS` : "PERIOD"} />
+      <SectionHead label="Movers" meta={prCount ? `${prCount} PRS` : "THIS PERIOD"} />
       {movers.length === 0 ? (
         <div
           style={{

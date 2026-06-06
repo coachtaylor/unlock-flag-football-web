@@ -56,23 +56,54 @@ export default function WeeklyFocusCard({
         <UnlockState />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {focus.skills.map((s, i) => (
-            <FocusSkillRow
-              key={s.skillId}
-              skill={s}
-              teamId={teamId}
-              rosterSize={focus.rosterSize}
-              totalMeasured={focus.totalMeasured}
-              emphasis={i === 0}
-            />
-          ))}
-          <Link
-            href={`/dashboard/team/${teamId}/practice/new`}
-            className="wbtn ghost"
-            style={{ width: "100%", marginTop: 2, justifyContent: "center" }}
+          <p
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "var(--uff-text-dim)",
+              margin: "0 0 2px",
+            }}
           >
-            <Icon.plus size={13} /> Plan a practice
-          </Link>
+            {`Your team's ${
+              focus.skills.length === 1 ? "biggest gap" : `${focus.skills.length} biggest gaps`
+            } — and the drills to close ${
+              focus.skills.length === 1 ? "it" : "them"
+            } at Sunday's practice.`}
+          </p>
+          <div className="focus-grid">
+            {focus.skills.map((s, i) => (
+              <div className="focus-col" key={s.skillId}>
+                <FocusSkillRow
+                  skill={s}
+                  teamId={teamId}
+                  rosterSize={focus.rosterSize}
+                  totalMeasured={focus.totalMeasured}
+                  emphasis={i === 0}
+                />
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 12,
+              marginTop: 4,
+              paddingTop: 12,
+              borderTop: "1px solid var(--uff-line-soft)",
+            }}
+          >
+            <span style={{ fontSize: 11.5, color: "var(--uff-text-mute)" }}>
+              Turn these gaps into a session
+            </span>
+            <Link
+              href={`/dashboard/team/${teamId}/practice/new`}
+              className="wbtn primary"
+            >
+              <Icon.plus size={13} /> Build a practice
+            </Link>
+          </div>
         </div>
       )}
     </div>

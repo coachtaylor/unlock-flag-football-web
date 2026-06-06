@@ -17,7 +17,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import { Icon } from "@/components/uff/icons";
 import Link from "next/link";
 
-import { loadTeamDashboard, loadTeamSkillRadar, loadTeamFocus } from "@/lib/dashboard/team-home-data";
+import { loadTeamDashboard, loadTeamSkillRadar, loadTeamFocus, buildPulseSuggestions } from "@/lib/dashboard/team-home-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import { memberCanManage } from "@/lib/team/staff-roles";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
@@ -57,6 +57,31 @@ function weekLabel() {
     month: "short",
     day: "numeric",
   })}`;
+}
+
+// Quiet section spine for the lower dashboard — gives the scroll a narrative
+// (DEVELOPMENT → OPERATIONS) instead of a wall of equal-weight widgets.
+function GroupHeading({ label, question }: { label: string; question: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+      <span style={{ whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--uff-text-mute)",
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ fontSize: 12, color: "var(--uff-text-dim)" }}> · {question}</span>
+      </span>
+      <span style={{ flex: 1, height: 1, background: "var(--uff-line-soft)" }} />
+    </div>
+  );
 }
 
 export default async function TeamDashboardPage({
@@ -201,14 +226,9 @@ export default async function TeamDashboardPage({
                 <CaptainViewToggle isCaptain={data.isCurrentUserCaptain} />
               )}
               {canManage && (
-                <>
-                  <Link href={`/dashboard/team/${teamId}/practice/new`} className="wbtn">
-                    <Icon.plus size={13} /> Plan practice
-                  </Link>
-                  <Link href="/benchmarks" className="wbtn primary">
-                    Run benchmark
-                  </Link>
-                </>
+                <Link href={`/dashboard/team/${teamId}/practice/new`} className="wbtn">
+                  <Icon.plus size={13} /> Plan practice
+                </Link>
               )}
             </>
           }
@@ -218,14 +238,12 @@ export default async function TeamDashboardPage({
           {/* Hero + Next practice */}
           <div className="td-row td-row-hero">
             <HeroCard
-              teamId={teamId}
               greeting={greetingFor(profile?.first_name ?? null)}
               weekLabel={weekLabel()}
               practicesLogged={data.cadence.cells.filter((c) => c.intensity >= 2).length}
               practicesPlanned={data.cadence.cells.length}
               copy={heroCopy}
               stats={data.hero}
-              hasNextPractice={!!data.nextPractice}
             />
             <NextPracticeCard practice={data.nextPractice} teamId={teamId} />
           </div>
@@ -236,13 +254,25 @@ export default async function TeamDashboardPage({
             <WeeklyFocusCard focus={focus} teamId={teamId} />
           )}
 
+          {/* ── DEVELOPMENT: is the team getting better? ── */}
+          <GroupHeading label="Development" question="is it working?" />
+
           {/* Pinned pulses (KPI strip) */}
           <div>
             <SectionHead
               label={playerView ? "Your pulses" : "Pinned pulses"}
               meta={`${data.pulses.length} / 4`}
             />
-            <PinnedPulsesStrip pulses={pulses} />
+            <PinnedPulsesStrip
+              pulses={pulses}
+              teamId={teamId}
+              canPin={canManage && !playerView}
+              suggestions={
+                canManage && !playerView
+                  ? buildPulseSuggestions(focus, new Set(pulses.map((p) => p.drillId)))
+                  : []
+              }
+            />
           </div>
 
           {/* Trends + Movers */}
@@ -259,6 +289,9 @@ export default async function TeamDashboardPage({
             <TeamSkillRadarCard data={skillRadar} />
             <NeedsAttentionCard items={data.attention} teamId={teamId} />
           </div>
+
+          {/* ── OPERATIONS: how are we running the program? ── */}
+          <GroupHeading label="Operations" question="how are we running it?" />
 
           {/* Drill mix · Cadence · Attendance (3-up wrap) */}
           <div className="td-row td-row-trio">

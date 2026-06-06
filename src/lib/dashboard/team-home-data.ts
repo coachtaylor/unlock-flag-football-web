@@ -37,6 +37,7 @@ export type PinnedPulse = {
   inverse: boolean;
   unit: string;
   series: number[]; // 8 points (weekly), oldest → newest
+  points: number; // # of weeks with real data (≥2 ⇒ a trend exists)
   color: string;
   pinnedAt: string | null;
 };
@@ -48,6 +49,7 @@ export type BreakdownPulseRow = {
   delta: number | null;
   series: number[]; // 8 weekly points, oldest → newest. Empty positions
                     // still get a zero-filled series for layout stability.
+  points: number; // # of weeks with real data for this position
 };
 
 export type BreakdownPulse = {
@@ -174,6 +176,8 @@ export type FocusDrill = { drillId: string; drillName: string };
 // Evidence chain behind a weak skill (the "why" — Build 8.5 storytelling pass).
 export type FocusEvidencePlayer = { playerId: string; name: string; score: number };
 export type FocusEvidenceDrill = { drillName: string; avgScore: number; players: number };
+// Weekly composite for the trend sparkline (oldest → newest).
+export type FocusTrendPoint = { week: string; score: number };
 
 export type FocusSkill = {
   skillId: string;
@@ -186,6 +190,7 @@ export type FocusSkill = {
   drills: FocusDrill[]; // recommended published drills that train this skill
   lowPlayers: FocusEvidencePlayer[]; // who's dragging it (lowest first)
   evidenceDrills: FocusEvidenceDrill[]; // which drills/scores produced this (weakest first)
+  trend: FocusTrendPoint[]; // weekly composite, oldest→newest (≥2 pts ⇒ drawable)
 };
 
 export type TeamFocus = {
@@ -194,6 +199,34 @@ export type TeamFocus = {
   rosterSize: number; // active players, for coverage ("3 of 10 rated")
   totalMeasured: number; // # of skills that cleared the bar (for "lowest of N")
 };
+
+// A "pin this drill" nudge for empty pulse slots — the drills that close the
+// team's top gaps, so empty slots become guided actions instead of dead space.
+export type PulseSuggestion = {
+  skillName: string;
+  skillRank: number; // 1 = weakest skill it addresses
+  drillId: string;
+  drillName: string;
+};
+
+// Derive pin suggestions from the focus recommendations (DRY — same drills the
+// "This week's focus" card prescribes). Weakest-skill-first, drills the team
+// already pins are skipped, each drill suggested once.
+export function buildPulseSuggestions(
+  focus: TeamFocus,
+  pinnedDrillIds: Set<string>
+): PulseSuggestion[] {
+  const seen = new Set<string>(pinnedDrillIds);
+  const out: PulseSuggestion[] = [];
+  for (const s of focus.skills) {
+    for (const d of s.drills) {
+      if (seen.has(d.drillId)) continue;
+      seen.add(d.drillId);
+      out.push({ skillName: s.skillName, skillRank: s.rank, drillId: d.drillId, drillName: d.drillName });
+    }
+  }
+  return out;
+}
 
 /* ─────────────── skill radar (Build 12) ─────────────── */
 
@@ -557,7 +590,7 @@ export async function loadTeamDashboard(
     drillId: string,
     type: PulseBenchmarkType,
     eligible: Set<string>
-  ): { current: number | null; previous: number | null; delta: number | null; series: number[] } {
+  ): { current: number | null; previous: number | null; delta: number | null; series: number[]; points: number } {
     const rows = benchmarks.filter((b) => {
       if (b.drill_id !== drillId) return false;
       if (b.benchmark_type !== type) return false;
@@ -580,17 +613,32 @@ export async function loadTeamDashboard(
         );
       if (wIdx >= 0 && wIdx < 8) weeks[wIdx].push(v);
     }
-    const series = weeks.map((w) => avg(w) ?? 0);
-    for (let i = 1; i < series.length; i++) {
-      if (!weeks[i].length && weeks[i - 1].length) series[i] = series[i - 1];
-    }
-    for (let i = series.length - 2; i >= 0; i--) {
-      if (!weeks[i].length && weeks[i + 1].length) series[i] = series[i + 1];
-    }
-    const current = avg(weeks.slice(-2).flat());
-    const previous = avg(weeks.slice(-6, -2).flat());
+    // Benchmarks are episodic (logged every few weeks), so a fixed trailing
+    // 2-week window for "current" is almost always empty. Instead anchor on
+    // the weeks that ACTUALLY have data: current = latest measured week,
+    // previous = the measured week before it. Robust to sparse logging.
+    const weeklyAvg = weeks.map((w) => avg(w)); // (number | null)[8]
+    const filledIdx = weeklyAvg
+      .map((v, i) => (v != null ? i : -1))
+      .filter((i) => i >= 0);
+
+    const current = filledIdx.length > 0 ? weeklyAvg[filledIdx[filledIdx.length - 1]]! : null;
+    const previous = filledIdx.length > 1 ? weeklyAvg[filledIdx[filledIdx.length - 2]]! : null;
     const delta = current != null && previous != null ? current - previous : null;
-    return { current, previous, delta, series };
+
+    // Continuous series for the sparkline: back-fill leading gaps with the
+    // first known value and carry the last known value forward, so empty
+    // weeks don't read as phantom drops to zero.
+    const firstKnown = filledIdx.length > 0 ? weeklyAvg[filledIdx[0]]! : 0;
+    const series: number[] = new Array(8).fill(0);
+    let carry = firstKnown;
+    for (let i = 0; i < 8; i++) {
+      if (weeklyAvg[i] != null) carry = weeklyAvg[i]!;
+      series[i] = carry;
+    }
+    // points = # of distinct weeks that actually have data (drives the
+    // "needs more readings to trend" honest state in the UI).
+    return { current, previous, delta, series, points: filledIdx.length };
   }
 
   function pulseColor(t: PulseBenchmarkType): string {
@@ -618,6 +666,7 @@ export async function loadTeamDashboard(
           previous: agg.previous,
           delta: agg.delta,
           series: agg.series,
+          points: agg.points,
         };
       });
       return {
@@ -649,6 +698,7 @@ export async function loadTeamDashboard(
       inverse,
       unit,
       series: agg.series,
+      points: agg.points,
       color,
       pinnedAt: pin.pinned_at,
     };
@@ -1198,7 +1248,7 @@ export async function loadTeamFocus(
   // top-3 weakest skills — three reads in parallel. The *_drill / *_player
   // views ship in migration 99; if not yet applied they return empty and the
   // card degrades to rank + coverage only (still a story, no crash).
-  const [recRes, drillRes, playerRes] = await Promise.all([
+  const [recRes, drillRes, playerRes, trendRes] = await Promise.all([
     supabase
       .from("v_team_focus_recommendations")
       .select("skill_id, drill_id, drill_name, rec_rank")
@@ -1218,6 +1268,15 @@ export async function loadTeamFocus(
       .eq("team_id", teamId)
       .in("skill_id", skillIds)
       .order("player_score", { ascending: true }),
+    // Weekly composite for the trend sparkline (migration 100). Ships empty
+    // if the view isn't applied yet → the Trend slot stays a locked placeholder.
+    supabase
+      .from("v_team_skill_week")
+      .select("skill_id, week_start, avg_score, players_n")
+      .eq("team_id", teamId)
+      .in("skill_id", skillIds)
+      .gte("players_n", 2)
+      .order("week_start", { ascending: true }),
   ]);
 
   const recsBySkill = new Map<string, FocusDrill[]>();
@@ -1253,6 +1312,15 @@ export async function loadTeamFocus(
     lowPlayersBySkill.set(r.skill_id as string, arr);
   }
 
+  // Trend: last 6 weekly points per skill (already oldest→newest from the query).
+  const trendBySkill = new Map<string, FocusTrendPoint[]>();
+  for (const r of trendRes.data ?? []) {
+    const arr = trendBySkill.get(r.skill_id as string) ?? [];
+    arr.push({ week: r.week_start as string, score: Number(r.avg_score) });
+    trendBySkill.set(r.skill_id as string, arr);
+  }
+  for (const [k, arr] of trendBySkill) trendBySkill.set(k, arr.slice(-6));
+
   const skills: FocusSkill[] = top.map((r, i) => ({
     skillId: r.skill_id as string,
     skillSlug: r.skill_slug as string,
@@ -1264,6 +1332,7 @@ export async function loadTeamFocus(
     drills: recsBySkill.get(r.skill_id as string) ?? [],
     lowPlayers: lowPlayersBySkill.get(r.skill_id as string) ?? [],
     evidenceDrills: evDrillsBySkill.get(r.skill_id as string) ?? [],
+    trend: trendBySkill.get(r.skill_id as string) ?? [],
   }));
 
   return { skills, hasSignal: true, rosterSize, totalMeasured };

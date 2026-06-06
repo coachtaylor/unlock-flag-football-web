@@ -48,7 +48,7 @@ export default function NextPracticeCard({
           <br />
           <Link
             href={`${practiceBase}/new`}
-            className="wbtn primary"
+            className="wbtn"
             style={{ marginTop: 12, display: "inline-flex" }}
           >
             <Icon.plus size={12} /> Plan a practice
@@ -135,11 +135,16 @@ export default function NextPracticeCard({
           </span>
         </div>
         <Link
-          href={`${practiceBase}/${practice.id}`}
-          className="wbtn primary"
+          href={
+            practice.blockCount > 0
+              ? `${practiceBase}/${practice.id}`
+              : `${practiceBase}/${practice.id}/edit`
+          }
+          className="wbtn"
           style={{ height: 32, padding: "0 12px", fontSize: 12 }}
         >
-          Open practice <Icon.chevR size={12} />
+          {practice.blockCount > 0 ? "Open practice" : "Finish setting up"}{" "}
+          <Icon.chevR size={12} />
         </Link>
       </div>
     </div>

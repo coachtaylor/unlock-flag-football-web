@@ -1,33 +1,26 @@
 // Build 7 marquee widget: up to 4 pinned pulses shown as KPI cards with a
-// current value, delta vs prior window, and an 8-week sparkline.
+// current value, trend delta, and an 8-week sparkline.
 //
-// Branch 2 (Build 7.5b): pulses are now backed by `team_dashboard_pins`,
-// one row per (drill, benchmark_type, position) slice. A single drill
-// can appear multiple times in the strip with different type/position
-// scopes. Each card surfaces a TYPE kicker line and a POSITION chip so
-// the scope is unambiguous.
+// Build 8.5 (data-story pass): cleaner card hierarchy — the drill name is the
+// title, scope is a quiet mono line, the metric + trend pill are the hero.
+// Empty slots are no longer dead: they suggest pinning a drill that closes one
+// of the team's top gaps (reusing the "This week's focus" recommendations).
 
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
 import Spark from "./Spark";
-import type { PinnedPulse, PulseSlot } from "@/lib/dashboard/team-home-data";
+import { ScaleBar, scaleMaxFor } from "./pulse-bits";
+import UnpinPulseButton from "./UnpinPulseButton";
+import type { PinnedPulse, PulseSlot, PulseSuggestion } from "@/lib/dashboard/team-home-data";
 import BreakdownPulseCard from "./BreakdownPulseCard";
+
+const CARD_MIN_H = 128;
 
 function fmtVal(p: PinnedPulse) {
   if (p.current == null) return "—";
   if (p.benchmarkType === "timed") return p.current.toFixed(2);
   if (p.benchmarkType === "rated") return p.current.toFixed(1);
-  if (p.benchmarkType === "pct") return Math.round(p.current).toString();
   return Math.round(p.current).toString();
-}
-
-function fmtDelta(p: PinnedPulse) {
-  if (p.delta == null) return null;
-  const v = Math.abs(p.delta);
-  const formatted =
-    p.benchmarkType === "timed" ? v.toFixed(2) : v.toFixed(p.benchmarkType === "rated" ? 1 : 0);
-  const sign = p.delta < 0 ? "−" : "+";
-  return `${sign}${formatted}${p.unit}`;
 }
 
 function isGood(p: PinnedPulse): boolean {
@@ -35,33 +28,122 @@ function isGood(p: PinnedPulse): boolean {
   return p.inverse ? p.delta < 0 : p.delta > 0;
 }
 
+// Trend pill: literal direction arrow, colored by good/bad (timed is inverse).
+// Honest about sparse data — a pulse needs ≥2 readings to claim a trend.
+function DeltaPill({ p }: { p: PinnedPulse }) {
+  const muted = { fontSize: 10.5, color: "var(--uff-text-mute)", fontFamily: "var(--font-mono)" } as const;
+  if (p.points === 0) {
+    return <span style={muted}>No readings in scope</span>;
+  }
+  if (p.points === 1) {
+    return <span style={muted}>1 reading · log again to trend</span>;
+  }
+  if (p.delta == null || p.delta === 0) {
+    return <span style={muted}>— flat vs prior</span>;
+  }
+  const good = isGood(p);
+  const mag = Math.abs(p.delta);
+  const val =
+    p.benchmarkType === "timed" ? mag.toFixed(2) : p.benchmarkType === "rated" ? mag.toFixed(1) : Math.round(mag).toString();
+  const color = good ? "var(--uff-lime)" : "var(--uff-red)";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        alignSelf: "flex-start",
+        fontFamily: "var(--font-mono)",
+        fontSize: 10.5,
+        fontWeight: 700,
+        color,
+        background: good ? "rgba(194,255,61,0.12)" : "rgba(255,77,77,0.12)",
+        padding: "2px 7px",
+        borderRadius: 6,
+      }}
+    >
+      {p.delta < 0 ? "▼" : "▲"}
+      {val}
+      {p.unit}
+      <span style={{ color: "var(--uff-text-mute)", fontWeight: 500 }}>vs prior</span>
+    </span>
+  );
+}
+
+function SuggestedPulse({ s, teamId }: { s: PulseSuggestion; teamId: string }) {
+  return (
+    <div
+      className="w-card"
+      style={{
+        padding: 16,
+        border: "1px dashed rgba(255,106,26,0.30)",
+        background: "rgba(255,106,26,0.04)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minHeight: CARD_MIN_H,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 9.5,
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "var(--uff-orange)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        Suggested pin
+      </span>
+      <div style={{ fontSize: 12.5, color: "var(--uff-text-dim)", lineHeight: 1.45, flex: 1 }}>
+        Track{" "}
+        <span style={{ color: "var(--uff-text)", fontWeight: 500 }}>{s.skillName}</span>
+        {" — "}
+        {s.skillRank === 1 ? "your weakest skill" : "a top team gap"}.
+      </div>
+      <Link
+        href={`/dashboard/team/${teamId}/drills/${s.drillId}`}
+        className="wbtn ghost"
+        style={{ height: 30, alignSelf: "flex-start", maxWidth: "100%" }}
+      >
+        <Icon.pin size={12} />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          Pin {s.drillName}
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 function EmptyPulse() {
   return (
     <div
       className="w-card"
       style={{
-        padding: 18,
+        padding: 16,
         border: "1px dashed var(--uff-line)",
         background: "transparent",
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        minHeight: 116,
+        minHeight: CARD_MIN_H,
       }}
     >
       <span
         style={{
-          fontSize: 10.5,
+          fontSize: 9.5,
           fontWeight: 700,
           letterSpacing: "0.14em",
           textTransform: "uppercase",
           color: "var(--uff-text-mute)",
+          fontFamily: "var(--font-mono)",
         }}
       >
         Empty pulse slot
       </span>
-      <span style={{ fontSize: 12, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
-        Pin a (drill, type) pulse from any drill&apos;s detail page.
+      <span style={{ fontSize: 12, color: "var(--uff-text-dim)", lineHeight: 1.5, flex: 1 }}>
+        Pin a drill from its detail page to watch a metric here.
       </span>
       <Link href="/drills" className="wbtn ghost" style={{ height: 30, alignSelf: "flex-start" }}>
         Browse drills <Icon.chevR size={12} />
@@ -72,11 +154,18 @@ function EmptyPulse() {
 
 export default function PinnedPulsesStrip({
   pulses,
+  suggestions = [],
+  teamId,
+  canPin = false,
 }: {
   pulses: PulseSlot[];
+  suggestions?: PulseSuggestion[];
+  teamId: string;
+  canPin?: boolean;
 }) {
-  const slots: (PulseSlot | null)[] = [...pulses];
-  while (slots.length < 4) slots.push(null);
+  const emptyCount = Math.max(0, 4 - pulses.length);
+  // Fill empty slots with suggestions first, then generic empties.
+  const fillers = Array.from({ length: emptyCount }, (_, i) => suggestions[i] ?? null);
 
   return (
     <div
@@ -86,128 +175,123 @@ export default function PinnedPulsesStrip({
         gap: 16,
       }}
     >
-      {slots.map((p, i) => {
-        if (!p) return <EmptyPulse key={`empty-${i}`} />;
-        if (p.kind === "breakdown") {
-          return <BreakdownPulseCard key={p.pinId} pulse={p} />;
-        }
-        return <SinglePulseCard key={p.pinId} pulse={p} />;
-      })}
+      {pulses.map((p) =>
+        p.kind === "breakdown" ? (
+          <BreakdownPulseCard key={p.pinId} pulse={p} teamId={teamId} canPin={canPin} />
+        ) : (
+          <SinglePulseCard key={p.pinId} pulse={p} teamId={teamId} canPin={canPin} />
+        )
+      )}
+      {fillers.map((s, i) =>
+        s ? (
+          <SuggestedPulse key={`sug-${s.drillId}`} s={s} teamId={teamId} />
+        ) : (
+          <EmptyPulse key={`empty-${i}`} />
+        )
+      )}
     </div>
   );
 }
 
-function SinglePulseCard({ pulse: p }: { pulse: PinnedPulse }) {
+function SinglePulseCard({
+  pulse: p,
+  teamId,
+  canPin,
+}: {
+  pulse: PinnedPulse;
+  teamId: string;
+  canPin: boolean;
+}) {
+  const scaleMax = scaleMaxFor(p.benchmarkType);
   return (
-    <div className="w-card td-stat-cell" style={{ padding: 18 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: 8,
-                gap: 8,
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <Link
-                  href={`/drills/${p.drillId}`}
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--uff-text-mute)",
-                    textDecoration: "none",
-                    display: "block",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {p.drillName}
-                </Link>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    marginTop: 4,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: "0.10em",
-                      textTransform: "uppercase",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      background: "rgba(255,106,26,0.14)",
-                      color: "var(--uff-orange)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {p.benchmarkType}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: "0.10em",
-                      textTransform: "uppercase",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      background: "rgba(255,255,255,0.04)",
-                      color: "var(--uff-text-dim)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {p.position ?? "ALL"}
-                  </span>
-                </div>
-              </div>
-              <Icon.pin size={13} />
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <div
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 26,
-                    fontWeight: 700,
-                    letterSpacing: "-0.02em",
-                    color: "var(--uff-text)",
-                    display: "flex",
-                    alignItems: "baseline",
-                    gap: 4,
-                  }}
-                >
-                  {fmtVal(p)}
-                  <span style={{ fontSize: 12, color: "var(--uff-text-dim)" }}>{p.unit}</span>
-                </div>
-                {fmtDelta(p) && (
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: isGood(p) ? "var(--uff-lime)" : "var(--uff-red)",
-                    }}
-                  >
-                    {fmtDelta(p)} vs prior
-                  </span>
-                )}
-              </div>
-              <Spark data={p.series} color={p.color} w={88} h={36} />
-            </div>
+    <div
+      className="w-card td-stat-cell"
+      style={{ position: "relative", padding: 16, display: "flex", flexDirection: "column", minHeight: CARD_MIN_H }}
+    >
+      {canPin ? (
+        <UnpinPulseButton pinId={p.pinId} drillId={p.drillId} teamId={teamId} />
+      ) : (
+        <span className="pulse-unpin" style={{ pointerEvents: "none" }}>
+          <Icon.pin size={13} />
+        </span>
+      )}
+
+      <Link
+        href={`/dashboard/team/${teamId}/drills/${p.drillId}`}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          flex: 1,
+          textDecoration: "none",
+          color: "inherit",
+        }}
+      >
+        {/* header: drill name (title) + scope line */}
+        <div style={{ minWidth: 0, paddingRight: 26 }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: "var(--uff-text)",
+              display: "block",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {p.drillName}
+          </span>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 9.5,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--uff-text-mute)",
+              marginTop: 3,
+            }}
+          >
+            {p.benchmarkType} · {p.position ?? "ALL"}
+          </div>
+        </div>
+
+        {/* metric + sparkline */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 10,
+            marginTop: "auto",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 26,
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+              color: "var(--uff-text)",
+              lineHeight: 1,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 4,
+            }}
+          >
+            {fmtVal(p)}
+            <span style={{ fontSize: 12, color: "var(--uff-text-dim)" }}>{p.unit}</span>
+          </div>
+          <Spark data={p.series} color={p.color} w={84} h={34} />
+        </div>
+
+        {/* absolute scale — makes the number legible at a glance (pct /100, rated /5) */}
+        {scaleMax != null && <ScaleBar value={p.current} max={scaleMax} color={p.color} />}
+
+        {/* trend */}
+        <DeltaPill p={p} />
+      </Link>
     </div>
   );
 }

@@ -1,18 +1,43 @@
 "use client";
 
-// One weak skill, told as a story (Build 8.5 storytelling pass).
-// Summary line is always visible (rank + coverage + top driver); the full
-// evidence chain — who's dragging it, which drills prove it, trend — lives
-// behind a "Why" expander so the card stays uncluttered.
+// One weak skill, told as a complete story (Build 8.5 storytelling pass).
+// Three beats, top to bottom:
+//   1. GAP  — rank + name + score + an amber severity meter (the gap, made visible)
+//   2. WHY  — evidence chain (who's dragging it / which drills / trend) behind an
+//             expander so the card stays uncluttered
+//   3. FIX  — always-visible prescription: the recommended drills to close the gap,
+//             styled as real orange action rows (the CTA that was previously buried)
+// Amber = the problem, orange = the action.
 
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
-import type { FocusSkill } from "@/lib/dashboard/team-home-data";
+import Spark from "./Spark";
+import type { FocusSkill, FocusTrendPoint } from "@/lib/dashboard/team-home-data";
 
 const pct = (s: number) => `${Math.round(s * 100)}%`;
 const ordinal = (rank: number) =>
-  rank === 1 ? "WEAKEST" : rank === 2 ? "2ND WEAKEST" : "3RD WEAKEST";
+  rank === 1 ? "WEAKEST" : rank === 2 ? "2ND" : "3RD";
+
+// Direction is the story: higher score = gap closing (good, lime); lower =
+// widening (bad, red); within ±2 pts = holding. null when too few points.
+type TrendInfo = {
+  dir: "up" | "down" | "flat";
+  deltaPts: number;
+  weeks: number;
+  color: string;
+};
+function trendInfo(trend: FocusTrendPoint[]): TrendInfo | null {
+  if (trend.length < 2) return null;
+  const delta = trend[trend.length - 1].score - trend[0].score;
+  const weeks = trend.length - 1;
+  if (Math.abs(delta) < 0.02) {
+    return { dir: "flat", deltaPts: 0, weeks, color: "var(--uff-text-mute)" };
+  }
+  return delta > 0
+    ? { dir: "up", deltaPts: Math.abs(Math.round(delta * 100)), weeks, color: "var(--uff-lime)" }
+    : { dir: "down", deltaPts: Math.abs(Math.round(delta * 100)), weeks, color: "var(--uff-red)" };
+}
 
 export default function FocusSkillRow({
   skill,
@@ -27,7 +52,10 @@ export default function FocusSkillRow({
   totalMeasured: number;
   emphasis: boolean;
 }) {
-  const [open, setOpen] = useState(emphasis);
+  // Default-collapsed so the three columns start at an even height; the
+  // weakest still reads as priority via the rank badge + heavier accent edge.
+  const [open, setOpen] = useState(false);
+  const ti = trendInfo(skill.trend);
 
   const topDrill = skill.evidenceDrills[0];
   // Confident only when a real share of the roster has been rated.
@@ -50,14 +78,18 @@ export default function FocusSkillRow({
   return (
     <div
       style={{
-        padding: emphasis ? "14px" : "12px 14px",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        padding: "13px 14px",
         borderRadius: 10,
         background: "var(--uff-surface-2)",
         border: "1px solid var(--uff-line-soft)",
-        borderLeft: "3px solid #FFB347", // focus = caution, never green
+        // gap = caution (never green); weakest gets a heavier accent edge
+        borderLeft: `${emphasis ? 3 : 2}px solid #FFB347`,
       }}
     >
-      {/* header */}
+      {/* ── 1. GAP ───────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <span
           style={{
@@ -77,27 +109,49 @@ export default function FocusSkillRow({
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: emphasis ? 15 : 13.5,
+            fontSize: 13.5,
             fontWeight: 500,
             color: "var(--uff-text)",
           }}
         >
           {skill.skillName}
         </span>
-        <span className="tabular-nums" style={{ fontSize: 12, color: "var(--uff-text-mute)" }}>
-          {pct(skill.avgScore)}
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+          {ti && ti.dir !== "flat" && (
+            <span
+              title={`${ti.deltaPts} pts over ${ti.weeks} wk${ti.weeks > 1 ? "s" : ""}`}
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: ti.color,
+              }}
+            >
+              {ti.dir === "up" ? "▲" : "▼"}
+              {ti.deltaPts}
+            </span>
+          )}
+          <span
+            className="tabular-nums"
+            style={{ fontSize: 13, fontWeight: 600, color: "#FFB347" }}
+          >
+            {pct(skill.avgScore)}
+          </span>
         </span>
       </div>
 
-      {/* why one-liner */}
-      <div style={{ fontSize: 11.5, color: "var(--uff-text-dim)", marginTop: 5, lineHeight: 1.45 }}>
-        {whyBits.join(" · ")}
-        {!confident && (
-          <span style={{ color: "#FFB347" }}> · low confidence</span>
-        )}
+      {/* severity meter — the gap, made visible */}
+      <div className="focus-meter" style={{ marginTop: 9 }} aria-hidden>
+        <i style={{ width: `${Math.max(4, Math.round(skill.avgScore * 100))}%` }} />
       </div>
 
-      {/* expander */}
+      {/* why one-liner */}
+      <div style={{ fontSize: 11.5, color: "var(--uff-text-dim)", marginTop: 8, lineHeight: 1.45 }}>
+        {whyBits.join(" · ")}
+        {!confident && <span style={{ color: "#FFB347" }}> · low confidence</span>}
+      </div>
+
+      {/* ── 2. WHY (evidence, collapsed) ─────────────────────── */}
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -106,7 +160,7 @@ export default function FocusSkillRow({
           border: "none",
           padding: 0,
           cursor: "pointer",
-          color: "var(--uff-accent, #D48A30)",
+          color: "var(--uff-text-mute)",
           fontSize: 11.5,
           fontWeight: 500,
           display: "inline-flex",
@@ -115,7 +169,7 @@ export default function FocusSkillRow({
         }}
         aria-expanded={open}
       >
-        {open ? "Hide why" : "Why this is the gap"}
+        {open ? "Hide the evidence" : "See the evidence"}
         <span style={{ transform: open ? "rotate(90deg)" : "none", display: "inline-flex" }}>
           <Icon.chevR size={12} />
         </span>
@@ -155,45 +209,88 @@ export default function FocusSkillRow({
             </Evidence>
           )}
 
-          {/* trend — locked until repeat assessments exist */}
+          {/* trend — real sparkline once ≥2 weekly points exist */}
           <Evidence label="Trend">
-            <div style={{ ...rowStyle, color: "var(--uff-text-dim)", fontStyle: "italic" }}>
-              Re-assess this skill over the coming weeks to unlock the trend line.
-            </div>
+            {ti ? (
+              <div style={{ ...rowStyle, gap: 12 }}>
+                <Spark
+                  data={skill.trend.map((t) => t.score)}
+                  color={ti.color}
+                  w={96}
+                  h={28}
+                  fill={false}
+                />
+                <span style={{ flex: 1, minWidth: 0, color: "var(--uff-text-dim)" }}>
+                  {ti.dir === "up"
+                    ? `Up ${ti.deltaPts} pts over ${ti.weeks} wk${ti.weeks > 1 ? "s" : ""} — gap closing`
+                    : ti.dir === "down"
+                      ? `Down ${ti.deltaPts} pts over ${ti.weeks} wk${ti.weeks > 1 ? "s" : ""} — gap widening`
+                      : `Holding steady over ${ti.weeks} wk${ti.weeks > 1 ? "s" : ""}`}
+                </span>
+              </div>
+            ) : (
+              <div style={{ ...rowStyle, color: "var(--uff-text-dim)", fontStyle: "italic" }}>
+                Re-assess this skill over the coming weeks to unlock the trend line.
+              </div>
+            )}
           </Evidence>
         </div>
       )}
 
-      {/* prescription */}
-      {skill.drills.length > 0 ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-          {skill.drills.map((d) => (
+      {/* ── 3. FIX (the CTA — always visible, pinned to bottom) ── */}
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 12,
+          borderTop: "1px solid var(--uff-line-soft)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--uff-orange)",
+            marginBottom: 8,
+          }}
+        >
+          The fix · drills to close this gap
+        </div>
+
+        {skill.drills.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {skill.drills.map((d) => (
+              <Link
+                key={d.drillId}
+                href={`/dashboard/team/${teamId}/drills/${d.drillId}`}
+                className="focus-fix"
+              >
+                <span className="ic" aria-hidden>
+                  <Icon.plus size={13} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 500 }}>
+                  {d.drillName}
+                </span>
+                <span className="arrow" aria-hidden>
+                  <Icon.chevR size={14} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11.5, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
+            No published drill trains this skill yet.{" "}
             <Link
-              key={d.drillId}
-              href={`/dashboard/team/${teamId}/drills/${d.drillId}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "6px 10px",
-                borderRadius: 8,
-                background: "var(--uff-surface)",
-                border: "1px solid var(--uff-line)",
-                color: "var(--uff-text)",
-                fontSize: 12,
-                fontWeight: 500,
-                textDecoration: "none",
-              }}
+              href={`/dashboard/team/${teamId}/drills`}
+              style={{ color: "var(--uff-orange)", fontWeight: 500 }}
             >
-              <Icon.plus size={11} /> {d.drillName}
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div style={{ fontSize: 11.5, color: "var(--uff-text-dim)", marginTop: 12 }}>
-          No published drill is tagged with this skill yet — tag one to get a fix here.
-        </div>
-      )}
+              Tag a drill
+            </Link>{" "}
+            to get a recommendation here.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

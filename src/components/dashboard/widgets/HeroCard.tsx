@@ -1,25 +1,19 @@
-import Link from "next/link";
-import { Icon } from "@/components/uff/icons";
 import type { HeroStats } from "@/lib/dashboard/team-home-data";
 
 export default function HeroCard({
-  teamId,
   greeting,
   weekLabel,
   practicesLogged,
   practicesPlanned,
   copy,
   stats,
-  hasNextPractice,
 }: {
-  teamId: string;
   greeting: string;
   weekLabel: string;
   practicesLogged: number;
   practicesPlanned: number;
   copy: string;
   stats: HeroStats;
-  hasNextPractice: boolean;
 }) {
   const cells: { label: string; v: string; delta: string; tone?: "lime" }[] = [
     {
@@ -139,21 +133,6 @@ export default function HeroCard({
             <span style={{ fontSize: 11, color: "var(--uff-text-dim)" }}>{c.delta}</span>
           </div>
         ))}
-      </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-        <Link
-          href={
-            hasNextPractice
-              ? `/dashboard/team/${teamId}/practice`
-              : `/dashboard/team/${teamId}/practice/new`
-          }
-          className="wbtn primary"
-        >
-          <Icon.bolt size={13} /> {hasNextPractice ? "Review tonight's practice" : "Build your first practice"}
-        </Link>
-        <Link href={`/benchmarks`} className="wbtn">
-          Run benchmark
-        </Link>
       </div>
     </div>
   );
