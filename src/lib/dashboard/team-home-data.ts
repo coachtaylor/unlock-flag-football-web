@@ -108,6 +108,9 @@ export type AttentionItem = {
   initials: string;
   note: string;
   flag: "stale" | "down" | "absent";
+  // Contextual next-step CTA per flag (Action Layer, Build 8.5). Turns a
+  // flagged player into a one-tap action instead of a dead-end roster link.
+  action: { label: string; href: string };
 };
 
 export type ActivityRow = {
@@ -162,6 +165,34 @@ export type TeamDashboardData = {
   isCurrentUserCaptain: boolean;
   currentUserPlayerId: string | null;
   needsReviewCount: number;
+};
+
+/* ─────────────── team focus / prescription (Build 8.5) ─────────────── */
+
+export type FocusDrill = { drillId: string; drillName: string };
+
+// Evidence chain behind a weak skill (the "why" — Build 8.5 storytelling pass).
+export type FocusEvidencePlayer = { playerId: string; name: string; score: number };
+export type FocusEvidenceDrill = { drillName: string; avgScore: number; players: number };
+
+export type FocusSkill = {
+  skillId: string;
+  skillSlug: string;
+  skillName: string;
+  skillGroup: string;
+  avgScore: number; // 0–1 absolute composite (lower = weaker)
+  playersWithSignal: number;
+  rank: number; // 1-based position among measured skills (1 = weakest)
+  drills: FocusDrill[]; // recommended published drills that train this skill
+  lowPlayers: FocusEvidencePlayer[]; // who's dragging it (lowest first)
+  evidenceDrills: FocusEvidenceDrill[]; // which drills/scores produced this (weakest first)
+};
+
+export type TeamFocus = {
+  skills: FocusSkill[]; // weakest first, up to 3
+  hasSignal: boolean; // any skill cleared the >=3-player bar
+  rosterSize: number; // active players, for coverage ("3 of 10 rated")
+  totalMeasured: number; // # of skills that cleared the bar (for "lowest of N")
 };
 
 /* ─────────────── skill radar (Build 12) ─────────────── */
@@ -906,6 +937,7 @@ export async function loadTeamDashboard(
         initials: initialsOf(p.player_name),
         note: last ? `No benchmark in ${daysAgo(last)}d` : "No benchmark yet",
         flag: "stale",
+        action: { label: "Run benchmark", href: "/benchmarks" },
       });
     }
     if (attention.length >= 1) break;
@@ -927,6 +959,10 @@ export async function loadTeamDashboard(
         initials: initialsOf(p.player_name),
         note: "Missed last 2 practices",
         flag: "absent",
+        action: {
+          label: "View player",
+          href: `/dashboard/team/${teamId}/roster/${p.id}`,
+        },
       });
       if (attention.length >= 2) break;
     }
@@ -947,6 +983,10 @@ export async function loadTeamDashboard(
           initials: initialsOf(p.player_name),
           note: `Behind on ${drill.drill_name.toLowerCase()}`,
           flag: "down",
+          action: {
+            label: "Coach this drill",
+            href: `/dashboard/team/${teamId}/drills/${drill.id}`,
+          },
         });
         if (attention.length >= 3) break outer;
         break;
@@ -1111,6 +1151,124 @@ export async function loadTeamDashboard(
 //
 // Self-contained (own queries) so it can run in parallel with
 // loadTeamDashboard from the page rather than bloating that loader.
+/**
+ * Team focus / prescription engine (Build 8.5, Action Layer — Prong 2).
+ *
+ * Reads the absolute-scale weakness ranking (v_team_skill_focus) and the
+ * drill recommendations (v_team_focus_recommendations) created in migration 98.
+ * Both views are RLS-scoped via security_invoker, and we additionally filter by
+ * team_id. Returns the up-to-3 weakest skills (weakest first), each with up to
+ * two published drills that train it. `hasSignal=false` means no skill cleared
+ * the >=3-player bar yet — the card renders the "log more ratings" unlock state.
+ *
+ * NOTE: timed benchmarks are intentionally excluded from this ranking (they have
+ * no absolute reference). They DO feed player-level widgets via
+ * v_player_skill_profile. See docs/ACTION_LAYER_SPEC.md.
+ */
+export async function loadTeamFocus(
+  supabase: SupabaseClient,
+  teamId: string
+): Promise<TeamFocus> {
+  // All measured skills (weakest first) + active roster size run in parallel.
+  const [allFocusRes, rosterRes] = await Promise.all([
+    supabase
+      .from("v_team_skill_focus")
+      .select("skill_id, skill_slug, skill_name, skill_group, avg_score, players_with_signal")
+      .eq("team_id", teamId)
+      .order("avg_score", { ascending: true }),
+    supabase
+      .from("team_players")
+      .select("id", { count: "exact", head: true })
+      .eq("team_id", teamId)
+      .eq("status", "active"),
+  ]);
+
+  const allRows = allFocusRes.data ?? [];
+  const rosterSize = rosterRes.count ?? 0;
+  const totalMeasured = allRows.length;
+
+  if (totalMeasured === 0) {
+    return { skills: [], hasSignal: false, rosterSize, totalMeasured: 0 };
+  }
+
+  const top = allRows.slice(0, 3);
+  const skillIds = top.map((r) => r.skill_id as string);
+
+  // Evidence (recommended drills, contributing drills, lowest players) for the
+  // top-3 weakest skills — three reads in parallel. The *_drill / *_player
+  // views ship in migration 99; if not yet applied they return empty and the
+  // card degrades to rank + coverage only (still a story, no crash).
+  const [recRes, drillRes, playerRes] = await Promise.all([
+    supabase
+      .from("v_team_focus_recommendations")
+      .select("skill_id, drill_id, drill_name, rec_rank")
+      .eq("team_id", teamId)
+      .in("skill_id", skillIds)
+      .lte("rec_rank", 2)
+      .order("rec_rank", { ascending: true }),
+    supabase
+      .from("v_team_skill_drill")
+      .select("skill_id, drill_name, avg_score, players_n")
+      .eq("team_id", teamId)
+      .in("skill_id", skillIds)
+      .order("avg_score", { ascending: true }),
+    supabase
+      .from("v_team_skill_player")
+      .select("skill_id, player_id, player_name, player_score")
+      .eq("team_id", teamId)
+      .in("skill_id", skillIds)
+      .order("player_score", { ascending: true }),
+  ]);
+
+  const recsBySkill = new Map<string, FocusDrill[]>();
+  for (const r of recRes.data ?? []) {
+    const arr = recsBySkill.get(r.skill_id as string) ?? [];
+    arr.push({ drillId: r.drill_id as string, drillName: r.drill_name as string });
+    recsBySkill.set(r.skill_id as string, arr);
+  }
+
+  const evDrillsBySkill = new Map<string, FocusEvidenceDrill[]>();
+  for (const r of drillRes.data ?? []) {
+    const arr = evDrillsBySkill.get(r.skill_id as string) ?? [];
+    if (arr.length < 3) {
+      arr.push({
+        drillName: r.drill_name as string,
+        avgScore: Number(r.avg_score),
+        players: Number(r.players_n),
+      });
+    }
+    evDrillsBySkill.set(r.skill_id as string, arr);
+  }
+
+  const lowPlayersBySkill = new Map<string, FocusEvidencePlayer[]>();
+  for (const r of playerRes.data ?? []) {
+    const arr = lowPlayersBySkill.get(r.skill_id as string) ?? [];
+    if (arr.length < 3) {
+      arr.push({
+        playerId: r.player_id as string,
+        name: r.player_name as string,
+        score: Number(r.player_score),
+      });
+    }
+    lowPlayersBySkill.set(r.skill_id as string, arr);
+  }
+
+  const skills: FocusSkill[] = top.map((r, i) => ({
+    skillId: r.skill_id as string,
+    skillSlug: r.skill_slug as string,
+    skillName: r.skill_name as string,
+    skillGroup: r.skill_group as string,
+    avgScore: Number(r.avg_score),
+    playersWithSignal: Number(r.players_with_signal),
+    rank: i + 1,
+    drills: recsBySkill.get(r.skill_id as string) ?? [],
+    lowPlayers: lowPlayersBySkill.get(r.skill_id as string) ?? [],
+    evidenceDrills: evDrillsBySkill.get(r.skill_id as string) ?? [],
+  }));
+
+  return { skills, hasSignal: true, rosterSize, totalMeasured };
+}
+
 export async function loadTeamSkillRadar(
   supabase: SupabaseClient,
   teamId: string

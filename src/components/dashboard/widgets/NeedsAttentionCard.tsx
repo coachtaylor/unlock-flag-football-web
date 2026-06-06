@@ -35,8 +35,9 @@ export default function NeedsAttentionCard({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {items.map((p) => (
-            <div
+            <Link
               key={p.playerId}
+              href={p.action.href}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -46,6 +47,8 @@ export default function NeedsAttentionCard({
                 background: "var(--uff-surface-2)",
                 border: "1px solid var(--uff-line-soft)",
                 borderLeft: `3px solid ${FLAG_COLOR[p.flag]}`,
+                textDecoration: "none",
+                color: "inherit",
               }}
             >
               <div
@@ -80,8 +83,21 @@ export default function NeedsAttentionCard({
                   {p.note}
                 </div>
               </div>
-              <Icon.chevR size={12} />
-            </div>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: 11.5,
+                  fontWeight: 500,
+                  color: "var(--uff-accent, #D48A30)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {p.action.label}
+                <Icon.chevR size={12} />
+              </span>
+            </Link>
           ))}
         </div>
       )}

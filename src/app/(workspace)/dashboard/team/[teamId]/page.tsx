@@ -17,7 +17,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import { Icon } from "@/components/uff/icons";
 import Link from "next/link";
 
-import { loadTeamDashboard, loadTeamSkillRadar } from "@/lib/dashboard/team-home-data";
+import { loadTeamDashboard, loadTeamSkillRadar, loadTeamFocus } from "@/lib/dashboard/team-home-data";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import { memberCanManage } from "@/lib/team/staff-roles";
 import HeroCard from "@/components/dashboard/widgets/HeroCard";
@@ -29,6 +29,7 @@ import DrillMixCard from "@/components/dashboard/widgets/DrillMixCard";
 import PracticeCadenceCard from "@/components/dashboard/widgets/PracticeCadenceCard";
 import AttendanceCard from "@/components/dashboard/widgets/AttendanceCard";
 import NeedsAttentionCard from "@/components/dashboard/widgets/NeedsAttentionCard";
+import WeeklyFocusCard from "@/components/dashboard/widgets/WeeklyFocusCard";
 import RecentActivityCard from "@/components/dashboard/widgets/RecentActivityCard";
 import MostRunDrillsCard from "@/components/dashboard/widgets/MostRunDrillsCard";
 import TeamSkillRadarCard from "@/components/dashboard/widgets/TeamSkillRadarCard";
@@ -119,10 +120,11 @@ export default async function TeamDashboardPage({
     ) || isLeagueAdmin;
 
   // Load all widget data in one pass.
-  const [data, sidebarWorkspaces, skillRadar] = await Promise.all([
+  const [data, sidebarWorkspaces, skillRadar, focus] = await Promise.all([
     loadTeamDashboard(supabase, teamId, user.id),
     loadSidebarWorkspaces(teamId, team.league_id),
     loadTeamSkillRadar(supabase, teamId),
+    loadTeamFocus(supabase, teamId),
   ]);
 
   // A view-only captain is locked to player view; a full-access captain
@@ -227,6 +229,12 @@ export default async function TeamDashboardPage({
             />
             <NextPracticeCard practice={data.nextPractice} teamId={teamId} />
           </div>
+
+          {/* This week's focus — the Action Layer's prescription hero.
+              Coach-facing only; a view-only/player view doesn't get team CTAs. */}
+          {canManage && !playerView && (
+            <WeeklyFocusCard focus={focus} teamId={teamId} />
+          )}
 
           {/* Pinned pulses (KPI strip) */}
           <div>
