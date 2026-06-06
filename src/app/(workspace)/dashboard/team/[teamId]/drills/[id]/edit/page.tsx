@@ -4,10 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleTeamIds } from "@/lib/access/teams";
 import { teamColorHex } from "@/components/uff/team-colors";
-import {
-  categoryToSlug,
-  type BenchKind,
-} from "@/components/uff-web/drills/atoms";
+import { categoryToSlug } from "@/components/uff-web/drills/atoms";
 import DrillForm, { type DrillFormInitial } from "../../DrillForm";
 import type { DiagramData } from "@/types/diagram";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
@@ -18,19 +15,10 @@ import {
 } from "@/lib/drills/skills-data";
 import {
   parseBenchmarkConfig,
-  webEntriesFromConfig,
+  benchmarkConfigFromLegacy,
 } from "@/lib/benchmarks/config";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_BENCH: BenchKind[] = [
-  "timed",
-  "rated",
-  "reps",
-  "pct",
-  "flags",
-  "drops",
-];
 
 type Props = { params: Promise<{ teamId: string; id: string }> };
 
@@ -122,15 +110,6 @@ export default async function EditDrillPage({ params }: Props) {
     selectedCategoryIds = Array.from(set);
   }
 
-  // Coalesce legacy single benchmark_type into the new shape.
-  const rawTypes = (drill.benchmark_types as string[] | null) ?? [];
-  const legacy = drill.benchmark_type as string | null;
-  const mergedTypes = new Set<string>(rawTypes);
-  if (legacy) mergedTypes.add(legacy);
-  const benchmarkTypes: BenchKind[] = Array.from(mergedTypes).filter(
-    (t): t is BenchKind => (ALLOWED_BENCH as string[]).includes(t),
-  );
-
   const rawDiagram = drill.setup_diagram as DiagramData | null;
   const setupDiagram =
     rawDiagram &&
@@ -146,13 +125,15 @@ export default async function EditDrillPage({ params }: Props) {
       )
     : [];
 
-  // Parse the canonical (scope-grouped) config and flatten it into web's
-  // scope-less per-type {target, better} for the form. The raw canonical
-  // config rides along so a web save preserves scope + mobile-only knobs.
-  const benchmarkConfigRaw = parseBenchmarkConfig(drill.benchmark_config);
-  const benchmarkConfig = benchmarkConfigRaw
-    ? webEntriesFromConfig(benchmarkConfigRaw).perType
-    : {};
+  // Parse the canonical (scope-grouped) config the form seeds from. Fall back
+  // to a whole-team config built from the pre-migration-38 legacy columns so a
+  // legacy drill (no benchmark_config) still shows its benchmarks in the form.
+  const benchmarkConfigRaw =
+    parseBenchmarkConfig(drill.benchmark_config) ??
+    benchmarkConfigFromLegacy(
+      drill.benchmark_type as string | null,
+      drill.benchmark_types as string[] | null,
+    );
 
   const initial: DrillFormInitial = {
     id: drill.id as string,
@@ -161,8 +142,6 @@ export default async function EditDrillPage({ params }: Props) {
     sourceUrl: (drill.source_url as string | null) ?? "",
     categoryIds: selectedCategoryIds,
     skills: toPickerInitial(drillSkillsMap[id] ?? []),
-    benchmarkTypes,
-    benchmarkConfig,
     benchmarkConfigRaw,
     defaultDurationMin: (drill.default_duration_min as number | null) ?? 10,
     defaultReps: (drill.default_reps as number | null) ?? 5,

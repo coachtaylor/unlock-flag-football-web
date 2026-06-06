@@ -8,9 +8,10 @@
 //
 //   { scope, matchConfigs?, whole?|qb?|nonqb?: { types, perType } }
 //
-// Web only authors WHOLE-team benchmarks (there is no scope picker in the web
-// drill form), but it must (a) read configs authored by mobile without losing
-// scope or per-type knobs, and (b) preserve scope + mobile-only knobs when a
+// The web drill form authors the full scope-grouped config (whole / qb /
+// nonqb / both) via its own scope picker — parity with mobile. It must also
+// (a) read configs authored by mobile without losing scope or per-type knobs,
+// and (b) preserve mobile-only per-type knobs (attemptsPerSet, label) when a
 // web edit saves over a mobile-authored drill. See TD-1 in TECH_DEBT.md.
 //
 // Direction canonicalizes on the boolean `inverse` (mobile's field). Web's UI
@@ -110,6 +111,34 @@ export function parseBenchmarkConfig(raw: unknown): BenchmarkConfig | null {
   return cfg;
 }
 
+// Build a whole-team config from the pre-migration-38 legacy columns
+// (benchmark_type / benchmark_types). Mirror of mobile's
+// benchmarkConfigFromLegacy. Used as a fallback when benchmark_config is null
+// so a legacy drill still shows its benchmarks in the editor.
+const LEGACY_TYPE_MAP: Record<string, BenchKind> = {
+  timed: "timed",
+  rated: "rated",
+  reps_complete: "reps",
+  percentage: "pct",
+};
+
+export function benchmarkConfigFromLegacy(
+  legacyType: string | null | undefined,
+  legacyTypes: string[] | null | undefined,
+): BenchmarkConfig | null {
+  const fromArray = (legacyTypes ?? [])
+    .map((t) => LEGACY_TYPE_MAP[t] ?? (isBenchKind(t) ? t : null))
+    .filter((t): t is BenchKind => t != null);
+  const single = legacyType ? LEGACY_TYPE_MAP[legacyType] : null;
+  const seen = new Set<BenchKind>();
+  const types = (fromArray.length > 0 ? fromArray : single ? [single] : [])
+    .filter((t) => (seen.has(t) ? false : (seen.add(t), true)));
+  if (types.length === 0) return null;
+  const perType: GroupConfig["perType"] = {};
+  for (const t of types) perType[t] = {};
+  return { scope: "whole", whole: { types, perType } };
+}
+
 // ── Direction mapping (canonical `inverse` <-> web `better`) ─────────────
 
 function betterFromInverse(
@@ -157,45 +186,107 @@ export function webEntriesFromConfig(cfg: BenchmarkConfig): {
   return { types: BENCH_ORDER.filter((t) => typeSet.has(t)), perType };
 }
 
+// Per-group read — canonical GroupConfig -> web {types, perType}. Used to seed
+// each of the web form's three parallel group editors (whole / qb / nonqb) so
+// the scope picker is non-destructive when flipping between scopes.
+export function webGroupEntries(g: GroupConfig | undefined): {
+  types: BenchKind[];
+  perType: WebBenchConfig;
+} {
+  if (!g) return { types: [], perType: {} };
+  const perType: WebBenchConfig = {};
+  for (const t of g.types) {
+    const pt = g.perType[t] ?? {};
+    perType[t] = { target: pt.target, better: betterFromInverse(t, pt.inverse) };
+  }
+  return { types: BENCH_ORDER.filter((t) => g.types.includes(t)), perType };
+}
+
+// Seed the web drill form's benchmark state from a stored config. Mirrors the
+// three parallel group states the mobile DrillForm keeps (so a coach can flip
+// whole → both → whole without losing a config).
+export function webFormGroups(cfg: BenchmarkConfig | null): {
+  scope: BenchmarkScope;
+  matchConfigs: boolean;
+  whole: { types: BenchKind[]; perType: WebBenchConfig };
+  qb: { types: BenchKind[]; perType: WebBenchConfig };
+  nonqb: { types: BenchKind[]; perType: WebBenchConfig };
+} {
+  return {
+    scope: cfg?.scope ?? "whole",
+    matchConfigs: cfg?.matchConfigs ?? false,
+    whole: webGroupEntries(cfg?.whole),
+    qb: webGroupEntries(cfg?.qb),
+    nonqb: webGroupEntries(cfg?.nonqb),
+  };
+}
+
 // ── Write: web edits -> canonical, preserving scope + mobile knobs ───────
-// Web always edits as a flat type list with per-type targets. We write those
-// into whichever groups the drill's existing scope uses (whole for new /
-// legacy / whole drills), preserving mobile-only per-type fields and the
-// original scope so a web save never silently flattens a mobile config.
+// Web now authors the full scope-grouped config (whole / qb / nonqb / both),
+// mirroring mobile's buildBenchmarkConfig. Each web group carries a flat type
+// list + per-type {target, better}; we map that back into the canonical
+// {types, perType{target, inverse}} shape while preserving any mobile-only
+// per-type fields (attemptsPerSet, label) from the matching original group.
 
-export function applyWebEdits(
-  original: BenchmarkConfig | null,
-  types: BenchKind[],
-  webPerType: WebBenchConfig,
-): BenchmarkConfig {
-  const scope: BenchmarkScope = original?.scope ?? "whole";
-  const ordered = BENCH_ORDER.filter((t) => types.includes(t));
+type WebGroupInput = { types: BenchKind[]; perType: WebBenchConfig };
 
-  const buildGroup = (existing?: GroupConfig): GroupConfig => {
+export function buildWebBenchmarkConfig(input: {
+  original: BenchmarkConfig | null;
+  scope: BenchmarkScope;
+  whole: WebGroupInput;
+  qb: WebGroupInput;
+  nonqb: WebGroupInput;
+  matchConfigs: boolean;
+}): BenchmarkConfig {
+  const { original, scope, whole, qb, nonqb, matchConfigs } = input;
+
+  const buildGroup = (
+    web: WebGroupInput,
+    existing?: GroupConfig,
+  ): GroupConfig => {
+    const ordered = BENCH_ORDER.filter((t) => web.types.includes(t));
     const perType: GroupConfig["perType"] = {};
     for (const t of ordered) {
       const prev = existing?.perType[t] ?? {};
-      const web = webPerType[t] ?? {};
-      const entry: PerTypeConfig = { ...prev }; // keep mobile knobs
+      const w = web.perType[t] ?? {};
+      const entry: PerTypeConfig = { ...prev }; // keep mobile-only knobs
 
-      const target = web.target != null ? String(web.target).trim() : "";
+      const target = w.target != null ? String(w.target).trim() : "";
       if (target !== "") entry.target = target;
       else delete entry.target;
 
-      const inv = inverseFromBetter(web.better);
+      const inv = inverseFromBetter(w.better);
       if (inv !== undefined) entry.inverse = inv;
 
       perType[t] = entry;
     }
-    return { types: [...ordered], perType };
+    return { types: ordered, perType };
   };
 
   const cfg: BenchmarkConfig = { scope };
-  if (scope === "both" && typeof original?.matchConfigs === "boolean") {
-    cfg.matchConfigs = original.matchConfigs;
-  }
-  for (const g of groupsForScope(scope)) {
-    cfg[g] = buildGroup(original?.[g]);
+  if (scope === "whole") {
+    cfg.whole = buildGroup(whole, original?.whole);
+  } else if (scope === "qb") {
+    cfg.qb = buildGroup(qb, original?.qb);
+  } else if (scope === "nonqb") {
+    cfg.nonqb = buildGroup(nonqb, original?.nonqb);
+  } else {
+    // both — when matchConfigs is on, QBs mirror the Non-QB group.
+    cfg.matchConfigs = matchConfigs;
+    const nonqbGroup = buildGroup(nonqb, original?.nonqb);
+    cfg.nonqb = nonqbGroup;
+    cfg.qb = matchConfigs ? nonqbGroup : buildGroup(qb, original?.qb);
   }
   return cfg;
+}
+
+// Whether a built config captures anything (mirror of mobile
+// isBenchmarkConfigured). Used to gate save + decide the empty state.
+export function isBenchmarkConfigured(cfg: BenchmarkConfig | null): boolean {
+  if (!cfg) return false;
+  if (cfg.scope === "both")
+    return (cfg.qb?.types.length ?? 0) > 0 || (cfg.nonqb?.types.length ?? 0) > 0;
+  const g =
+    cfg.scope === "whole" ? cfg.whole : cfg.scope === "qb" ? cfg.qb : cfg.nonqb;
+  return (g?.types.length ?? 0) > 0;
 }

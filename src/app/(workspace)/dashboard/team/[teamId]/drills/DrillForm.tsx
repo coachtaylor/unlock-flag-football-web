@@ -41,8 +41,12 @@ import SkillPicker, {
 } from "@/components/uff-web/drills/SkillPicker";
 import { allowedSkillGroupsForPhases } from "@/lib/drills/skill-groups";
 import {
-  applyWebEdits,
+  buildWebBenchmarkConfig,
+  webFormGroups,
+  webEntriesFromConfig,
+  isBenchmarkConfigured,
   type BenchmarkConfig as CanonicalBenchmarkConfig,
+  type BenchmarkScope,
 } from "@/lib/benchmarks/config";
 import type {
   DrillSkillLink,
@@ -67,6 +71,17 @@ type BenchConfigEntry = {
 
 type BenchConfig = Partial<Record<BenchKind, BenchConfigEntry>>;
 
+// One position group's benchmark config in the web form — a selected type set
+// plus per-type pass-marks. The form keeps three of these in parallel (whole /
+// qb / nonqb), mirroring the mobile DrillForm, so the scope picker is
+// non-destructive when a coach flips between scopes.
+type WebGroup = { types: Set<BenchKind>; config: BenchConfig };
+
+const seedGroup = (g: {
+  types: BenchKind[];
+  perType: BenchConfig;
+}): WebGroup => ({ types: new Set(g.types), config: { ...g.perType } });
+
 export type DrillFormInitial = {
   id: string;
   drillName: string;
@@ -77,11 +92,8 @@ export type DrillFormInitial = {
   // existed before build-10. Populated from drill_skills for clones of
   // preset drills and for drills that have been hand-tagged.
   skills: DrillSkillLink[];
-  benchmarkTypes: BenchKind[];
-  // Web form per-type targets (flattened from the canonical config for the
-  // scope-less web UI). `benchmarkConfigRaw` carries the full canonical config
-  // so a web save preserves scope + mobile-only per-type knobs (TD-1).
-  benchmarkConfig: BenchConfig;
+  // The full canonical scope-grouped benchmark config. The form seeds scope +
+  // its three position groups from this and writes it back on save (TD-1).
   benchmarkConfigRaw: CanonicalBenchmarkConfig | null;
   defaultDurationMin: number;
   defaultReps: number;
@@ -122,6 +134,49 @@ const DEFAULT_TARGETS: Record<BenchKind, BenchConfigEntry> = {
   pct: { target: "75" },
   flags: { target: "3" },
   drops: { target: "0", better: "lower" },
+};
+
+// ── Pure WebGroup updaters (shared by every group editor) ──────────────
+
+// Toggle a benchmark type in/out of a group, seeding its default pass-mark on
+// add and dropping the stale pass-mark on remove.
+function toggleTypeInWebGroup(group: WebGroup, id: BenchKind): WebGroup {
+  const types = new Set(group.types);
+  const config = { ...group.config };
+  if (types.has(id)) {
+    types.delete(id);
+    delete config[id];
+  } else {
+    types.add(id);
+    if (!config[id]) config[id] = { ...DEFAULT_TARGETS[id] };
+  }
+  return { types, config };
+}
+
+function setWebGroupCfg<K extends keyof BenchConfigEntry>(
+  group: WebGroup,
+  id: BenchKind,
+  key: K,
+  val: BenchConfigEntry[K],
+): WebGroup {
+  return {
+    types: group.types,
+    config: { ...group.config, [id]: { ...group.config[id], [key]: val } },
+  };
+}
+
+// Scope picker copy — mirrors mobile's BENCHMARK_SCOPE_OPTIONS.
+const SCOPE_OPTIONS: { id: BenchmarkScope; label: string; sub: string }[] = [
+  { id: "whole", label: "Whole team", sub: "one config" },
+  { id: "qb", label: "QBs only", sub: "positions filtered" },
+  { id: "nonqb", label: "Non-QBs", sub: "positions filtered" },
+  { id: "both", label: "Both", sub: "separate configs" },
+];
+const SCOPE_LABELS: Record<BenchmarkScope, string> = {
+  whole: "Whole team",
+  qb: "QBs only",
+  nonqb: "Non-QBs",
+  both: "QBs + Non-QBs",
 };
 
 const BENCH_BLURBS: Record<BenchKind, string> = {
@@ -206,14 +261,25 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
   const [notes, setNotes] = useState<string[]>(initial?.notes ?? []);
   const [newNote, setNewNote] = useState("");
 
+  // Seed scope + the three parallel position groups from the stored canonical
+  // config (benchmarkConfigRaw). Web now authors the full scope-grouped shape
+  // so a coach can benchmark the whole team, just QBs, just non-QBs, or both
+  // groups with separate configs — matching the mobile drill form.
+  const seeded = useMemo(
+    () => webFormGroups(initial?.benchmarkConfigRaw ?? null),
+    [initial?.benchmarkConfigRaw],
+  );
   const [usesBench, setUsesBench] = useState<boolean>(
-    (initial?.benchmarkTypes?.length ?? 0) > 0,
+    isBenchmarkConfigured(initial?.benchmarkConfigRaw ?? null),
   );
-  const [benchTypes, setBenchTypes] = useState<Set<BenchKind>>(
-    new Set(initial?.benchmarkTypes ?? []),
+  const [benchScope, setBenchScope] = useState<BenchmarkScope>(seeded.scope);
+  const [matchConfigs, setMatchConfigs] = useState<boolean>(seeded.matchConfigs);
+  const [wholeGroup, setWholeGroup] = useState<WebGroup>(() =>
+    seedGroup(seeded.whole),
   );
-  const [benchConfig, setBenchConfig] = useState<BenchConfig>(
-    initial?.benchmarkConfig ?? {},
+  const [qbGroup, setQbGroup] = useState<WebGroup>(() => seedGroup(seeded.qb));
+  const [nonqbGroup, setNonqbGroup] = useState<WebGroup>(() =>
+    seedGroup(seeded.nonqb),
   );
 
   const [status, setStatus] = useState<"draft" | "published">(
@@ -276,28 +342,67 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       return changed ? m : sw;
     });
   };
-  const toggleBenchType = (id: BenchKind) =>
-    setBenchTypes((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) {
-        n.delete(id);
-      } else {
-        n.add(id);
-        setBenchConfig((cfg) =>
-          cfg[id] ? cfg : { ...cfg, [id]: { ...DEFAULT_TARGETS[id] } },
-        );
-      }
-      return n;
+  // Setter for whichever single group the current scope edits.
+  const setActiveGroup = (g: WebGroup) => {
+    if (benchScope === "qb") setQbGroup(g);
+    else if (benchScope === "nonqb") setNonqbGroup(g);
+    else setWholeGroup(g);
+  };
+  const activeSingleGroup =
+    benchScope === "qb"
+      ? qbGroup
+      : benchScope === "nonqb"
+        ? nonqbGroup
+        : wholeGroup;
+
+  // "both" scope: Non-QB is primary; QB mirrors it while Match is on.
+  const applyNonQb = (next: WebGroup) => {
+    setNonqbGroup(next);
+    if (benchScope === "both" && matchConfigs) setQbGroup(next);
+  };
+  const applyQb = (next: WebGroup) => {
+    setQbGroup(next);
+    if (benchScope === "both" && matchConfigs) setNonqbGroup(next);
+  };
+  const toggleMatchConfigs = () =>
+    setMatchConfigs((prev) => {
+      const next = !prev;
+      if (next) setQbGroup(nonqbGroup); // QBs adopt the Non-QB config
+      return next;
     });
-  const setBenchCfg = <K extends keyof BenchConfigEntry>(
-    id: BenchKind,
-    key: K,
-    val: BenchConfigEntry[K],
-  ) =>
-    setBenchConfig((cfg) => ({
-      ...cfg,
-      [id]: { ...cfg[id], [key]: val },
-    }));
+
+  // Build the canonical scope-grouped config once — used for both the save
+  // payload and the live preview, so the two never drift.
+  const canonicalConfig = useMemo<CanonicalBenchmarkConfig | null>(() => {
+    if (!usesBench) return null;
+    return buildWebBenchmarkConfig({
+      original: initial?.benchmarkConfigRaw ?? null,
+      scope: benchScope,
+      whole: { types: [...wholeGroup.types], perType: wholeGroup.config },
+      qb: { types: [...qbGroup.types], perType: qbGroup.config },
+      nonqb: { types: [...nonqbGroup.types], perType: nonqbGroup.config },
+      matchConfigs,
+    });
+  }, [
+    usesBench,
+    benchScope,
+    matchConfigs,
+    wholeGroup,
+    qbGroup,
+    nonqbGroup,
+    initial?.benchmarkConfigRaw,
+  ]);
+
+  // Flattened type list + per-type pass-marks across the active scope, for the
+  // preview rail (mirror of mobile's flattenBenchmarkTypes).
+  const previewEntries = useMemo(
+    () =>
+      canonicalConfig
+        ? webEntriesFromConfig(canonicalConfig)
+        : { types: [] as BenchKind[], perType: {} as BenchConfig },
+    [canonicalConfig],
+  );
+  const benchConfigured = isBenchmarkConfigured(canonicalConfig);
 
   function addEquipment() {
     const trimmed = newEquipment.trim();
@@ -340,7 +445,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
 
   const nameReady = name.trim().length > 0;
   const catsReady = selectedCatIds.size > 0;
-  const benchReady = !usesBench || benchTypes.size > 0;
+  const benchReady = !usesBench || benchConfigured;
   const canSubmit = nameReady && catsReady && benchReady && !submitting;
 
   // ── Save ─────────────────────────────────────────────────────────────
@@ -355,7 +460,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       setError("Pick at least one phase.");
       return;
     }
-    if (usesBench && benchTypes.size === 0) {
+    if (usesBench && !benchConfigured) {
       setError(
         "Pick at least one benchmark type, or toggle benchmarks off.",
       );
@@ -383,15 +488,13 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
         return c?.type === "phase";
       }) ?? orderedCatIds[0];
 
-    const types = Array.from(benchTypes);
-    // Build the canonical scope-grouped config (the one shape mobile + the
-    // capture flow read — see TD-1). Web edits as a flat type list; this maps
-    // web's per-type {target, better} into the existing scope's group(s) while
-    // preserving the original scope and any mobile-only per-type knobs.
-    const canonicalConfig: CanonicalBenchmarkConfig | null =
-      usesBench && types.length > 0
-        ? applyWebEdits(initial?.benchmarkConfigRaw ?? null, types, benchConfig)
-        : null;
+    // The canonical scope-grouped config (built in canonicalConfig useMemo —
+    // the one shape mobile + the capture flow read, see TD-1) and the
+    // flattened type union across the active scope. Null out when benchmarks
+    // are off or nothing is configured.
+    const cfgToSave: CanonicalBenchmarkConfig | null =
+      usesBench && benchConfigured ? canonicalConfig : null;
+    const types = previewEntries.types;
 
     // Legacy single-string benchmark_type — keep populated for any read path
     // that hasn't migrated to benchmark_types[]. Falls back to the first of
@@ -408,8 +511,8 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       source_url: sourceUrl.trim() || null,
       benchmark_type: legacyBenchType,
       benchmark_types: usesBench ? types : [],
-      benchmark_config: canonicalConfig,
-      benchmark_scope: canonicalConfig?.scope ?? null,
+      benchmark_config: cfgToSave,
+      benchmark_scope: cfgToSave?.scope ?? null,
       is_dashboard_pinned: pinned,
       dashboard_pinned_at:
         pinned && !initial?.isDashboardPinned ? new Date().toISOString() : null,
@@ -701,31 +804,56 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
 
                 {usesBench && (
                   <>
-                    <BenchTypeGrid
-                      selected={benchTypes}
-                      onToggle={toggleBenchType}
-                    />
+                    <ScopeGrid value={benchScope} onChange={setBenchScope} />
+                    <p
+                      style={{
+                        fontSize: 11.5,
+                        lineHeight: 1.5,
+                        color: "var(--uff-text-mute)",
+                        margin: "10px 2px 0",
+                      }}
+                    >
+                      “Both” lets you configure QBs and non-QBs differently on
+                      the same drill.
+                    </p>
 
-                    {benchTypes.size > 0 ? (
-                      <BenchTargetsBlock
-                        selected={Array.from(benchTypes)}
-                        config={benchConfig}
-                        onChange={setBenchCfg}
-                      />
-                    ) : (
+                    {benchScope === "both" ? (
                       <div
                         style={{
-                          padding: "14px 16px",
-                          background: "rgba(255,77,77,0.05)",
-                          border: "1px solid rgba(255,77,77,0.18)",
-                          borderRadius: 12,
-                          color: "var(--uff-text)",
-                          fontSize: 12.5,
-                          lineHeight: 1.5,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 14,
+                          marginTop: 16,
                         }}
                       >
-                        Pick at least one type, or toggle benchmarks off to
-                        run this as a coaching-only drill.
+                        <MatchConfigsRow
+                          on={matchConfigs}
+                          onToggle={toggleMatchConfigs}
+                        />
+                        <GroupBlock
+                          title="Non-QBs · receivers"
+                          accent="var(--uff-orange)"
+                          group={nonqbGroup}
+                          onChange={applyNonQb}
+                        />
+                        <GroupBlock
+                          title="QBs"
+                          accent="#6EA8FF"
+                          group={qbGroup}
+                          onChange={applyQb}
+                          disabled={matchConfigs}
+                          disabledNote="Mirroring the Non-QB config. Turn off “Match” to set QBs separately."
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 16 }}>
+                        <GroupBlock
+                          title="What gets captured?"
+                          accent="var(--uff-orange)"
+                          group={activeSingleGroup}
+                          onChange={setActiveGroup}
+                          muted
+                        />
                       </div>
                     )}
                   </>
@@ -922,15 +1050,16 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                 reps={reps}
                 cats={selectedCatList.map((c) => c.slug)}
                 primarySlug={primarySlug}
-                types={Array.from(benchTypes)}
+                types={previewEntries.types}
                 status={status}
                 pinned={pinned}
                 onTogglePinned={() => setPinned((p) => !p)}
+                scope={usesBench ? benchScope : null}
               />
-              {usesBench && benchTypes.size > 0 && (
+              {usesBench && previewEntries.types.length > 0 && (
                 <CaptureWidgetPreview
-                  types={Array.from(benchTypes)}
-                  config={benchConfig}
+                  types={previewEntries.types}
+                  config={previewEntries.perType}
                 />
               )}
               <FormHelpCard />
@@ -1242,6 +1371,291 @@ function BenchGate({
         {on ? "YES" : "NO"}
       </span>
     </button>
+  );
+}
+
+// ── Scope picker — who gets benchmarked ────────────────────────────────
+// 2×2 grid mirroring the mobile "Who gets benchmarked?" cards.
+
+function ScopeGrid({
+  value,
+  onChange,
+}: {
+  value: BenchmarkScope;
+  onChange: (s: BenchmarkScope) => void;
+}) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--uff-text)",
+          marginBottom: 8,
+        }}
+      >
+        Who gets benchmarked?
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {SCOPE_OPTIONS.map((opt) => {
+          const on = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onChange(opt.id)}
+              aria-pressed={on}
+              style={{
+                textAlign: "left",
+                background: on
+                  ? "var(--uff-orange)"
+                  : "var(--uff-surface-2)",
+                border: `1.5px solid ${
+                  on ? "var(--uff-orange)" : "var(--uff-line)"
+                }`,
+                borderRadius: 12,
+                padding: "12px 14px",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition:
+                  "border-color 120ms ease, background 120ms ease",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  color: on ? "#0a0a0d" : "var(--uff-text)",
+                }}
+              >
+                {opt.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 2,
+                  color: on ? "rgba(10,10,13,0.7)" : "var(--uff-text-mute)",
+                }}
+              >
+                {opt.sub}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Match QB & non-QB toggle (only shown for the "both" scope) ─────────
+
+function MatchConfigsRow({
+  on,
+  onToggle,
+}: {
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        width: "100%",
+        textAlign: "left",
+        background: "var(--uff-surface-2)",
+        border: `1px solid ${on ? "var(--uff-orange)" : "var(--uff-line)"}`,
+        borderRadius: 12,
+        padding: "12px 14px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      <span
+        style={{
+          width: 44,
+          height: 26,
+          borderRadius: 999,
+          background: on ? "var(--uff-orange)" : "var(--uff-line)",
+          position: "relative",
+          flexShrink: 0,
+          transition: "background 140ms ease",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 3,
+            left: on ? 21 : 3,
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            background: "#0a0a0d",
+            transition: "left 140ms ease",
+          }}
+        />
+      </span>
+      <span style={{ flex: 1 }}>
+        <span
+          style={{
+            display: "block",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--uff-text)",
+          }}
+        >
+          Match QB &amp; non-QB configs
+        </span>
+        <span
+          style={{
+            display: "block",
+            fontSize: 11.5,
+            color: "var(--uff-text-mute)",
+            marginTop: 2,
+            lineHeight: 1.5,
+          }}
+        >
+          {on
+            ? "On — both groups capture the same metrics."
+            : "Off — set each group's metrics separately."}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// ── Group editor — one position group's types + pass-marks ─────────────
+
+function GroupBlock({
+  title,
+  accent,
+  group,
+  onChange,
+  disabled = false,
+  disabledNote,
+  muted = false,
+}: {
+  title: string;
+  accent: string;
+  group: WebGroup;
+  onChange: (g: WebGroup) => void;
+  disabled?: boolean;
+  disabledNote?: string;
+  // Single-scope groups render a muted header + plain border (matches mobile's
+  // hideTitle treatment); the dual "both" groups use the colored accent.
+  muted?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        background: "var(--uff-surface)",
+        border: "1px solid var(--uff-line-soft)",
+        borderLeft: muted ? "1px solid var(--uff-line-soft)" : `2px solid ${accent}`,
+        borderRadius: 12,
+        padding: 14,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: ".12em",
+            textTransform: "uppercase",
+            color: muted ? "var(--uff-text-mute)" : accent,
+          }}
+        >
+          {!muted && (
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                background: accent,
+              }}
+            />
+          )}
+          {title}
+        </span>
+        {disabled && disabledNote && (
+          <span
+            style={{
+              fontSize: 10.5,
+              color: "var(--uff-text-mute)",
+              textAlign: "right",
+              lineHeight: 1.4,
+              maxWidth: 240,
+            }}
+          >
+            {disabledNote}
+          </span>
+        )}
+      </div>
+
+      <div
+        style={{
+          opacity: disabled ? 0.45 : 1,
+          pointerEvents: disabled ? "none" : "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+        aria-disabled={disabled}
+      >
+        <BenchTypeGrid
+          selected={group.types}
+          onToggle={(id) => onChange(toggleTypeInWebGroup(group, id))}
+        />
+
+        {group.types.size > 0 ? (
+          <BenchTargetsBlock
+            selected={[...group.types]}
+            config={group.config}
+            onChange={(id, key, val) =>
+              onChange(setWebGroupCfg(group, id, key, val))
+            }
+          />
+        ) : (
+          <div
+            style={{
+              padding: "14px 16px",
+              background: "rgba(255,77,77,0.05)",
+              border: "1px solid rgba(255,77,77,0.18)",
+              borderRadius: 12,
+              color: "var(--uff-text)",
+              fontSize: 12.5,
+              lineHeight: 1.5,
+            }}
+          >
+            Pick at least one type, or toggle benchmarks off to run this as a
+            coaching-only drill.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1863,6 +2277,7 @@ function DrillFormPreview({
   status,
   pinned,
   onTogglePinned,
+  scope,
 }: {
   name: string;
   duration: number;
@@ -1873,6 +2288,7 @@ function DrillFormPreview({
   status: "draft" | "published";
   pinned: boolean;
   onTogglePinned: () => void;
+  scope: BenchmarkScope | null;
 }) {
   const accent = WEB_CAT_DEFS[primarySlug]?.color ?? "var(--uff-orange)";
   return (
@@ -2001,6 +2417,22 @@ function DrillFormPreview({
               )
             }
           />
+          {scope && types.length > 0 && (
+            <KVRow
+              k="Scope"
+              v={
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--uff-text)",
+                  }}
+                >
+                  {SCOPE_LABELS[scope]}
+                </span>
+              }
+            />
+          )}
           <KVRow
             k="Dashboard"
             v={
