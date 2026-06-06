@@ -25,6 +25,13 @@ import {
   durLabel,
 } from "./atoms";
 import { DurStepper } from "./DurStepper";
+import TimeSelect from "./TimeSelect";
+import { CoachPicker } from "./DrillCoachControl";
+import {
+  type AssignableCoach,
+  coachAssignmentColumns,
+  selectedCoachKey,
+} from "@/lib/team/assignable-coaches";
 import {
   savePlan,
   deletePlan,
@@ -63,6 +70,7 @@ type Props = {
   drillCatalog: DrillCatalogEntry[];
   blockTemplates: BlockTemplateEntry[];
   roster: RosterEntry[];
+  coaches: AssignableCoach[];
 };
 
 // Local editable shapes — kept loose so we can build up an unsaved plan
@@ -115,7 +123,7 @@ function toEdit(plan: EditorPlan): {
   };
 }
 
-export default function EditorClient({ plan, drillCatalog, blockTemplates, roster }: Props) {
+export default function EditorClient({ plan, drillCatalog, blockTemplates, roster, coaches }: Props) {
   const router = useRouter();
   const initial = toEdit(plan);
   const [title, setTitle] = useState(initial.title);
@@ -179,7 +187,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
         attended: null,
       })),
     };
-  }, [title, date, startTime, status, blocks, breaks, attendees, plan]);
+  }, [title, date, startTime, endTime, status, blocks, breaks, attendees, plan]);
 
   const t = planTotals(projection);
   const overBudget = t.total > t.target && t.target > 0;
@@ -305,6 +313,8 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                   category_name: drill.category_name,
                   description: drill.description,
                   log_note: null,
+                  assigned_member_id: null,
+                  assigned_player_id: null,
                 },
               ],
             },
@@ -362,6 +372,8 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
         reps_count: d.reps_count,
         notes: d.notes,
         parallel_group: d.parallel_group,
+        assigned_member_id: d.assigned_member_id,
+        assigned_player_id: d.assigned_player_id,
       })),
     }));
   }
@@ -447,12 +459,9 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle()} />
                 </FieldRow>
                 <FieldRow label="Start time">
-                  <input
-                    type="time"
-                    step={300}
-                    value={startTime ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value || null;
+                  <TimeSelect
+                    value={startTime}
+                    onChange={(v) => {
                       setStartTime(v);
                       // Auto-bump end time to start + 2h. Always — if a
                       // user wants a different end they can set it after.
@@ -462,11 +471,9 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                   />
                 </FieldRow>
                 <FieldRow label="End time">
-                  <input
-                    type="time"
-                    step={300}
-                    value={endTime ?? ""}
-                    onChange={(e) => setEndTime(e.target.value || null)}
+                  <TimeSelect
+                    value={endTime}
+                    onChange={(v) => setEndTime(v)}
                     style={inputStyle()}
                   />
                 </FieldRow>
@@ -512,10 +519,16 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
                     onAddDrill={() => {
                       setDrillPickerBlock(block.key);
                       setSheet("drills");
+                      // Pull the freshest published catalog so drills created or
+                      // published in another tab show up immediately. router.refresh()
+                      // preserves this client component's in-progress edits (see note
+                      // on the preset-browse flow above).
+                      router.refresh();
                     }}
                     onPairParallel={() => pairAsParallel(block.key)}
                     onReorderBlock={(dir) => reorderBlock(block.key, dir)}
                     onRemoveBlock={() => removeBlock(block.key)}
+                    coaches={coaches}
                   />
                   {!hasBreakAfter && <InsertBreakRail onInsert={() => insertBreakAfter(block.block_order)} />}
                 </div>
@@ -791,6 +804,7 @@ function BlockEditCard({
   onPairParallel,
   onReorderBlock,
   onRemoveBlock,
+  coaches,
 }: {
   block: EditBlock;
   blockIndex: number;
@@ -804,6 +818,7 @@ function BlockEditCard({
   onPairParallel: () => void;
   onReorderBlock: (dir: -1 | 1) => void;
   onRemoveBlock: () => void;
+  coaches: AssignableCoach[];
 }) {
   const c = blockColor(block.name);
   const [collapsed, setCollapsed] = useState(false);
@@ -828,7 +843,9 @@ function BlockEditCard({
     <div
       style={{
         background: "var(--uff-surface)",
-        border: "1px solid var(--uff-line-soft)",
+        borderTop: "1px solid var(--uff-line-soft)",
+        borderRight: "1px solid var(--uff-line-soft)",
+        borderBottom: "1px solid var(--uff-line-soft)",
         borderLeft: `4px solid ${c.accent}`,
         borderRadius: 14,
         overflow: "hidden",
@@ -932,6 +949,7 @@ function BlockEditCard({
                     onChange={(patch) => onUpdateDrill(d.key, patch)}
                     onRemove={() => onRemoveDrill(d.key)}
                     onReorder={(dir) => onReorderDrill(d.key, dir)}
+                    coaches={coaches}
                   />
                 );
               }
@@ -945,6 +963,7 @@ function BlockEditCard({
                   onChange={onUpdateDrill}
                   onRemove={onRemoveDrill}
                   onReorder={onReorderDrill}
+                  coaches={coaches}
                 />
               );
             })}
@@ -1010,6 +1029,7 @@ function DrillEditRow({
   onReorder,
   isParallelSibling,
   onUnpair,
+  coaches,
 }: {
   d: EditDrill;
   accent: string;
@@ -1020,6 +1040,7 @@ function DrillEditRow({
   onReorder: (dir: -1 | 1) => void;
   isParallelSibling?: boolean;
   onUnpair?: () => void;
+  coaches: AssignableCoach[];
 }) {
   if (!expanded) {
     return (
@@ -1031,9 +1052,11 @@ function DrillEditRow({
           gap: 10,
           padding: "10px 12px",
           background: "rgba(255,255,255,0.02)",
-          border: "1px solid var(--uff-line-soft)",
-          borderRadius: 10,
+          borderTop: "1px solid var(--uff-line-soft)",
+          borderRight: "1px solid var(--uff-line-soft)",
+          borderBottom: "1px solid var(--uff-line-soft)",
           borderLeft: `3px solid ${accent}`,
+          borderRadius: 10,
           cursor: "pointer",
         }}
       >
@@ -1137,9 +1160,11 @@ function DrillEditRow({
     <div
       style={{
         background: "rgba(255,255,255,0.025)",
-        border: `1px solid ${accent}33`,
-        borderRadius: 10,
+        borderTop: `1px solid ${accent}33`,
+        borderRight: `1px solid ${accent}33`,
+        borderBottom: `1px solid ${accent}33`,
         borderLeft: `3px solid ${accent}`,
+        borderRadius: 10,
         overflow: "hidden",
       }}
     >
@@ -1263,6 +1288,27 @@ function DrillEditRow({
           />
         </div>
 
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: ".14em",
+              color: "var(--uff-text-mute)",
+              textTransform: "uppercase",
+              marginBottom: 5,
+            }}
+          >
+            Leads this drill
+          </div>
+          <CoachPicker
+            value={selectedCoachKey(d.assigned_member_id, d.assigned_player_id)}
+            coaches={coaches}
+            canManage
+            onChange={(coach) => onChange(coachAssignmentColumns(coach))}
+          />
+        </div>
+
         <div
           style={{
             display: "flex",
@@ -1350,6 +1396,7 @@ function ParallelGroup({
   onChange,
   onRemove,
   onReorder,
+  coaches,
 }: {
   drills: EditDrill[];
   accent: string;
@@ -1358,6 +1405,7 @@ function ParallelGroup({
   onChange: (dk: string, patch: Partial<EditDrill>) => void;
   onRemove: (dk: string) => void;
   onReorder: (dk: string, dir: -1 | 1) => void;
+  coaches: AssignableCoach[];
 }) {
   const maxMin = Math.max(...drills.map((d) => d.duration_minutes));
   return (
@@ -1421,6 +1469,7 @@ function ParallelGroup({
               onReorder={(dir) => onReorder(d.key, dir)}
               isParallelSibling
               onUnpair={() => onChange(d.key, { parallel_group: null })}
+              coaches={coaches}
             />
           );
         })}
@@ -1927,7 +1976,9 @@ function BlockLibrarySheet({
               style={{
                 padding: "12px 14px",
                 background: "var(--uff-surface-2)",
-                border: "1px solid var(--uff-line-soft)",
+                borderTop: "1px solid var(--uff-line-soft)",
+                borderRight: "1px solid var(--uff-line-soft)",
+                borderBottom: "1px solid var(--uff-line-soft)",
                 borderLeft: `3px solid ${c.accent}`,
                 borderRadius: 10,
                 display: "flex",

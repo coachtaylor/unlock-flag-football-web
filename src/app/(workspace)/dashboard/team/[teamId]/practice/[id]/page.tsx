@@ -8,6 +8,7 @@ import { teamColorHex, playerColorForIndex } from "@/components/uff/team-colors"
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanFull, interleavePlan, planTotals } from "@/lib/practice/plan-data";
+import { loadAssignableCoaches } from "@/lib/team/assignable-coaches";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import { resolveActorNames } from "@/lib/activity";
 import Byline from "@/components/activity/Byline";
@@ -83,6 +84,11 @@ export default async function PracticeDetailPage({
 
   const t = planTotals(plan);
   const rows = interleavePlan(plan);
+
+  // Coaching staff + captains for the per-drill assign-coach control. Loaded
+  // for everyone (not just managers) so the assigned-coach chip resolves a
+  // name for view-only members too.
+  const coaches = await loadAssignableCoaches(supabase, plan.team_id);
 
   // Attribution byline (Build 14.5): last editor, falling back to creator.
   const planActors = await resolveActorNames(supabase, [plan.created_by, plan.updated_by]);
@@ -310,7 +316,17 @@ export default async function PracticeDetailPage({
                     {rows.map((row) => {
                       if (row.kind === "block") {
                         const idx = plan.blocks.findIndex((b) => b.id === row.payload.id);
-                        return <BlockReadCard key={row.payload.id} block={row.payload} index={idx} />;
+                        return (
+                          <BlockReadCard
+                            key={row.payload.id}
+                            block={row.payload}
+                            index={idx}
+                            coaches={coaches}
+                            canManage={canManage}
+                            planId={plan.id}
+                            teamId={teamId}
+                          />
+                        );
                       }
                       return <BreakReadRow key={row.payload.id} minutes={row.payload.duration_minutes} />;
                     })}

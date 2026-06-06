@@ -169,7 +169,9 @@ export default function PresetLibraryClient({
                   preset={p}
                   teamId={teamId}
                   base={base}
-                  onCloned={(drillId) => router.push(`${base}/${drillId}`)}
+                  onCloned={(drillId) =>
+                    router.push(`${base}/${drillId}?from=library`)
+                  }
                 />
               ))}
             </div>

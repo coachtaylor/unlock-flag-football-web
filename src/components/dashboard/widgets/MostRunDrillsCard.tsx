@@ -2,7 +2,15 @@ import Link from "next/link";
 import SectionHead from "./SectionHead";
 import type { MostRunDrill } from "@/lib/dashboard/team-home-data";
 
-export default function MostRunDrillsCard({ rows }: { rows: MostRunDrill[] }) {
+export default function MostRunDrillsCard({
+  rows,
+  teamId,
+}: {
+  rows: MostRunDrill[];
+  teamId: string;
+}) {
+  // Team-scoped drills base (Build 8) — flat /drills now redirects to /dashboard.
+  const drillsBase = `/dashboard/team/${teamId}/drills`;
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="w-card">
@@ -28,7 +36,7 @@ export default function MostRunDrillsCard({ rows }: { rows: MostRunDrill[] }) {
               style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}
             >
               <Link
-                href={`/drills/${r.drillId}`}
+                href={`${drillsBase}/${r.drillId}`}
                 style={{
                   width: 110,
                   color: "var(--uff-text-dim)",
@@ -76,7 +84,7 @@ export default function MostRunDrillsCard({ rows }: { rows: MostRunDrill[] }) {
         </div>
       )}
       <Link
-        href="/drills"
+        href={drillsBase}
         className="wbtn ghost"
         style={{ width: "100%", marginTop: 12, justifyContent: "center" }}
       >

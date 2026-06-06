@@ -157,7 +157,13 @@ function MultiSparkline({ rows, width, height, inverse }: SparklineProps) {
   );
 }
 
-export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse }) {
+export default function BreakdownPulseCard({
+  pulse,
+  drillsBase,
+}: {
+  pulse: BreakdownPulse;
+  drillsBase: string;
+}) {
   return (
     <div
       className="w-card td-stat-cell"
@@ -179,7 +185,7 @@ export default function BreakdownPulseCard({ pulse }: { pulse: BreakdownPulse })
       >
         <div style={{ minWidth: 0, flex: 1 }}>
           <Link
-            href={`/drills/${pulse.drillId}`}
+            href={`${drillsBase}/${pulse.drillId}`}
             style={{
               fontSize: 10.5,
               fontWeight: 700,

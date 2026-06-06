@@ -41,8 +41,12 @@ import SkillPicker, {
 } from "@/components/uff-web/drills/SkillPicker";
 import { allowedSkillGroupsForPhases } from "@/lib/drills/skill-groups";
 import {
-  applyWebEdits,
+  applyWebEditsScoped,
+  webEntriesFromGroup,
+  flattenConfigTypes,
   type BenchmarkConfig as CanonicalBenchmarkConfig,
+  type BenchmarkScope,
+  type GroupConfig as CanonicalGroupConfig,
 } from "@/lib/benchmarks/config";
 import type {
   DrillSkillLink,
@@ -66,6 +70,26 @@ type BenchConfigEntry = {
 };
 
 type BenchConfig = Partial<Record<BenchKind, BenchConfigEntry>>;
+
+// One role group's editable state in the form.
+type WebGroupState = { types: Set<BenchKind>; config: BenchConfig };
+
+// Seed a group from a canonical group, or from flat fallbacks (legacy / no-raw
+// drills that only carry benchmark_types + the flattened per-type config).
+function initGroup(
+  rawGroup?: CanonicalGroupConfig,
+  fallbackTypes?: BenchKind[],
+  fallbackConfig?: BenchConfig,
+): WebGroupState {
+  if (rawGroup) {
+    const { types, perType } = webEntriesFromGroup(rawGroup);
+    return { types: new Set(types), config: perType as BenchConfig };
+  }
+  return {
+    types: new Set(fallbackTypes ?? []),
+    config: fallbackConfig ?? {},
+  };
+}
 
 export type DrillFormInitial = {
   id: string;
@@ -209,12 +233,63 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
   const [usesBench, setUsesBench] = useState<boolean>(
     (initial?.benchmarkTypes?.length ?? 0) > 0,
   );
-  const [benchTypes, setBenchTypes] = useState<Set<BenchKind>>(
-    new Set(initial?.benchmarkTypes ?? []),
+  // Benchmark scope (role): whole team / QBs / non-QBs / both. Mirrors the
+  // mobile drill form (constants/benchmarks.ts) and the canonical config.
+  const rawCfg = initial?.benchmarkConfigRaw ?? null;
+  const [benchScope, setBenchScope] = useState<BenchmarkScope>(
+    rawCfg?.scope ?? "whole",
   );
-  const [benchConfig, setBenchConfig] = useState<BenchConfig>(
-    initial?.benchmarkConfig ?? {},
+  const [matchConfigs, setMatchConfigs] = useState<boolean>(
+    rawCfg?.matchConfigs ?? false,
   );
+  // Per-role groups. The scope picker decides which are active; switching
+  // scope is non-destructive (each group keeps its own selection).
+  const [wholeGroup, setWholeGroup] = useState<WebGroupState>(() =>
+    initGroup(rawCfg?.whole, initial?.benchmarkTypes, initial?.benchmarkConfig),
+  );
+  const [qbGroup, setQbGroup] = useState<WebGroupState>(() =>
+    initGroup(rawCfg?.qb),
+  );
+  const [nonqbGroup, setNonqbGroup] = useState<WebGroupState>(() =>
+    initGroup(rawCfg?.nonqb),
+  );
+
+  // The group(s) active for the current scope.
+  const activeGroup =
+    benchScope === "qb" ? qbGroup : benchScope === "nonqb" ? nonqbGroup : wholeGroup;
+  const setActiveGroup =
+    benchScope === "qb"
+      ? setQbGroup
+      : benchScope === "nonqb"
+        ? setNonqbGroup
+        : setWholeGroup;
+
+  // De-duped union of types + merged config across the active scope's groups —
+  // drives the live preview rail and the flat type summary.
+  const flatBench = useMemo(() => {
+    const groups =
+      benchScope === "both"
+        ? matchConfigs
+          ? [nonqbGroup]
+          : [qbGroup, nonqbGroup]
+        : [activeGroup];
+    const types: BenchKind[] = [];
+    const config: BenchConfig = {};
+    for (const g of groups) {
+      for (const t of g.types) {
+        if (!types.includes(t)) {
+          types.push(t);
+          config[t] = g.config[t];
+        }
+      }
+    }
+    return { types, config };
+  }, [benchScope, matchConfigs, activeGroup, qbGroup, nonqbGroup]);
+
+  const benchConfigured =
+    benchScope === "both"
+      ? qbGroup.types.size > 0 || nonqbGroup.types.size > 0
+      : activeGroup.types.size > 0;
 
   const [status, setStatus] = useState<"draft" | "published">(
     initial?.status ?? "draft",
@@ -276,27 +351,31 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       return changed ? m : sw;
     });
   };
-  const toggleBenchType = (id: BenchKind) =>
-    setBenchTypes((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) {
-        n.delete(id);
+  // Toggle a type / edit a per-type knob within a specific role group.
+  const toggleTypeIn = (
+    setGroup: React.Dispatch<React.SetStateAction<WebGroupState>>,
+    id: BenchKind,
+  ) =>
+    setGroup((prev) => {
+      const types = new Set(prev.types);
+      let config = prev.config;
+      if (types.has(id)) {
+        types.delete(id);
       } else {
-        n.add(id);
-        setBenchConfig((cfg) =>
-          cfg[id] ? cfg : { ...cfg, [id]: { ...DEFAULT_TARGETS[id] } },
-        );
+        types.add(id);
+        if (!config[id]) config = { ...config, [id]: { ...DEFAULT_TARGETS[id] } };
       }
-      return n;
+      return { types, config };
     });
-  const setBenchCfg = <K extends keyof BenchConfigEntry>(
+  const setCfgIn = <K extends keyof BenchConfigEntry>(
+    setGroup: React.Dispatch<React.SetStateAction<WebGroupState>>,
     id: BenchKind,
     key: K,
     val: BenchConfigEntry[K],
   ) =>
-    setBenchConfig((cfg) => ({
-      ...cfg,
-      [id]: { ...cfg[id], [key]: val },
+    setGroup((prev) => ({
+      types: prev.types,
+      config: { ...prev.config, [id]: { ...prev.config[id], [key]: val } },
     }));
 
   function addEquipment() {
@@ -340,7 +419,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
 
   const nameReady = name.trim().length > 0;
   const catsReady = selectedCatIds.size > 0;
-  const benchReady = !usesBench || benchTypes.size > 0;
+  const benchReady = !usesBench || benchConfigured;
   const canSubmit = nameReady && catsReady && benchReady && !submitting;
 
   // ── Save ─────────────────────────────────────────────────────────────
@@ -355,9 +434,11 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       setError("Pick at least one phase.");
       return;
     }
-    if (usesBench && benchTypes.size === 0) {
+    if (usesBench && !benchConfigured) {
       setError(
-        "Pick at least one benchmark type, or toggle benchmarks off.",
+        benchScope === "both"
+          ? "Pick at least one benchmark type for QBs or non-QBs, or toggle benchmarks off."
+          : "Pick at least one benchmark type, or toggle benchmarks off.",
       );
       return;
     }
@@ -383,15 +464,30 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
         return c?.type === "phase";
       }) ?? orderedCatIds[0];
 
-    const types = Array.from(benchTypes);
     // Build the canonical scope-grouped config (the one shape mobile + the
-    // capture flow read — see TD-1). Web edits as a flat type list; this maps
-    // web's per-type {target, better} into the existing scope's group(s) while
-    // preserving the original scope and any mobile-only per-type knobs.
+    // capture flow read — see TD-1). Web now authors the scope (role) too, so
+    // we write each active group's types + per-type {target, better} under the
+    // chosen scope, preserving any mobile-only per-type knobs on the original.
+    const groupToEdits = (g: WebGroupState) => ({
+      types: Array.from(g.types),
+      perType: g.config,
+    });
     const canonicalConfig: CanonicalBenchmarkConfig | null =
-      usesBench && types.length > 0
-        ? applyWebEdits(initial?.benchmarkConfigRaw ?? null, types, benchConfig)
+      usesBench && benchConfigured
+        ? applyWebEditsScoped(
+            initial?.benchmarkConfigRaw ?? null,
+            benchScope,
+            {
+              whole: groupToEdits(wholeGroup),
+              qb: groupToEdits(qbGroup),
+              nonqb: groupToEdits(nonqbGroup),
+            },
+            matchConfigs,
+          )
         : null;
+
+    // Flat type list for the benchmark_types[] column (dashboard filtering).
+    const types = canonicalConfig ? flattenConfigTypes(canonicalConfig) : [];
 
     // Legacy single-string benchmark_type — keep populated for any read path
     // that hasn't migrated to benchmark_types[]. Falls back to the first of
@@ -601,14 +697,14 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
           style={{ maxWidth: 1180, margin: "0 auto", width: "100%" }}
         >
           <div className="drillform-grid">
-            {/* LEFT — sectioned form */}
+            {/* LEFT — sectioned form. Each Section is its own panel (see the
+                Section component); the column itself is transparent so the
+                panels read as distinct chunks against the page background. */}
             <div
-              className="w-card"
               style={{
-                padding: 28,
                 display: "flex",
                 flexDirection: "column",
-                gap: 28,
+                gap: 16,
               }}
             >
               <Section
@@ -652,7 +748,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="02"
                 label="Phase"
-                hint="When this drill runs in practice. The phase anchors the drill's visual identity and sets which skill groups you can tag below."
+                hint="When this drill runs in practice. Sets its color and which skills you can tag below."
               >
                 <CatGroup
                   label=""
@@ -665,7 +761,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="03"
                 label="Skill tags"
-                hint="Which player skills does this drill develop? These power the team skill profile, the player dashboard, and recommended-drill suggestions. Pick at least one primary."
+                hint="What this drill develops — powers the team profile, player dashboards, and drill suggestions. Pick at least one primary."
               >
                 {allowedGroups.length === 0 ? (
                   <div
@@ -695,38 +791,60 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="04"
                 label="Benchmarks"
-                hint="Pick the metrics coaches will capture during practice. One drill can capture multiple types per rep."
+                hint="Choose who's scored and which metrics coaches capture. A drill can capture multiple per rep."
               >
                 <BenchGate on={usesBench} onChange={setUsesBench} />
 
                 {usesBench && (
                   <>
-                    <BenchTypeGrid
-                      selected={benchTypes}
-                      onToggle={toggleBenchType}
-                    />
+                    <BenchScopePicker value={benchScope} onChange={setBenchScope} />
 
-                    {benchTypes.size > 0 ? (
-                      <BenchTargetsBlock
-                        selected={Array.from(benchTypes)}
-                        config={benchConfig}
-                        onChange={setBenchCfg}
+                    {benchScope !== "both" ? (
+                      <BenchGroupEditor
+                        group={activeGroup}
+                        onToggle={(id) => toggleTypeIn(setActiveGroup, id)}
+                        onSetCfg={(id, key, val) =>
+                          setCfgIn(setActiveGroup, id, key, val)
+                        }
                       />
                     ) : (
-                      <div
-                        style={{
-                          padding: "14px 16px",
-                          background: "rgba(255,77,77,0.05)",
-                          border: "1px solid rgba(255,77,77,0.18)",
-                          borderRadius: 12,
-                          color: "var(--uff-text)",
-                          fontSize: 12.5,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        Pick at least one type, or toggle benchmarks off to
-                        run this as a coaching-only drill.
-                      </div>
+                      <>
+                        <MatchConfigsToggle
+                          on={matchConfigs}
+                          onChange={setMatchConfigs}
+                        />
+                        {matchConfigs ? (
+                          <>
+                            <RoleHeading label="QBs & Non-QBs" sub="shared config" />
+                            <BenchGroupEditor
+                              group={nonqbGroup}
+                              onToggle={(id) => toggleTypeIn(setNonqbGroup, id)}
+                              onSetCfg={(id, key, val) =>
+                                setCfgIn(setNonqbGroup, id, key, val)
+                              }
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <RoleHeading label="QBs" sub="positions filtered" />
+                            <BenchGroupEditor
+                              group={qbGroup}
+                              onToggle={(id) => toggleTypeIn(setQbGroup, id)}
+                              onSetCfg={(id, key, val) =>
+                                setCfgIn(setQbGroup, id, key, val)
+                              }
+                            />
+                            <RoleHeading label="Non-QBs" sub="positions filtered" />
+                            <BenchGroupEditor
+                              group={nonqbGroup}
+                              onToggle={(id) => toggleTypeIn(setNonqbGroup, id)}
+                              onSetCfg={(id, key, val) =>
+                                setCfgIn(setNonqbGroup, id, key, val)
+                              }
+                            />
+                          </>
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -735,7 +853,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="05"
                 label="Setup diagram"
-                hint="Drag cones onto the field. Movement segments auto-fill the setup instructions below."
+                hint="Drag cones onto the field. Segments auto-fill the setup instructions below."
               >
                 <SetupDiagramSection
                   value={diagramData}
@@ -794,7 +912,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="06"
                 label="Drill notes"
-                hint="Coaching cues, common mistakes, or anything you want to remember about running this drill. Each line is its own note."
+                hint="Coaching cues, common mistakes, reminders. One note per line."
               >
                 <NotesList
                   items={notes}
@@ -809,7 +927,7 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
               <Section
                 num="07"
                 label="Block timing & equipment"
-                hint="Defaults the planner uses when this drill gets added to a practice. Cones come from the diagram above; add anything extra below."
+                hint="Planner defaults when this drill is added to a practice. Cones come from the diagram above."
               >
                 <div
                   style={{
@@ -922,15 +1040,15 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                 reps={reps}
                 cats={selectedCatList.map((c) => c.slug)}
                 primarySlug={primarySlug}
-                types={Array.from(benchTypes)}
+                types={flatBench.types}
                 status={status}
                 pinned={pinned}
                 onTogglePinned={() => setPinned((p) => !p)}
               />
-              {usesBench && benchTypes.size > 0 && (
+              {usesBench && flatBench.types.length > 0 && (
                 <CaptureWidgetPreview
-                  types={Array.from(benchTypes)}
-                  config={benchConfig}
+                  types={flatBench.types}
+                  config={flatBench.config}
                 />
               )}
               <FormHelpCard />
@@ -980,46 +1098,77 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
-            color: "var(--uff-lime)",
-            letterSpacing: ".08em",
-            fontWeight: 700,
-          }}
-        >
-          {num}
-        </span>
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: "var(--uff-orange)",
-            letterSpacing: ".01em",
-          }}
-        >
-          {label}
-        </span>
-      </div>
-      {hint && (
-        <div
-          style={{
-            fontSize: 12,
-            color: "var(--uff-text)",
-            lineHeight: 1.5,
-            paddingLeft: 28,
-          }}
-        >
-          {hint}
+    <section
+      className="w-card"
+      style={{
+        padding: 0,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header band — divider + subtle tint set it apart from the body so
+          each section reads as a labelled chunk, not a run-on list. */}
+      <header
+        style={{
+          padding: "13px 20px",
+          borderBottom: "1px solid var(--uff-line-soft)",
+          background: "rgba(255,255,255,0.018)",
+          display: "flex",
+          flexDirection: "column",
+          gap: hint ? 5 : 0,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--uff-lime)",
+              letterSpacing: ".1em",
+              fontWeight: 700,
+            }}
+          >
+            {num}
+          </span>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 12.5,
+              fontWeight: 600,
+              letterSpacing: ".09em",
+              textTransform: "uppercase",
+              color: "var(--uff-text)",
+            }}
+          >
+            {label}
+          </h3>
         </div>
-      )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {hint && (
+          <p
+            style={{
+              margin: 0,
+              paddingLeft: 26,
+              fontSize: 12,
+              color: "var(--uff-text-mute)",
+              lineHeight: 1.5,
+            }}
+          >
+            {hint}
+          </p>
+        )}
+      </header>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          padding: 20,
+        }}
+      >
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1242,6 +1391,213 @@ function BenchGate({
         {on ? "YES" : "NO"}
       </span>
     </button>
+  );
+}
+
+// ── Scope (role) picker ─────────────────────────────────────────────────
+// Mirrors the mobile drill form's "Who gets benchmarked?" step.
+
+const BENCH_SCOPE_OPTIONS: {
+  id: BenchmarkScope;
+  label: string;
+  sub: string;
+}[] = [
+  { id: "whole", label: "Whole team", sub: "one config" },
+  { id: "qb", label: "QBs only", sub: "positions filtered" },
+  { id: "nonqb", label: "Non-QBs", sub: "positions filtered" },
+  { id: "both", label: "Both", sub: "separate configs" },
+];
+
+function BenchScopePicker({
+  value,
+  onChange,
+}: {
+  value: BenchmarkScope;
+  onChange: (v: BenchmarkScope) => void;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 12.5,
+          fontWeight: 600,
+          color: "var(--uff-text)",
+          marginBottom: 8,
+        }}
+      >
+        Who gets benchmarked?
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {BENCH_SCOPE_OPTIONS.map((o) => {
+          const on = value === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onChange(o.id)}
+              aria-pressed={on}
+              style={{
+                textAlign: "left",
+                padding: "11px 13px",
+                borderRadius: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                background: on
+                  ? "linear-gradient(180deg, rgba(255,106,26,0.08) 0%, transparent 80%), var(--uff-surface-2)"
+                  : "var(--uff-surface-2)",
+                border: `1.5px solid ${on ? "var(--uff-orange)" : "var(--uff-line)"}`,
+                color: "var(--uff-text)",
+              }}
+            >
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{o.label}</div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: on ? "var(--uff-orange)" : "var(--uff-text-mute)",
+                  marginTop: 2,
+                }}
+              >
+                {o.sub}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RoleHeading({ label, sub }: { label: string; sub: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        gap: 8,
+        marginTop: 4,
+      }}
+    >
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: ".14em",
+          textTransform: "uppercase",
+          color: "var(--uff-orange)",
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>{sub}</span>
+    </div>
+  );
+}
+
+function MatchConfigsToggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 13px",
+        background: "var(--uff-surface-2)",
+        border: `1px solid ${on ? "var(--uff-orange)" : "var(--uff-line)"}`,
+        borderRadius: 10,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        color: "var(--uff-text)",
+        width: "fit-content",
+      }}
+    >
+      <span
+        style={{
+          width: 34,
+          height: 20,
+          borderRadius: 999,
+          background: on ? "var(--uff-orange)" : "var(--uff-line)",
+          position: "relative",
+          flexShrink: 0,
+          transition: "background 140ms ease",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 3,
+            left: on ? 17 : 3,
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            background: "#0a0a0d",
+            transition: "left 140ms ease",
+          }}
+        />
+      </span>
+      <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+        Use the same config for QBs and non-QBs
+      </span>
+    </button>
+  );
+}
+
+// ── One role group's editor (type grid + targets) ──────────────────────
+
+function BenchGroupEditor({
+  group,
+  onToggle,
+  onSetCfg,
+}: {
+  group: WebGroupState;
+  onToggle: (id: BenchKind) => void;
+  onSetCfg: <K extends keyof BenchConfigEntry>(
+    id: BenchKind,
+    key: K,
+    val: BenchConfigEntry[K],
+  ) => void;
+}) {
+  return (
+    <>
+      <BenchTypeGrid selected={group.types} onToggle={onToggle} />
+      {group.types.size > 0 ? (
+        <BenchTargetsBlock
+          selected={Array.from(group.types)}
+          config={group.config}
+          onChange={onSetCfg}
+        />
+      ) : (
+        <div
+          style={{
+            padding: "14px 16px",
+            background: "rgba(255,77,77,0.05)",
+            border: "1px solid rgba(255,77,77,0.18)",
+            borderRadius: 12,
+            color: "var(--uff-text)",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+          }}
+        >
+          Pick at least one type, or toggle benchmarks off to run this as a
+          coaching-only drill.
+        </div>
+      )}
+    </>
   );
 }
 

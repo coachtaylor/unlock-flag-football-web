@@ -4,10 +4,34 @@
 import type { PlanBlock, PlanDrill } from "@/lib/practice/plan-data";
 import { blockMinutes } from "@/lib/practice/plan-data";
 import { blockColor } from "@/lib/practice/block-colors";
+import type { AssignableCoach } from "@/lib/team/assignable-coaches";
+import { DrillCoachControl } from "./DrillCoachControl";
 import { PIcon } from "./atoms";
 
-export function BlockReadCard({ block, index }: { block: PlanBlock; index: number }) {
+export type DrillAssignCtx = {
+  coaches: AssignableCoach[];
+  canManage: boolean;
+  planId: string;
+  teamId: string;
+};
+
+export function BlockReadCard({
+  block,
+  index,
+  coaches,
+  canManage,
+  planId,
+  teamId,
+}: {
+  block: PlanBlock;
+  index: number;
+  coaches: AssignableCoach[];
+  canManage: boolean;
+  planId: string;
+  teamId: string;
+}) {
   const c = blockColor(block.name);
+  const assignCtx: DrillAssignCtx = { coaches, canManage, planId, teamId };
 
   // Group drills by parallel_group, preserving order
   type Group = { kind: "solo"; drills: PlanDrill[] } | { kind: "parallel"; drills: PlanDrill[] };
@@ -130,7 +154,14 @@ export function BlockReadCard({ block, index }: { block: PlanBlock; index: numbe
         )}
         {groups.map((g, gi) => {
           if (g.kind === "solo") {
-            return <DrillReadRow key={g.drills[0].id} d={g.drills[0]} accent={c.accent} />;
+            return (
+              <DrillReadRow
+                key={g.drills[0].id}
+                d={g.drills[0]}
+                accent={c.accent}
+                assignCtx={assignCtx}
+              />
+            );
           }
           const maxMin = Math.max(...g.drills.map((d) => d.duration_minutes));
           return (
@@ -176,7 +207,7 @@ export function BlockReadCard({ block, index }: { block: PlanBlock; index: numbe
                 }}
               >
                 {g.drills.map((d) => (
-                  <DrillReadRow key={d.id} d={d} accent={c.accent} />
+                  <DrillReadRow key={d.id} d={d} accent={c.accent} assignCtx={assignCtx} />
                 ))}
               </div>
             </div>
@@ -187,7 +218,15 @@ export function BlockReadCard({ block, index }: { block: PlanBlock; index: numbe
   );
 }
 
-function DrillReadRow({ d, accent }: { d: PlanDrill; accent: string }) {
+function DrillReadRow({
+  d,
+  accent,
+  assignCtx,
+}: {
+  d: PlanDrill;
+  accent: string;
+  assignCtx: DrillAssignCtx;
+}) {
   return (
     <div
       style={{
@@ -258,6 +297,17 @@ function DrillReadRow({ d, accent }: { d: PlanDrill; accent: string }) {
           >
             &ldquo;{d.notes}&rdquo;
           </div>
+        )}
+        {!d.is_water_break && (
+          <DrillCoachControl
+            planId={assignCtx.planId}
+            teamId={assignCtx.teamId}
+            drillRowId={d.id}
+            assignedMemberId={d.assigned_member_id}
+            assignedPlayerId={d.assigned_player_id}
+            coaches={assignCtx.coaches}
+            canManage={assignCtx.canManage}
+          />
         )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>

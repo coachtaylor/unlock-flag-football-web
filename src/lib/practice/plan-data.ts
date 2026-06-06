@@ -46,6 +46,12 @@ export type PlanDrill = {
   // plan_drill row itself so it travels with the drill row and shows up
   // in DrillNoteHistorySheet without a separate table.
   log_note: string | null;
+  // Coach/captain assigned to lead this drill (migs 95/96). Staff →
+  // assigned_member_id (team_members.id); captain → assigned_player_id
+  // (team_players.id). Resolved to a name/color at render via the team's
+  // assignable-coaches list.
+  assigned_member_id: string | null;
+  assigned_player_id: string | null;
 };
 
 export type PlanBlock = {
@@ -126,6 +132,23 @@ export function blockMinutes(block: PlanBlock): number {
   return mn;
 }
 
+// Minutes between a plan's start and end time ("HH:MM" / "HH:MM:SS", 24h).
+// Returns 0 when either is missing or the window is non-positive.
+export function planWindowMinutes(
+  startTime: string | null,
+  endTime: string | null,
+): number {
+  if (!startTime || !endTime) return 0;
+  const toMin = (t: string) => {
+    const [h, m] = t.split(":");
+    return parseInt(h, 10) * 60 + parseInt(m, 10);
+  };
+  const start = toMin(startTime);
+  const end = toMin(endTime);
+  if (Number.isNaN(start) || Number.isNaN(end)) return 0;
+  return Math.max(0, end - start);
+}
+
 export type PlanTotals = {
   drillsMin: number;
   breakMin: number;
@@ -177,8 +200,10 @@ export function planTotals(plan: PracticePlan): PlanTotals {
   const rsvpIn = plan.attendees.filter((a) => a.rsvp === true).length;
   const rsvpOut = plan.attendees.filter((a) => a.rsvp === false).length;
   const rsvpMaybe = 0;
-  // Target falls back to sum of block targets if not set on plan
-  const target = plan.blocks.reduce((a, b) => a + (b.target_minutes ?? 0), 0);
+  // Target is the scheduled practice window (end − start). When no window is
+  // set yet, fall back to the sum of block targets.
+  const windowMin = planWindowMinutes(plan.start_time, plan.end_time);
+  const target = windowMin || plan.blocks.reduce((a, b) => a + (b.target_minutes ?? 0), 0);
   return {
     drillsMin,
     breakMin,
@@ -260,7 +285,7 @@ export async function fetchPlanFull(
     supabase
       .from("practice_plan_drills")
       .select(
-        "id, plan_block_id, drill_id, drill_order, duration_minutes, reps_count, notes, parallel_group, is_water_break, log_note",
+        "id, plan_block_id, drill_id, drill_order, duration_minutes, reps_count, notes, parallel_group, is_water_break, log_note, assigned_member_id, assigned_player_id",
       )
       .eq("practice_plan_id", planId)
       .order("drill_order", { ascending: true }),
@@ -328,6 +353,8 @@ export async function fetchPlanFull(
       category_name: meta?.category_name ?? null,
       description: meta?.description ?? null,
       log_note: (d.log_note as string | null) ?? null,
+      assigned_member_id: (d.assigned_member_id as string | null) ?? null,
+      assigned_player_id: (d.assigned_player_id as string | null) ?? null,
     };
   });
 
@@ -416,7 +443,7 @@ export async function fetchPlanSummaries(
   ]);
 
   const drillsByBlock = new Map<string, { duration_minutes: number; parallel_group: number | null }[]>();
-  let totalDrillsByPlan = new Map<string, number>();
+  const totalDrillsByPlan = new Map<string, number>();
   for (const d of drillsRes.data ?? []) {
     if (d.is_water_break) continue;
     if (!d.plan_block_id) continue;

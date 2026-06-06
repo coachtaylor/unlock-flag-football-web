@@ -46,7 +46,10 @@ const ALLOWED_BENCH: BenchKind[] = [
   "drops",
 ];
 
-type Props = { params: Promise<{ teamId: string; id: string }> };
+type Props = {
+  params: Promise<{ teamId: string; id: string }>;
+  searchParams: Promise<{ from?: string }>;
+};
 
 type RecentLog = {
   playerId: string | null;
@@ -66,8 +69,10 @@ type SnapshotRow = {
   sparkData: number[];
 };
 
-export default async function DrillDetailPage({ params }: Props) {
+export default async function DrillDetailPage({ params, searchParams }: Props) {
   const { teamId, id } = await params;
+  const { from } = await searchParams;
+  const cameFromPresetLibrary = from === "library";
   const supabase = await createClient();
 
   const {
@@ -367,6 +372,26 @@ export default async function DrillDetailPage({ params }: Props) {
           className="page"
           style={{ maxWidth: 1280, margin: "0 auto", width: "100%" }}
         >
+          {/* Back to preset library — shown only when the user arrived by
+              cloning a preset (?from=library), so they can keep adding drills. */}
+          {cameFromPresetLibrary && (
+            <Link
+              href={`${base}/library`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
+                color: "var(--uff-orange)",
+                textDecoration: "none",
+                padding: "0 0 10px",
+              }}
+            >
+              <span aria-hidden>←</span> Back to preset library
+            </Link>
+          )}
+
           {/* Crumbs */}
           <div
             style={{

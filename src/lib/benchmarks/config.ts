@@ -137,6 +137,21 @@ function inverseFromBetter(
 // merge the groups (first group wins on a per-type conflict) so a coach still
 // sees the drill's targets when opening a mobile-scoped drill on web.
 
+// One group → web {types, perType}. Used per-role when the form edits a
+// scope's groups independently (e.g. "both" — QB vs non-QB).
+export function webEntriesFromGroup(group: GroupConfig | undefined): {
+  types: BenchKind[];
+  perType: WebBenchConfig;
+} {
+  const perType: WebBenchConfig = {};
+  const types = BENCH_ORDER.filter((t) => group?.types.includes(t));
+  for (const t of types) {
+    const pt = group!.perType[t] ?? {};
+    perType[t] = { target: pt.target, better: betterFromInverse(t, pt.inverse) };
+  }
+  return { types, perType };
+}
+
 export function webEntriesFromConfig(cfg: BenchmarkConfig): {
   types: BenchKind[];
   perType: WebBenchConfig;
@@ -144,17 +159,19 @@ export function webEntriesFromConfig(cfg: BenchmarkConfig): {
   const typeSet = new Set<BenchKind>();
   const perType: WebBenchConfig = {};
   for (const gName of groupsForScope(cfg.scope)) {
-    const g = cfg[gName];
-    if (!g) continue;
-    for (const t of g.types) {
+    const { types, perType: gPer } = webEntriesFromGroup(cfg[gName]);
+    for (const t of types) {
       typeSet.add(t);
-      if (!perType[t]) {
-        const pt = g.perType[t] ?? {};
-        perType[t] = { target: pt.target, better: betterFromInverse(t, pt.inverse) };
-      }
+      if (!perType[t]) perType[t] = gPer[t];
     }
   }
   return { types: BENCH_ORDER.filter((t) => typeSet.has(t)), perType };
+}
+
+// Flatten a canonical config to its de-duped type list (for the flat
+// benchmark_types[] column the dashboard filters on).
+export function flattenConfigTypes(cfg: BenchmarkConfig): BenchKind[] {
+  return webEntriesFromConfig(cfg).types;
 }
 
 // ── Write: web edits -> canonical, preserving scope + mobile knobs ───────
@@ -163,39 +180,82 @@ export function webEntriesFromConfig(cfg: BenchmarkConfig): {
 // legacy / whole drills), preserving mobile-only per-type fields and the
 // original scope so a web save never silently flattens a mobile config.
 
+// Build one canonical group from a web type list + per-type edits, preserving
+// any mobile-only per-type knobs (attemptsPerSet / label) on the existing group.
+function buildGroupFromWeb(
+  existing: GroupConfig | undefined,
+  types: BenchKind[],
+  webPerType: WebBenchConfig,
+): GroupConfig {
+  const ordered = BENCH_ORDER.filter((t) => types.includes(t));
+  const perType: GroupConfig["perType"] = {};
+  for (const t of ordered) {
+    const prev = existing?.perType[t] ?? {};
+    const web = webPerType[t] ?? {};
+    const entry: PerTypeConfig = { ...prev }; // keep mobile knobs
+
+    const target = web.target != null ? String(web.target).trim() : "";
+    if (target !== "") entry.target = target;
+    else delete entry.target;
+
+    const inv = inverseFromBetter(web.better);
+    if (inv !== undefined) entry.inverse = inv;
+
+    perType[t] = entry;
+  }
+  return { types: [...ordered], perType };
+}
+
+// A web type list + per-type edits, per role group. Only the groups relevant
+// to `scope` are read.
+export type WebGroupEdits = {
+  whole?: { types: BenchKind[]; perType: WebBenchConfig };
+  qb?: { types: BenchKind[]; perType: WebBenchConfig };
+  nonqb?: { types: BenchKind[]; perType: WebBenchConfig };
+};
+
+// Write web edits into a canonical config under an explicit scope (role).
+// Mirrors mobile's buildBenchmarkConfig: whole/qb/nonqb keep a single group;
+// "both" keeps qb + nonqb (collapsed to one shared group when matchConfigs).
+export function applyWebEditsScoped(
+  original: BenchmarkConfig | null,
+  scope: BenchmarkScope,
+  edits: WebGroupEdits,
+  matchConfigs = false,
+): BenchmarkConfig {
+  const cfg: BenchmarkConfig = { scope };
+  if (scope === "both") {
+    cfg.matchConfigs = matchConfigs;
+    const nonqb = buildGroupFromWeb(
+      original?.nonqb,
+      edits.nonqb?.types ?? [],
+      edits.nonqb?.perType ?? {},
+    );
+    cfg.nonqb = nonqb;
+    cfg.qb = matchConfigs
+      ? nonqb
+      : buildGroupFromWeb(original?.qb, edits.qb?.types ?? [], edits.qb?.perType ?? {});
+    return cfg;
+  }
+  const g = scope; // "whole" | "qb" | "nonqb"
+  cfg[g] = buildGroupFromWeb(original?.[g], edits[g]?.types ?? [], edits[g]?.perType ?? {});
+  return cfg;
+}
+
+// Back-compat flat (whole-scope) writer. Preserves the drill's existing scope
+// by writing the same flat edits into each of that scope's groups.
 export function applyWebEdits(
   original: BenchmarkConfig | null,
   types: BenchKind[],
   webPerType: WebBenchConfig,
 ): BenchmarkConfig {
   const scope: BenchmarkScope = original?.scope ?? "whole";
-  const ordered = BENCH_ORDER.filter((t) => types.includes(t));
-
-  const buildGroup = (existing?: GroupConfig): GroupConfig => {
-    const perType: GroupConfig["perType"] = {};
-    for (const t of ordered) {
-      const prev = existing?.perType[t] ?? {};
-      const web = webPerType[t] ?? {};
-      const entry: PerTypeConfig = { ...prev }; // keep mobile knobs
-
-      const target = web.target != null ? String(web.target).trim() : "";
-      if (target !== "") entry.target = target;
-      else delete entry.target;
-
-      const inv = inverseFromBetter(web.better);
-      if (inv !== undefined) entry.inverse = inv;
-
-      perType[t] = entry;
-    }
-    return { types: [...ordered], perType };
-  };
-
   const cfg: BenchmarkConfig = { scope };
   if (scope === "both" && typeof original?.matchConfigs === "boolean") {
     cfg.matchConfigs = original.matchConfigs;
   }
   for (const g of groupsForScope(scope)) {
-    cfg[g] = buildGroup(original?.[g]);
+    cfg[g] = buildGroupFromWeb(original?.[g], types, webPerType);
   }
   return cfg;
 }

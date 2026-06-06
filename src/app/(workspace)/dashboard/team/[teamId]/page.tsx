@@ -234,7 +234,7 @@ export default async function TeamDashboardPage({
               label={playerView ? "Your pulses" : "Pinned pulses"}
               meta={`${data.pulses.length} / 4`}
             />
-            <PinnedPulsesStrip pulses={pulses} />
+            <PinnedPulsesStrip pulses={pulses} teamId={teamId} />
           </div>
 
           {/* Trends + Movers */}
@@ -270,7 +270,7 @@ export default async function TeamDashboardPage({
               teamId={teamId}
               needsReviewCount={data.needsReviewCount}
             />
-            <MostRunDrillsCard rows={data.mostRunDrills} />
+            <MostRunDrillsCard rows={data.mostRunDrills} teamId={teamId} />
           </div>
 
           {!hasAnyData && (

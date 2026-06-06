@@ -7,6 +7,7 @@ import { teamColorHex, playerColorForIndex } from "@/components/uff/team-colors"
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { fetchPlanFull, fetchBlockTemplates } from "@/lib/practice/plan-data";
+import { loadAssignableCoaches } from "@/lib/team/assignable-coaches";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import EditorClient, {
   type DrillCatalogEntry,
@@ -108,6 +109,7 @@ export default async function PracticeEditPage({
     "U";
 
   const editorPlan: EditorPlan = { ...plan, teamId: plan.team_id };
+  const coaches = await loadAssignableCoaches(supabase, plan.team_id);
 
   return (
     <div className="uff-web">
@@ -141,6 +143,7 @@ export default async function PracticeEditPage({
             drillCatalog={drillCatalog}
             blockTemplates={blockTemplates}
             roster={roster}
+            coaches={coaches}
           />
         </div>
       </div>

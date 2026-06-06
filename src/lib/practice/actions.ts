@@ -45,6 +45,10 @@ export type SaveDrillInput = {
   reps_count?: number | null;
   notes?: string | null;
   parallel_group?: number | null;
+  // Coach/captain leading this drill: staff → assigned_member_id
+  // (team_members.id), captain → assigned_player_id (team_players.id).
+  assigned_member_id?: string | null;
+  assigned_player_id?: string | null;
 };
 
 export type SaveBreakInput = {
@@ -97,6 +101,32 @@ export async function savePlan(
   if (rpcErr) return { ok: false, error: rpcErr.message };
 
   revalidatePlan(teamId, payload.plan_id);
+  return { ok: true };
+}
+
+// Assign (or clear) the coach/captain leading a single drill row from the
+// practice review screen. Writes the one junction row by id and revalidates
+// the detail path so the chip reflects the change. RLS gates the write.
+export async function assignDrillCoach(
+  planId: string,
+  drillRowId: string,
+  memberId: string | null,
+  playerId: string | null,
+  teamId?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated" };
+
+  const { error } = await supabase
+    .from("practice_plan_drills")
+    .update({ assigned_member_id: memberId, assigned_player_id: playerId })
+    .eq("id", drillRowId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePlan(teamId, planId);
   return { ok: true };
 }
 

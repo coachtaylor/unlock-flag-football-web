@@ -35,7 +35,7 @@ function isGood(p: PinnedPulse): boolean {
   return p.inverse ? p.delta < 0 : p.delta > 0;
 }
 
-function EmptyPulse() {
+function EmptyPulse({ drillsBase }: { drillsBase: string }) {
   return (
     <div
       className="w-card"
@@ -63,7 +63,7 @@ function EmptyPulse() {
       <span style={{ fontSize: 12, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
         Pin a (drill, type) pulse from any drill&apos;s detail page.
       </span>
-      <Link href="/drills" className="wbtn ghost" style={{ height: 30, alignSelf: "flex-start" }}>
+      <Link href={drillsBase} className="wbtn ghost" style={{ height: 30, alignSelf: "flex-start" }}>
         Browse drills <Icon.chevR size={12} />
       </Link>
     </div>
@@ -72,9 +72,14 @@ function EmptyPulse() {
 
 export default function PinnedPulsesStrip({
   pulses,
+  teamId,
 }: {
   pulses: PulseSlot[];
+  teamId: string;
 }) {
+  // Team-scoped drills base (Build 8) — the flat /drills route now redirects to
+  // /dashboard, so every drill link here must carry the active team.
+  const drillsBase = `/dashboard/team/${teamId}/drills`;
   const slots: (PulseSlot | null)[] = [...pulses];
   while (slots.length < 4) slots.push(null);
 
@@ -87,17 +92,17 @@ export default function PinnedPulsesStrip({
       }}
     >
       {slots.map((p, i) => {
-        if (!p) return <EmptyPulse key={`empty-${i}`} />;
+        if (!p) return <EmptyPulse key={`empty-${i}`} drillsBase={drillsBase} />;
         if (p.kind === "breakdown") {
-          return <BreakdownPulseCard key={p.pinId} pulse={p} />;
+          return <BreakdownPulseCard key={p.pinId} pulse={p} drillsBase={drillsBase} />;
         }
-        return <SinglePulseCard key={p.pinId} pulse={p} />;
+        return <SinglePulseCard key={p.pinId} pulse={p} drillsBase={drillsBase} />;
       })}
     </div>
   );
 }
 
-function SinglePulseCard({ pulse: p }: { pulse: PinnedPulse }) {
+function SinglePulseCard({ pulse: p, drillsBase }: { pulse: PinnedPulse; drillsBase: string }) {
   return (
     <div className="w-card td-stat-cell" style={{ padding: 18 }}>
             <div
@@ -111,7 +116,7 @@ function SinglePulseCard({ pulse: p }: { pulse: PinnedPulse }) {
             >
               <div style={{ minWidth: 0, flex: 1 }}>
                 <Link
-                  href={`/drills/${p.drillId}`}
+                  href={`${drillsBase}/${p.drillId}`}
                   style={{
                     fontSize: 10.5,
                     fontWeight: 700,
