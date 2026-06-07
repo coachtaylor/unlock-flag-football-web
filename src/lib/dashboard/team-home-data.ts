@@ -17,10 +17,21 @@
 // stitch together several sources per widget.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  type PulseBenchmarkType,
+  pulseUnit,
+  isInverse,
+  valueFromBenchmark,
+} from "@/lib/benchmarks/metrics";
+import { initialsFor as initialsOf } from "@/lib/format/initials";
 
 /* ─────────────────── types ─────────────────── */
 
-export type PulseBenchmarkType = "timed" | "rated" | "reps" | "pct" | "flags" | "drops";
+// Canonical PulseBenchmarkType + value-semantics helpers live in
+// lib/benchmarks/metrics.ts (shared with the Team Scouting Report loader so the
+// surfaces can't disagree). Re-exported here for back-compat — pulse-bits.tsx
+// still imports PulseBenchmarkType from this module.
+export type { PulseBenchmarkType };
 
 export type PinnedPulse = {
   kind: "single";
@@ -294,16 +305,6 @@ import type { SkillGroup } from "@/lib/types/skills";
 import { SKILL_GROUP_META } from "@/lib/drills/skill-groups";
 import { loadTeamActivity } from "@/lib/activity";
 
-function initialsOf(name: string) {
-  return name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 function startOfWeek(d: Date): Date {
   // Monday-anchored
   const x = new Date(d);
@@ -323,42 +324,8 @@ function avg(nums: number[]) {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-function pulseUnit(t: PulseBenchmarkType) {
-  switch (t) {
-    case "timed":
-      return "s";
-    case "rated":
-      return "/5";
-    case "pct":
-      return "%";
-    default:
-      return "";
-  }
-}
-
-function isInverse(t: PulseBenchmarkType) {
-  // timed + drops: lower is better
-  return t === "timed" || t === "drops";
-}
-
-function valueFromBenchmark(
-  row: { time_seconds: number | null; rating: number | null; made_count: number | null; attempts_count: number | null },
-  t: PulseBenchmarkType
-): number | null {
-  switch (t) {
-    case "timed":
-      return row.time_seconds;
-    case "rated":
-      return row.rating;
-    case "reps":
-    case "flags":
-    case "drops":
-      return row.made_count ?? row.rating; // reps lives in made_count for our newer types
-    case "pct":
-      if (row.made_count == null || !row.attempts_count) return null;
-      return (row.made_count / row.attempts_count) * 100;
-  }
-}
+// pulseUnit / isInverse / valueFromBenchmark now live in lib/benchmarks/metrics.ts
+// (imported at the top of this file).
 
 /* ─────────────── main loader ─────────────── */
 

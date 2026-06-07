@@ -59,7 +59,7 @@ export default function TeamSidebar({
     { id: "roster", label: "Roster", href: `/dashboard/team/${teamId}/roster`, icon: DashIcon.team },
     { id: "drills", label: "Drills", href: `/dashboard/team/${teamId}/drills`, icon: DashIcon.drills },
     { id: "practice", label: "Practice", href: `/dashboard/team/${teamId}/practice`, icon: DashIcon.practice },
-    { id: "benchmarks", label: "Benchmarks", href: "/benchmarks", icon: DashIcon.rules },
+    { id: "benchmarks", label: "Benchmarks", href: `/dashboard/team/${teamId}/benchmarks`, icon: DashIcon.rules },
   ];
 
   return (

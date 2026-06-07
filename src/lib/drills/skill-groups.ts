@@ -8,6 +8,7 @@
 // palette shifts (athletic = --uff-lime-400, offense = --uff-orange-500).
 
 import type { SkillGroup } from "@/lib/types/skills";
+import { sideForPosition } from "@/lib/positions";
 
 export type SkillGroupMeta = {
   id: SkillGroup;
@@ -95,4 +96,50 @@ export function allowedSkillGroupsForPhases(
     if (groups) for (const g of groups) set.add(g);
   }
   return SKILL_GROUP_META.filter((m) => set.has(m.id)).map((m) => m.id);
+}
+
+// ── Position ↔ skill-group relevance (Build 8.7 scouting report) ──────────
+//
+// Which skill groups actually matter for a player's position(s). A corner is
+// never graded on "qb"; a receiver is never graded on "defense". athletic + iq
+// cut across every position (physical + cognitive); the side-specific group is
+// added per listed position. A two-way player gets the union of their
+// positions' groups. Mirror to unlock-mobile if/when the scouting report ports.
+export function skillGroupsForPositions(
+  positions: string[] | null | undefined
+): SkillGroup[] {
+  const set = new Set<SkillGroup>(["athletic", "iq"]);
+  for (const p of positions ?? []) {
+    if (p === "QB") set.add("qb");
+    else if (sideForPosition(p) === "offense") set.add("offense");
+    else if (sideForPosition(p) === "defense") set.add("defense");
+  }
+  return SKILL_GROUP_META.filter((m) => set.has(m.id)).map((m) => m.id);
+}
+
+// Position "rooms" — how captains think about the roster ("QB room", "receiving
+// corps", "defense"). A player belongs to a room by PRIMARY position
+// (positions[0]). `signature` is the room's defining skill group (the one that
+// distinguishes it beyond the universal athletic/iq).
+export type PositionRoom = {
+  id: "qb" | "offense" | "defense";
+  label: string;
+  positions: string[];
+  signature: SkillGroup;
+};
+
+export const POSITION_ROOMS: PositionRoom[] = [
+  { id: "qb", label: "QB room", positions: ["QB"], signature: "qb" },
+  { id: "offense", label: "Receivers", positions: ["WR", "RB", "C"], signature: "offense" },
+  { id: "defense", label: "Defense", positions: ["CB", "S", "LB", "DE", "Rusher"], signature: "defense" },
+];
+
+// The room a player belongs to, by primary position. Returns null if the player
+// has no positions on record.
+export function roomForPrimaryPosition(
+  positions: string[] | null | undefined
+): PositionRoom | null {
+  const primary = positions?.[0];
+  if (!primary) return null;
+  return POSITION_ROOMS.find((r) => r.positions.includes(primary)) ?? null;
 }
