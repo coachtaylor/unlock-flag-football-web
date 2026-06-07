@@ -11,10 +11,16 @@ export const dynamic = "force-dynamic";
 
 export default async function NewPracticePlanPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ teamId: string }>;
+  // Carries the scouting "Plan…" deep-link through draft creation: focusSkill
+  // expands the recommendations drawer to a skill; fromScouting opens the drawer
+  // even for group-level CTAs that have no specific skill.
+  searchParams: Promise<{ focusSkill?: string; fromScouting?: string }>;
 }) {
   const { teamId } = await params;
+  const { focusSkill, fromScouting } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -28,5 +34,9 @@ export default async function NewPracticePlanPage({
   if (!canManageTeam(team)) redirect(`/dashboard/team/${teamId}/practice`);
 
   const id = await createPlanDraft(teamId);
-  redirect(`/dashboard/team/${teamId}/practice/${id}/edit`);
+  const qp = new URLSearchParams();
+  if (fromScouting) qp.set("fromScouting", fromScouting);
+  if (focusSkill) qp.set("focusSkill", focusSkill);
+  const qs = qp.toString();
+  redirect(`/dashboard/team/${teamId}/practice/${id}/edit${qs ? `?${qs}` : ""}`);
 }

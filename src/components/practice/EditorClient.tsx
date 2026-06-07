@@ -7,6 +7,7 @@
 // server action.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type {
@@ -18,12 +19,15 @@ import type {
 } from "@/lib/practice/plan-data";
 import { blockMinutes, interleavePlan, planTotals } from "@/lib/practice/plan-data";
 import { blockColor } from "@/lib/practice/block-colors";
+import type { SkillGroup } from "@/lib/types/skills";
+import { skillAreaLabel } from "@/lib/drills/skill-groups";
+import { scoreToGrade, gradeColor } from "@/lib/dashboard/heat-scale";
 import {
   PracticeStatusPill,
   PIcon,
   formatDateLabel,
-  durLabel,
 } from "./atoms";
+import { BenchChip, BENCH_TYPES, type BenchKind } from "@/components/uff-web/drills/atoms";
 import { DurStepper } from "./DurStepper";
 import {
   savePlan,
@@ -41,6 +45,7 @@ export type DrillCatalogEntry = {
   default_duration_min: number | null;
   default_reps: number | null;
   description: string | null;
+  trainsFocus?: boolean; // set when the editor opened with ?focusSkill= and this drill trains it
 };
 
 export type BlockTemplateEntry = {
@@ -58,11 +63,34 @@ export type RosterEntry = {
 
 export type EditorPlan = PracticePlan & { teamId: string };
 
+// One scouting-derived recommendation for the editor's "Build from scouting"
+// drawer — a weak skill + the drills that train it. Built from loadTeamFocus
+// (the SAME source the scouting report uses), so the planner can't drift from it.
+export type ScoutingRecommendation = {
+  skillId: string;
+  skillName: string;
+  skillGroup: SkillGroup;
+  rank: number; // 1 = weakest
+  avgScore: number; // 0..1 composite (lower = weaker)
+  playersWithSignal: number;
+  drills: { drillId: string; drillName: string }[];
+};
+
 type Props = {
   plan: EditorPlan;
   drillCatalog: DrillCatalogEntry[];
   blockTemplates: BlockTemplateEntry[];
   roster: RosterEntry[];
+  // Scouting-report recommendations (weakest skills + their drills) for the
+  // "Build from scouting" drawer. Empty when the team has no benchmark signal.
+  recommendations: ScoutingRecommendation[];
+  // When arriving from a scouting "Plan <skill>" CTA (?focusSkill=): the drawer
+  // auto-opens with this skill expanded, and the drill picker floats its drills.
+  focusSkillId?: string | null;
+  focusSkillName?: string | null;
+  // Open the recommendations drawer on arrival even with no specific skill —
+  // set for any scouting "Plan…" CTA (e.g. group-level "Plan a block on …").
+  openRecommendations?: boolean;
 };
 
 // Local editable shapes — kept loose so we can build up an unsaved plan
@@ -74,6 +102,48 @@ type EditBreak = PlanBreak & { key: string };
 
 let __cid = 0;
 const cid = (prefix: string) => `${prefix}-${++__cid}-${Date.now()}`;
+
+// Single source for building local drill/block rows — reused by addDrillToBlock,
+// addBlock, and addBlockWithDrills so the row shape never drifts between paths.
+function makeDrillRow(drill: DrillCatalogEntry, order: number): EditDrill {
+  return {
+    id: cid("dr"),
+    key: cid("dr"),
+    drill_id: drill.id,
+    drill_name: drill.name,
+    drill_order: order,
+    duration_minutes: drill.default_duration_min ?? 10,
+    reps_count: drill.default_reps ?? null,
+    notes: null,
+    parallel_group: null,
+    is_water_break: false,
+    benchmark_types: drill.benchmark_types,
+    category_name: drill.category_name,
+    description: drill.description,
+    log_note: null,
+  };
+}
+function makeBlock(
+  name: string,
+  templateId: string | null,
+  order: number,
+  drills: EditDrill[] = [],
+): EditBlock {
+  const key = cid("blk");
+  return { id: key, key, name, block_order: order, target_minutes: 15, template_id: templateId, drills };
+}
+
+// Left-accent border as four longhand sides — never mix the `border` shorthand
+// with a `borderLeft` longhand on the same element (React warns about that during
+// rerender). `base` is a full border value (e.g. "1px solid var(--uff-line-soft)").
+function leftAccentBorder(base: string, accent: string, width = 3): CSSProperties {
+  return {
+    borderTop: base,
+    borderRight: base,
+    borderBottom: base,
+    borderLeft: `${width}px solid ${accent}`,
+  };
+}
 
 // Add minutes to a "HH:MM" or "HH:MM:SS" time string, wrapping past midnight.
 // Returns the same shape it was given. Used to keep End time in sync with
@@ -115,7 +185,16 @@ function toEdit(plan: EditorPlan): {
   };
 }
 
-export default function EditorClient({ plan, drillCatalog, blockTemplates, roster }: Props) {
+export default function EditorClient({
+  plan,
+  drillCatalog,
+  blockTemplates,
+  roster,
+  recommendations,
+  focusSkillId,
+  focusSkillName,
+  openRecommendations,
+}: Props) {
   const router = useRouter();
   const initial = toEdit(plan);
   const [title, setTitle] = useState(initial.title);
@@ -124,10 +203,24 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
   const [endTime, setEndTime] = useState<string | null>(initial.end_time);
   const [status, setStatus] = useState<PlanStatus>(initial.status);
   const [blocks, setBlocks] = useState<EditBlock[]>(initial.blocks);
+  // Drill ids already scheduled on this plan — the scouting drawer filters these
+  // out so it never re-recommends a drill the coach already added.
+  const usedDrillIds = useMemo(
+    () =>
+      new Set(
+        blocks.flatMap((b) => b.drills.map((d) => d.drill_id).filter((id): id is string => Boolean(id))),
+      ),
+    [blocks],
+  );
   const [breaks, setBreaks] = useState<EditBreak[]>(initial.breaks);
   const [attendees, setAttendees] = useState<Record<string, boolean | null>>(initial.attendees);
   const [expandedDrillKey, setExpandedDrillKey] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"none" | "blocks" | "attendance" | "drills">("none");
+  // Deep-link from a scouting "Plan <skill>" CTA opens the recommendations drawer
+  // on first render (lazy init — not a setState-in-effect) so the coach lands on
+  // a built suggestion, not a blank canvas.
+  const [sheet, setSheet] = useState<"none" | "blocks" | "attendance" | "drills" | "recommendations">(
+    () => ((focusSkillId || openRecommendations) && recommendations.length > 0 ? "recommendations" : "none"),
+  );
   const [drillPickerBlock, setDrillPickerBlock] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -223,21 +316,37 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
     );
   }
   function addBlock(name: string = "New block", templateId: string | null = null) {
-    setBlocks((bs) => {
-      const key = cid("blk");
-      return [
-        ...bs,
-        {
-          id: key,
-          key,
-          name,
-          block_order: bs.length,
-          target_minutes: 15,
-          template_id: templateId,
-          drills: [],
-        },
-      ];
-    });
+    setBlocks((bs) => [...bs, makeBlock(name, templateId, bs.length)]);
+  }
+  // Append a named block already populated with drills — the "Add as a block"
+  // action from the scouting recommendations drawer. Returns nothing; the new
+  // block is the last in the list (its order = previous length).
+  function addBlockWithDrills(name: string, drills: DrillCatalogEntry[]) {
+    setBlocks((bs) => [
+      ...bs,
+      makeBlock(
+        name,
+        null,
+        bs.length,
+        drills.map((d, i) => makeDrillRow(d, i)),
+      ),
+    ]);
+  }
+  // Append several populated blocks at once — the scouting drawer's "Build the
+  // focus session" action (one block per weak skill). Single setBlocks so order
+  // indices stay correct and there's one re-render.
+  function addBlocksWithDrills(specs: { name: string; drills: DrillCatalogEntry[] }[]) {
+    setBlocks((bs) => [
+      ...bs,
+      ...specs.map((s, bi) =>
+        makeBlock(
+          s.name,
+          null,
+          bs.length + bi,
+          s.drills.map((d, i) => makeDrillRow(d, i)),
+        ),
+      ),
+    ]);
   }
   function removeBlock(blockKey: string) {
     // Find the removed block's order BEFORE we drop it, so we can fix up
@@ -286,28 +395,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       bs.map((b) =>
         b.key !== blockKey
           ? b
-          : {
-              ...b,
-              drills: [
-                ...b.drills,
-                {
-                  id: cid("dr"),
-                  key: cid("dr"),
-                  drill_id: drill.id,
-                  drill_name: drill.name,
-                  drill_order: b.drills.length,
-                  duration_minutes: drill.default_duration_min ?? 10,
-                  reps_count: drill.default_reps ?? null,
-                  notes: null,
-                  parallel_group: null,
-                  is_water_break: false,
-                  benchmark_types: drill.benchmark_types,
-                  category_name: drill.category_name,
-                  description: drill.description,
-                  log_note: null,
-                },
-              ],
-            },
+          : { ...b, drills: [...b.drills, makeDrillRow(drill, b.drills.length)] },
       ),
     );
   }
@@ -479,7 +567,14 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
 
           {/* Blocks + breaks */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {blocks.length === 0 && <EmptyPlanState onAdd={() => addBlock("Warm-up")} />}
+            {blocks.length === 0 && (
+              <EmptyPlanState
+                onAdd={() => addBlock("Warm-up")}
+                onFromScouting={
+                  recommendations.length > 0 ? () => setSheet("recommendations") : undefined
+                }
+              />
+            )}
 
             {interleavePlan(projection).map((row) => {
               if (row.kind === "break") {
@@ -524,7 +619,13 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
           </div>
 
           {/* Add block actions */}
-          <AddBlockRail onAddBlank={() => addBlock()} onAddFromLibrary={() => setSheet("blocks")} />
+          <AddBlockRail
+            onAddBlank={() => addBlock()}
+            onAddFromLibrary={() => setSheet("blocks")}
+            onFromScouting={
+              recommendations.length > 0 ? () => setSheet("recommendations") : undefined
+            }
+          />
 
           {error && (
             <div
@@ -601,6 +702,7 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
       {sheet === "drills" && drillPickerBlock && (
         <DrillPickerSheet
           catalog={drillCatalog}
+          focusSkillName={focusSkillName ?? null}
           onBrowsePresets={browsePresets}
           onClose={() => {
             setSheet("none");
@@ -623,6 +725,24 @@ export default function EditorClient({ plan, drillCatalog, blockTemplates, roste
           onBulkIn={() => setAttendees(Object.fromEntries(roster.map((p) => [p.id, true])))}
           onReset={() => setAttendees({})}
           onSave={commitAttendance}
+        />
+      )}
+      {sheet === "recommendations" && (
+        <RecommendationsSheet
+          recommendations={recommendations}
+          catalog={drillCatalog}
+          teamId={plan.teamId}
+          usedDrillIds={usedDrillIds}
+          initialSkillId={focusSkillId ?? null}
+          onClose={() => setSheet("none")}
+          onAddBlock={(name, drills) => {
+            addBlockWithDrills(name, drills);
+            setSheet("none");
+          }}
+          onBuildSession={(specs) => {
+            addBlocksWithDrills(specs);
+            setSheet("none");
+          }}
         />
       )}
     </div>
@@ -828,8 +948,7 @@ function BlockEditCard({
     <div
       style={{
         background: "var(--uff-surface)",
-        border: "1px solid var(--uff-line-soft)",
-        borderLeft: `4px solid ${c.accent}`,
+        ...leftAccentBorder("1px solid var(--uff-line-soft)", c.accent, 4),
         borderRadius: 14,
         overflow: "hidden",
       }}
@@ -1031,9 +1150,8 @@ function DrillEditRow({
           gap: 10,
           padding: "10px 12px",
           background: "rgba(255,255,255,0.02)",
-          border: "1px solid var(--uff-line-soft)",
+          ...leftAccentBorder("1px solid var(--uff-line-soft)", accent, 3),
           borderRadius: 10,
-          borderLeft: `3px solid ${accent}`,
           cursor: "pointer",
         }}
       >
@@ -1137,9 +1255,8 @@ function DrillEditRow({
     <div
       style={{
         background: "rgba(255,255,255,0.025)",
-        border: `1px solid ${accent}33`,
+        ...leftAccentBorder(`1px solid ${accent}33`, accent, 3),
         borderRadius: 10,
-        borderLeft: `3px solid ${accent}`,
         overflow: "hidden",
       }}
     >
@@ -1527,9 +1644,24 @@ function InsertBreakRail({ onInsert }: { onInsert: () => void }) {
   );
 }
 
-function AddBlockRail({ onAddBlank, onAddFromLibrary }: { onAddBlank: () => void; onAddFromLibrary: () => void }) {
+function AddBlockRail({
+  onAddBlank,
+  onAddFromLibrary,
+  onFromScouting,
+}: {
+  onAddBlank: () => void;
+  onAddFromLibrary: () => void;
+  onFromScouting?: () => void;
+}) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: onFromScouting ? "1fr 1fr 1fr" : "1fr 1fr",
+        gap: 10,
+        marginTop: 4,
+      }}
+    >
       <button type="button" onClick={onAddBlank} style={addBlockBtn("var(--uff-orange)")}>
         <PIcon.plus size={14} />
         <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -1548,11 +1680,22 @@ function AddBlockRail({ onAddBlank, onAddFromLibrary }: { onAddBlank: () => void
           </span>
         </span>
       </button>
+      {onFromScouting && (
+        <button type="button" onClick={onFromScouting} style={addBlockBtn("#6EA8FF")}>
+          <PIcon.bench size={14} />
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>From scouting report</span>
+            <span style={{ fontSize: 11, color: "var(--uff-text-mute)", fontWeight: 500 }}>
+              Build a block from your team&rsquo;s weakest skills
+            </span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }
 
-function EmptyPlanState({ onAdd }: { onAdd: () => void }) {
+function EmptyPlanState({ onAdd, onFromScouting }: { onAdd: () => void; onFromScouting?: () => void }) {
   return (
     <div
       style={{
@@ -1587,9 +1730,16 @@ function EmptyPlanState({ onAdd }: { onAdd: () => void }) {
           A block is a named section of practice — warm-up, install, scrimmage. Add one to begin, then drop drills inside.
         </div>
       </div>
-      <button type="button" onClick={onAdd} className="wbtn primary">
-        <PIcon.plus size={13} /> Add first block
-      </button>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+        {onFromScouting && (
+          <button type="button" onClick={onFromScouting} className="wbtn primary">
+            <PIcon.bench size={13} /> Build from scouting report
+          </button>
+        )}
+        <button type="button" onClick={onAdd} className={onFromScouting ? "wbtn" : "wbtn primary"}>
+          <PIcon.plus size={13} /> Add first block
+        </button>
+      </div>
     </div>
   );
 }
@@ -1927,8 +2077,7 @@ function BlockLibrarySheet({
               style={{
                 padding: "12px 14px",
                 background: "var(--uff-surface-2)",
-                border: "1px solid var(--uff-line-soft)",
-                borderLeft: `3px solid ${c.accent}`,
+                ...leftAccentBorder("1px solid var(--uff-line-soft)", c.accent, 3),
                 borderRadius: 10,
                 display: "flex",
                 alignItems: "center",
@@ -1965,23 +2114,430 @@ function BlockLibrarySheet({
   );
 }
 
+// "Build from scouting report" drawer. Surfaces loadTeamFocus' weakest skills +
+// their recommended drills (same source as the scouting page), lets the coach
+// check drills and add them as a block. Customizable + non-crowding: nothing
+// touches the canvas until "Add as a block".
+function RecommendationsSheet({
+  recommendations,
+  catalog,
+  teamId,
+  usedDrillIds,
+  initialSkillId,
+  onClose,
+  onAddBlock,
+  onBuildSession,
+}: {
+  recommendations: ScoutingRecommendation[];
+  catalog: DrillCatalogEntry[];
+  teamId: string;
+  // Drill ids already on the plan — filtered out so we never re-offer them.
+  usedDrillIds: Set<string>;
+  initialSkillId: string | null;
+  onClose: () => void;
+  onAddBlock: (name: string, drills: DrillCatalogEntry[]) => void;
+  // One-click: turn every weak area into its own block at once.
+  onBuildSession: (specs: { name: string; drills: DrillCatalogEntry[] }[]) => void;
+}) {
+  const catalogById = useMemo(() => new Map(catalog.map((d) => [d.id, d])), [catalog]);
+  // Per-skill drills not already scheduled on this plan. Re-recommending the
+  // skill's *other* drill (loadTeamFocus returns up to 2) falls out for free.
+  const availableBySkill = useMemo(() => {
+    const m = new Map<string, ScoutingRecommendation["drills"]>();
+    for (const r of recommendations) {
+      m.set(r.skillId, r.drills.filter((d) => !usedDrillIds.has(d.drillId)));
+    }
+    return m;
+  }, [recommendations, usedDrillIds]);
+  // Open panel — prefer the deep-linked skill, but only if it still has an
+  // unscheduled drill; else the first skill that does; else the weakest.
+  const [openSkill, setOpenSkill] = useState<string | null>(() => {
+    const firstAvailable =
+      recommendations.find((r) => (availableBySkill.get(r.skillId)?.length ?? 0) > 0)?.skillId ?? null;
+    const initialOk = initialSkillId != null && (availableBySkill.get(initialSkillId)?.length ?? 0) > 0;
+    return (initialOk ? initialSkillId : null) ?? firstAvailable ?? recommendations[0]?.skillId ?? null;
+  });
+  // Per-skill checked drill ids — pre-checked to every in-library, unscheduled rec drill.
+  const [checked, setChecked] = useState<Record<string, Set<string>>>(() => {
+    const init: Record<string, Set<string>> = {};
+    for (const r of recommendations) {
+      init[r.skillId] = new Set(
+        r.drills
+          .filter((d) => catalogById.has(d.drillId) && !usedDrillIds.has(d.drillId))
+          .map((d) => d.drillId),
+      );
+    }
+    return init;
+  });
+  function toggle(skillId: string, drillId: string) {
+    setChecked((prev) => {
+      const next = new Set(prev[skillId] ?? []);
+      if (next.has(drillId)) next.delete(drillId);
+      else next.add(drillId);
+      return { ...prev, [skillId]: next };
+    });
+  }
+
+  // One block per weak area: each skill's currently-checked (unscheduled,
+  // in-library) drills. Inherits the dedup/used filter from `availableBySkill`
+  // + the checked init, so it can never re-add a drill already on the plan.
+  const sessionSpecs = recommendations
+    .map((r) => ({
+      name: r.skillName,
+      drills: (availableBySkill.get(r.skillId) ?? [])
+        .filter((d) => (checked[r.skillId] ?? new Set<string>()).has(d.drillId))
+        .map((d) => catalogById.get(d.drillId))
+        .filter((e): e is DrillCatalogEntry => Boolean(e)),
+    }))
+    .filter((s) => s.drills.length > 0);
+
+  return (
+    <SheetShell width={520} anchor="right" onClose={onClose}>
+      <SheetHeader
+        title="Build from scouting report"
+        subtitle="Your weakest skills and the drills that train them. Check what you want, add it as a block."
+        onClose={onClose}
+      />
+      <div style={{ padding: "14px 20px", flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+        {recommendations.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "var(--uff-text-mute)", textAlign: "center", padding: "24px 0", lineHeight: 1.5 }}>
+            No recommendations yet — run benchmark assessments so we can spot your team&rsquo;s weak skills.{" "}
+            <Link href={`/dashboard/team/${teamId}/benchmarks`} style={{ color: "var(--uff-orange)" }}>
+              Open scouting report →
+            </Link>
+          </div>
+        ) : (
+          <>
+            {sessionSpecs.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => onBuildSession(sessionSpecs)}
+                  className="wbtn primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  <PIcon.plus size={13} /> Build the focus session ({sessionSpecs.length}{" "}
+                  {sessionSpecs.length === 1 ? "area" : "areas"})
+                </button>
+                <span style={{ fontSize: 11, color: "var(--uff-text-mute)", lineHeight: 1.4, textAlign: "center" }}>
+                  Adds each weak area as its own block — edit, retime, or remove after.
+                </span>
+              </div>
+            )}
+            {recommendations.map((r) => {
+              const open = openSkill === r.skillId;
+            const grade = scoreToGrade(r.avgScore);
+            const checkedSet = checked[r.skillId] ?? new Set<string>();
+            const selectedCount = checkedSet.size;
+            // Drills not already on the plan — used drills are dropped entirely.
+            const available = availableBySkill.get(r.skillId) ?? [];
+            return (
+              <div
+                key={r.skillId}
+                style={{
+                  border: `1px solid ${open ? "var(--uff-line)" : "var(--uff-line-soft)"}`,
+                  borderRadius: 10,
+                  background: "var(--uff-surface-2)",
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenSkill(open ? null : r.skillId)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "11px 12px",
+                    background: "transparent",
+                    border: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    title={grade ? `Avg ${grade}` : undefined}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#0B0F14",
+                      background: gradeColor(grade),
+                      flexShrink: 0,
+                    }}
+                  >
+                    {grade ?? "–"}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--uff-text)" }}>
+                      {skillAreaLabel(r.skillGroup)} · {r.skillName}
+                    </span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--uff-text-mute)", marginTop: 2 }}>
+                      {r.rank === 1 ? "Weakest area" : `Weak area #${r.rank}`}
+                      {" · "}
+                      {r.playersWithSignal} player{r.playersWithSignal === 1 ? "" : "s"} measured
+                    </span>
+                  </span>
+                  <PIcon.chevDn size={13} />
+                </button>
+
+                {open && (
+                  <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    {r.drills.length === 0 ? (
+                      <div style={{ fontSize: 11.5, color: "var(--uff-text-mute)", lineHeight: 1.5 }}>
+                        No drills are tagged to {r.skillName} yet.{" "}
+                        <Link href={`/dashboard/team/${teamId}/drills`} style={{ color: "var(--uff-orange)" }}>
+                          Tag a drill →
+                        </Link>
+                      </div>
+                    ) : available.length === 0 ? (
+                      <div style={{ fontSize: 11.5, color: "var(--uff-text-mute)", lineHeight: 1.5 }}>
+                        All recommended drills for {r.skillName} are already in this plan.
+                      </div>
+                    ) : (
+                      <>
+                        {available.map((d) => {
+                          const entry = catalogById.get(d.drillId);
+                          if (!entry) {
+                            return (
+                              <div key={d.drillId} style={{ fontSize: 12, color: "var(--uff-text-mute)", padding: "6px 0" }}>
+                                {d.drillName}{" "}
+                                <span style={{ fontSize: 10.5 }}>· not in your published library</span>
+                              </div>
+                            );
+                          }
+                          const isChecked = checkedSet.has(d.drillId);
+                          return (
+                            <button
+                              key={d.drillId}
+                              type="button"
+                              onClick={() => toggle(r.skillId, d.drillId)}
+                              aria-pressed={isChecked}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "8px 10px",
+                                background: isChecked ? "rgba(110,168,255,0.08)" : "var(--uff-surface-1, rgba(255,255,255,0.02))",
+                                border: `1px solid ${isChecked ? "#6EA8FF" : "var(--uff-line-soft)"}`,
+                                borderRadius: 8,
+                                cursor: "pointer",
+                                textAlign: "left",
+                              }}
+                            >
+                              <span
+                                aria-hidden
+                                style={{
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: 4,
+                                  flexShrink: 0,
+                                  display: "grid",
+                                  placeItems: "center",
+                                  background: isChecked ? "#6EA8FF" : "transparent",
+                                  border: `1.5px solid ${isChecked ? "#6EA8FF" : "var(--uff-line)"}`,
+                                  color: "#0B0F14",
+                                }}
+                              >
+                                {isChecked && <PIcon.check size={11} />}
+                              </span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--uff-text)" }}>
+                                {entry.name}
+                              </span>
+                              <span style={{ fontSize: 11, color: "var(--uff-text-mute)", fontFamily: "var(--font-mono)" }}>
+                                {entry.default_duration_min ?? 10}m
+                              </span>
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          disabled={selectedCount === 0}
+                          onClick={() => {
+                            const drills = available
+                              .filter((d) => checkedSet.has(d.drillId))
+                              .map((d) => catalogById.get(d.drillId))
+                              .filter((e): e is DrillCatalogEntry => Boolean(e));
+                            if (drills.length === 0) return;
+                            onAddBlock(r.skillName, drills);
+                          }}
+                          className="wbtn primary"
+                          style={{ opacity: selectedCount === 0 ? 0.5 : 1, marginTop: 2 }}
+                        >
+                          <PIcon.plus size={13} /> Add as a block
+                          {selectedCount > 0 ? ` (${selectedCount})` : ""}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+            })}
+          </>
+        )}
+      </div>
+    </SheetShell>
+  );
+}
+
+// Sort options for the drill picker. "focus" is only offered (and defaulted)
+// when the editor opened with a planning-focus skill.
+type DrillSortKey = "focus" | "name" | "dur-asc" | "dur-desc";
+
+// Compact filter pill used in the drill picker toolbar. Selected = orange
+// (interactive accent); unselected = quiet outline. One source of truth for
+// "togglable filter chip" inside this sheet.
+function PickerChip({
+  on,
+  onClick,
+  label,
+  count,
+}: {
+  on: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        height: 30,
+        padding: "0 11px",
+        borderRadius: 999,
+        border: `1px solid ${on ? "var(--uff-orange)" : "var(--uff-line)"}`,
+        background: on ? "color-mix(in srgb, var(--uff-orange) 16%, transparent)" : "transparent",
+        color: on ? "var(--uff-orange)" : "var(--uff-text-dim)",
+        fontFamily: "inherit",
+        fontSize: 12,
+        fontWeight: on ? 700 : 500,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        transition: "background 120ms ease, color 120ms ease, border-color 120ms ease",
+      }}
+    >
+      {label}
+      {count != null && (
+        <span
+          style={{
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: on ? "var(--uff-orange)" : "var(--uff-text-mute)",
+          }}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function DrillPickerSheet({
   catalog,
+  focusSkillName,
   onBrowsePresets,
   onClose,
   onPick,
 }: {
   catalog: DrillCatalogEntry[];
+  focusSkillName?: string | null;
   onBrowsePresets?: () => void;
   onClose: () => void;
   onPick: (d: DrillCatalogEntry) => void;
 }) {
+  const hasFocus = Boolean(focusSkillName);
   const [q, setQ] = useState("");
-  const filtered = catalog.filter(
-    (d) =>
-      d.name.toLowerCase().includes(q.toLowerCase()) ||
-      (d.category_name ?? "").toLowerCase().includes(q.toLowerCase()),
-  );
+  const [activeCats, setActiveCats] = useState<Set<string>>(new Set());
+  const [activeBench, setActiveBench] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<DrillSortKey>(hasFocus ? "focus" : "name");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // Distinct categories present in the catalog, name-sorted, with counts.
+  // Derived from the data because category_name is a free-form per-team label.
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const d of catalog) {
+      if (d.category_name) counts.set(d.category_name, (counts.get(d.category_name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [catalog]);
+
+  // Benchmark types actually present in the catalog, in canonical BENCH_TYPES order.
+  const benchKinds = useMemo(() => {
+    const present = new Set<string>();
+    for (const d of catalog) for (const t of d.benchmark_types) present.add(t);
+    return BENCH_TYPES.map((b) => b.id).filter((id) => present.has(id));
+  }, [catalog]);
+
+  const focusCount = hasFocus ? catalog.filter((d) => d.trainsFocus).length : 0;
+
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const xs = catalog.filter((d) => {
+      if (
+        needle &&
+        !d.name.toLowerCase().includes(needle) &&
+        !(d.category_name ?? "").toLowerCase().includes(needle)
+      )
+        return false;
+      if (activeCats.size > 0 && !(d.category_name && activeCats.has(d.category_name))) return false;
+      if (activeBench.size > 0 && !d.benchmark_types.some((t) => activeBench.has(t))) return false;
+      return true;
+    });
+    const byName = (a: DrillCatalogEntry, b: DrillCatalogEntry) => a.name.localeCompare(b.name);
+    // Duration sort with nulls always last, name as the tiebreaker.
+    const byDur = (a: DrillCatalogEntry, b: DrillCatalogEntry, dir: number) => {
+      const av = a.default_duration_min;
+      const bv = b.default_duration_min;
+      if (av == null && bv == null) return byName(a, b);
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av - bv) * dir || byName(a, b);
+    };
+    return xs.slice().sort((a, b) => {
+      switch (sort) {
+        case "focus":
+          return Number(b.trainsFocus ?? false) - Number(a.trainsFocus ?? false) || byName(a, b);
+        case "dur-asc":
+          return byDur(a, b, 1);
+        case "dur-desc":
+          return byDur(a, b, -1);
+        case "name":
+        default:
+          return byName(a, b);
+      }
+    });
+  }, [catalog, q, activeCats, activeBench, sort]);
+
+  const anyFilter = q.trim() !== "" || activeCats.size > 0 || activeBench.size > 0;
+  function clearFilters() {
+    setQ("");
+    setActiveCats(new Set());
+    setActiveBench(new Set());
+  }
+  function toggleIn(set: Set<string>, key: string): Set<string> {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  }
+
   return (
     <SheetShell width={560} anchor="right" onClose={onClose}>
       <SheetHeader
@@ -1989,114 +2545,364 @@ function DrillPickerSheet({
         subtitle="Pick from your team library, or browse curated presets."
         onClose={onClose}
       />
-      <div style={{ padding: "14px 20px", flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div
-          style={{
-            height: 38,
-            background: "var(--uff-surface-2)",
-            border: "1px solid var(--uff-line-soft)",
-            borderRadius: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "0 12px",
-          }}
-        >
-          <PIcon.search size={14} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+
+      {/* Toolbar — sticky controls: focus banner, search + sort + presets, filter chips */}
+      <div
+        style={{
+          padding: "14px 20px 12px",
+          borderBottom: "1px solid var(--uff-line-soft)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          flexShrink: 0,
+        }}
+      >
+        {hasFocus && (
+          <div
             style={{
-              flex: 1,
-              background: "transparent",
-              border: 0,
-              outline: "none",
-              color: "var(--uff-text)",
-              fontFamily: "inherit",
-              fontSize: 13,
-            }}
-            placeholder="Search drills…"
-          />
-        </div>
-        {onBrowsePresets && (
-          <button
-            type="button"
-            onClick={onBrowsePresets}
-            style={{
-              padding: "11px 14px",
-              border: "1px dashed var(--uff-line)",
+              padding: "10px 12px",
               borderRadius: 10,
-              background: "transparent",
-              color: "var(--uff-orange)",
-              fontFamily: "inherit",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
+              border: "1px solid var(--uff-orange)",
+              background: "color-mix(in srgb, var(--uff-orange) 12%, transparent)",
+              fontSize: 12.5,
+              lineHeight: 1.4,
+              color: "var(--uff-text)",
             }}
           >
-            <PIcon.template size={14} /> Browse preset library
-          </button>
-        )}
-        {filtered.length === 0 && (
-          <div style={{ fontSize: 12, color: "var(--uff-text-mute)", textAlign: "center", padding: "20px 0" }}>
-            No drills match.
+            Planning focus: <strong style={{ fontWeight: 700 }}>{focusSkillName}</strong>
+            {focusCount > 0 ? (
+              <>
+                {" "}
+                · {focusCount} drill{focusCount === 1 ? "" : "s"} train{focusCount === 1 ? "s" : ""} it,
+                shown first.
+              </>
+            ) : (
+              <> · no library drill is tagged to it yet — tag one to target this gap.</>
+            )}
           </div>
         )}
-        {filtered.map((d) => (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => onPick(d)}
+
+        {/* Search + sort + presets in one row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
             style={{
-              padding: "12px 14px",
+              flex: 1,
+              minWidth: 0,
+              height: 38,
               background: "var(--uff-surface-2)",
               border: "1px solid var(--uff-line-soft)",
               borderRadius: 10,
               display: "flex",
               alignItems: "center",
-              gap: 12,
-              cursor: "pointer",
-              textAlign: "left",
+              gap: 10,
+              padding: "0 12px",
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--uff-text)" }}>{d.name}</div>
-              <div
+            <PIcon.search size={14} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: "transparent",
+                border: 0,
+                outline: "none",
+                color: "var(--uff-text)",
+                fontFamily: "inherit",
+                fontSize: 13,
+              }}
+              placeholder="Search drills…"
+            />
+          </div>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as DrillSortKey)}
+              aria-label="Sort drills"
+              style={{
+                height: 38,
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                background: "var(--uff-surface-2)",
+                border: "1px solid var(--uff-line-soft)",
+                borderRadius: 10,
+                color: "var(--uff-text-dim)",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                fontWeight: 600,
+                padding: "0 30px 0 12px",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              {hasFocus && <option value="focus">Focus first</option>}
+              <option value="name">Name A–Z</option>
+              <option value="dur-asc">Shortest first</option>
+              <option value="dur-desc">Longest first</option>
+            </select>
+            <span
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
+                color: "var(--uff-text-mute)",
+                display: "inline-flex",
+              }}
+            >
+              <PIcon.chevDn size={13} />
+            </span>
+          </div>
+          {onBrowsePresets && (
+            <button
+              type="button"
+              onClick={onBrowsePresets}
+              title="Browse curated preset library"
+              style={{
+                height: 38,
+                flexShrink: 0,
+                padding: "0 12px",
+                border: "1px dashed var(--uff-line)",
+                borderRadius: 10,
+                background: "transparent",
+                color: "var(--uff-orange)",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <PIcon.template size={14} /> Presets
+            </button>
+          )}
+        </div>
+
+        {/* Filter chips: category group + benchmark-type group */}
+        {(categories.length > 0 || benchKinds.length > 0) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+            {categories.map((c) => (
+              <PickerChip
+                key={`cat-${c.name}`}
+                on={activeCats.has(c.name)}
+                onClick={() => setActiveCats((s) => toggleIn(s, c.name))}
+                label={c.name}
+                count={c.count}
+              />
+            ))}
+            {categories.length > 0 && benchKinds.length > 0 && (
+              <span
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  marginTop: 4,
-                  fontSize: 11,
-                  color: "var(--uff-text-dim)",
+                  flexShrink: 0,
+                  width: 1,
+                  height: 18,
+                  background: "var(--uff-line)",
+                  margin: "0 2px",
+                }}
+              />
+            )}
+            {benchKinds.map((id) => {
+              const meta = BENCH_TYPES.find((b) => b.id === id);
+              return (
+                <PickerChip
+                  key={`bench-${id}`}
+                  on={activeBench.has(id)}
+                  onClick={() => setActiveBench((s) => toggleIn(s, id))}
+                  label={meta?.label ?? id}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Result list */}
+      <div style={{ padding: "10px 20px 16px", flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "2px 2px 4px",
+            fontSize: 11,
+            color: "var(--uff-text-mute)",
+          }}
+        >
+          <span>
+            {rows.length} drill{rows.length === 1 ? "" : "s"}
+            {anyFilter ? " match" : ""}
+          </span>
+          {anyFilter && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              style={{
+                background: "transparent",
+                border: 0,
+                color: "var(--uff-orange)",
+                fontFamily: "inherit",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {rows.length === 0 && (
+          <div
+            style={{
+              fontSize: 12.5,
+              color: "var(--uff-text-mute)",
+              textAlign: "center",
+              padding: "28px 16px",
+              lineHeight: 1.5,
+            }}
+          >
+            No drills match your filters.
+            {anyFilter && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  style={{
+                    background: "transparent",
+                    border: 0,
+                    color: "var(--uff-orange)",
+                    fontFamily: "inherit",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {rows.map((d) => {
+          const hovered = hoveredId === d.id;
+          return (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => onPick(d)}
+              onMouseEnter={() => setHoveredId(d.id)}
+              onMouseLeave={() => setHoveredId((cur) => (cur === d.id ? null : cur))}
+              aria-label={`Add ${d.name}`}
+              style={{
+                padding: "11px 12px 11px 14px",
+                background: hovered ? "var(--uff-surface-raised)" : "var(--uff-surface-2)",
+                border: `1px solid ${hovered ? "var(--uff-line)" : "var(--uff-line-soft)"}`,
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "background 120ms ease, border-color 120ms ease",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      color: "var(--uff-text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.name}
+                  </span>
+                  {d.trainsFocus && hasFocus && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.02em",
+                        color: "var(--uff-orange)",
+                        border: "1px solid var(--uff-orange)",
+                        borderRadius: 5,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      trains {focusSkillName}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 5,
+                    fontSize: 11,
+                  }}
+                >
+                  {d.category_name && <span style={{ color: "var(--uff-text-dim)" }}>{d.category_name}</span>}
+                  {d.default_duration_min != null && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        color: "var(--uff-text-mute)",
+                      }}
+                    >
+                      <PIcon.clock size={11} />
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {d.default_duration_min}m
+                      </span>
+                    </span>
+                  )}
+                  {d.benchmark_types.map((t) => (
+                    <BenchChip key={t} id={t as BenchKind} mini />
+                  ))}
+                </div>
+              </div>
+              <span
+                aria-hidden
+                style={{
+                  flexShrink: 0,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 999,
+                  display: "grid",
+                  placeItems: "center",
+                  border: `1px solid ${hovered ? "var(--uff-orange)" : "var(--uff-line)"}`,
+                  background: hovered ? "color-mix(in srgb, var(--uff-orange) 16%, transparent)" : "transparent",
+                  color: "var(--uff-orange)",
+                  transition: "background 120ms ease, border-color 120ms ease",
                 }}
               >
-                {d.category_name && <span>{d.category_name}</span>}
-                {d.default_duration_min != null && (
-                  <span
-                    className="mono"
-                    style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)", color: "var(--uff-orange)", fontWeight: 700 }}
-                  >
-                    {d.default_duration_min}m
-                  </span>
-                )}
-                {d.benchmark_types.length > 0 && (
-                  <span style={{ color: "var(--uff-orange)", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    <PIcon.bench size={9} />
-                    {d.benchmark_types.join(" · ")}
-                  </span>
-                )}
-              </div>
-            </div>
-            <span style={{ color: "var(--uff-text-mute)" }}>
-              <PIcon.chevR size={13} />
-            </span>
-          </button>
-        ))}
+                <PIcon.plus size={14} />
+              </span>
+            </button>
+          );
+        })}
       </div>
     </SheetShell>
   );

@@ -16,58 +16,19 @@ import {
 } from "@/components/uff/team-colors";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
 import { memberCanManage } from "@/lib/team/staff-roles";
-import PlayerHistory, {
-  type PlayerHistoryDrill,
-  type PlayerHistoryLocked,
-} from "./PlayerHistory";
+import PlayerHistory from "./PlayerHistory";
+import {
+  buildPlayerHistory,
+  type BenchHistoryRow,
+} from "@/lib/benchmarks/player-history";
+import ObservationsFeed, {
+  type ObservationRowData,
+} from "@/components/dashboard/ObservationsFeed";
 import InjuryModal from "@/components/roster/InjuryModal";
 import PlayerSkillProfileCard, {
   type PlayerSkill,
 } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
 import type { SkillGroup } from "@/lib/types/skills";
-
-type DrillJoin = {
-  id?: string;
-  drill_name: string;
-  benchmark_type: string | null;
-  benchmark_types: string[] | null;
-};
-
-type BenchmarkRow = {
-  id: string;
-  assessment_date: string;
-  created_at: string;
-  time_seconds: number | null;
-  rating: number | null;
-  made_count: number | null;
-  attempts_count: number | null;
-  benchmark_type: string | null;
-  drill_id: string;
-  team_drills: DrillJoin | DrillJoin[] | null;
-};
-
-type PracticeJoin = {
-  id: string;
-  title: string | null;
-  practice_date: string | null;
-};
-
-type ObservationRow = {
-  id: string;
-  note_text: string;
-  created_at: string;
-  practice_plan_id: string | null;
-  practice_plans: PracticeJoin | PracticeJoin[] | null;
-};
-
-type Observation = {
-  id: string;
-  noteText: string;
-  practiceId: string | null;
-  practiceTitle: string | null;
-  practiceDate: string | null;
-  createdAt: string;
-};
 
 function initialsFor(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -79,85 +40,6 @@ function initialsFor(name: string) {
 function shortMonth(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
-}
-
-// Resolve a single benchmark row to a numeric sample for charting, using
-// the benchmark_type to decide which column to read.
-function sampleValue(b: BenchmarkRow, type: string | null): number | null {
-  switch (type) {
-    case "timed":
-      return b.time_seconds != null ? Number(b.time_seconds) : null;
-    case "rated":
-      return b.rating != null ? Number(b.rating) : null;
-    case "pct":
-      if (b.attempts_count && b.made_count != null) {
-        return (Number(b.made_count) / Number(b.attempts_count)) * 100;
-      }
-      return null;
-    case "flags":
-    case "drops":
-    case "reps":
-      return b.made_count != null ? Number(b.made_count) : null;
-    default:
-      if (b.time_seconds != null) return Number(b.time_seconds);
-      if (b.rating != null) return Number(b.rating);
-      return null;
-  }
-}
-
-function unitFor(type: string | null) {
-  switch (type) {
-    case "timed":
-      return "s";
-    case "rated":
-      return "/5";
-    case "pct":
-      return "%";
-    case "flags":
-      return " pulls";
-    case "drops":
-      return " drops";
-    case "reps":
-      return " reps";
-    default:
-      return "";
-  }
-}
-
-function betterFor(type: string | null): "higher" | "lower" {
-  return type === "timed" || type === "drops" ? "lower" : "higher";
-}
-
-function accentFor(type: string | null) {
-  switch (type) {
-    case "timed":
-      return "var(--uff-orange)";
-    case "rated":
-      return "#6EA8FF";
-    case "pct":
-      return "#FFB347";
-    case "flags":
-      return "#B89BFF";
-    case "drops":
-      return "var(--uff-red)";
-    case "reps":
-      return "var(--uff-lime)";
-    default:
-      return "var(--uff-text)";
-  }
-}
-
-function formatValue(v: number, type: string | null): string {
-  switch (type) {
-    case "timed":
-      return v.toFixed(2);
-    case "rated":
-      return v.toFixed(1);
-    case "pct":
-      return v.toFixed(0);
-    default:
-      return Number.isInteger(v) ? String(v) : v.toFixed(1);
-  }
 }
 
 export default async function PlayerDetailPage({
@@ -270,99 +152,11 @@ export default async function PlayerDetailPage({
   const colorIndex = (player.color_index as number) ?? 0;
   const playerColor = playerColorForIndex(colorIndex);
 
-  // Group benchmark rows by (drill_name, benchmark_type), and track which
-  // (drill, type) combos the drill *supports* (via team_drills.benchmark_types)
-  // but the player hasn't been measured on yet — those render as locked
-  // insight cards. Build 8.
-  const benches = (benchesRaw ?? []) as BenchmarkRow[];
-  const groups = new Map<string, PlayerHistoryDrill>();
-  // drill_id → { drillName, supportedTypes (set) }
-  const drillSupport = new Map<string, { drillName: string; supportedTypes: Set<string> }>();
-
-  for (const b of benches) {
-    const drillJoin = b.team_drills;
-    const drillRow = Array.isArray(drillJoin) ? drillJoin[0] : drillJoin;
-    const drillName = drillRow?.drill_name ?? "Drill";
-    const type = b.benchmark_type ?? drillRow?.benchmark_type ?? null;
-
-    // Record this drill's full supported-type list once (deduped) so we
-    // can compute the "locked" gap later.
-    if (b.drill_id && !drillSupport.has(b.drill_id)) {
-      const supported = new Set<string>();
-      const arr = drillRow?.benchmark_types ?? null;
-      if (arr) for (const t of arr) if (t) supported.add(t);
-      // Fall back to legacy single-string column if the array is empty.
-      if (supported.size === 0 && drillRow?.benchmark_type) {
-        supported.add(drillRow.benchmark_type);
-      }
-      drillSupport.set(b.drill_id, { drillName, supportedTypes: supported });
-    }
-
-    const value = sampleValue(b, type);
-    if (value == null) continue;
-    const key = `${b.drill_id}::${type ?? ""}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        drillId: b.drill_id,
-        drillName,
-        benchmarkType: type,
-        unit: unitFor(type),
-        better: betterFor(type),
-        accent: accentFor(type),
-        samples: [],
-      });
-    }
-    groups.get(key)!.samples.push({
-      date: b.assessment_date,
-      value,
-      label: formatValue(value, type),
-    });
-  }
-
-  const drills: PlayerHistoryDrill[] = Array.from(groups.values()).sort(
-    (a, b) => {
-      const aLast = a.samples[a.samples.length - 1]?.date ?? "";
-      const bLast = b.samples[b.samples.length - 1]?.date ?? "";
-      return bLast.localeCompare(aLast);
-    }
+  // Per-drill benchmark history + locked-insight tail + PB count, via the
+  // shared transform (one source of truth with the scouting sheet). Build 8.7.
+  const { drills, locked, benchmarkCount, pbCount } = buildPlayerHistory(
+    (benchesRaw ?? []) as BenchHistoryRow[]
   );
-
-  // Locked (drill, type) combos: drill supports the type but the player
-  // has zero samples for it. Sorted by drill name for stable ordering.
-  const measuredKeys = new Set(drills.map((d) => `${d.drillId}::${d.benchmarkType ?? ""}`));
-  const locked: PlayerHistoryLocked[] = [];
-  for (const [drillId, info] of drillSupport.entries()) {
-    for (const t of info.supportedTypes) {
-      if (measuredKeys.has(`${drillId}::${t}`)) continue;
-      locked.push({
-        key: `locked::${drillId}::${t}`,
-        drillId,
-        drillName: info.drillName,
-        benchmarkType: t,
-        accent: accentFor(t),
-      });
-    }
-  }
-  locked.sort((a, b) => a.drillName.localeCompare(b.drillName));
-
-  // Observations feed (Build 6.5b). Each player_notes row hydrates with
-  // its practice join so the card can deep-link to the practice it was
-  // captured on. Already ordered DESC by created_at from the query.
-  const observations: Observation[] = (
-    (observationsRaw ?? []) as ObservationRow[]
-  ).map((o) => {
-    const join = o.practice_plans;
-    const practice = Array.isArray(join) ? join[0] : join;
-    return {
-      id: o.id,
-      noteText: o.note_text,
-      practiceId: practice?.id ?? o.practice_plan_id ?? null,
-      practiceTitle: practice?.title ?? null,
-      practiceDate: practice?.practice_date ?? null,
-      createdAt: o.created_at,
-    };
-  });
 
   // Skill profile rows (Build 13). composite_score is 0..1; drop nulls
   // (the view emits a row only when at least one tagged drill scored).
@@ -382,20 +176,6 @@ export default async function PlayerDetailPage({
       composite: Number(r.composite_score),
       sampleSize: r.drill_sample_size ?? 0,
     }));
-
-  const benchmarkCount = benches.length;
-  // Personal bests across all drills (samples that beat all prior in that drill).
-  let pbCount = 0;
-  for (const g of drills) {
-    let best = g.better === "lower" ? Infinity : -Infinity;
-    for (const s of g.samples) {
-      const beats = g.better === "lower" ? s.value < best : s.value > best;
-      if (beats) {
-        if (best !== Infinity && best !== -Infinity) pbCount += 1;
-        best = s.value;
-      }
-    }
-  }
 
   const teamColor = teamColorHex(team.team_color);
   const userInitials =
@@ -692,7 +472,7 @@ export default async function PlayerDetailPage({
               </div>
             )}
 
-            <ObservationsCard observations={observations} />
+            <ObservationsFeed rows={(observationsRaw ?? []) as ObservationRowData[]} />
           </div>
 
           {/* History column */}
@@ -841,154 +621,3 @@ function Badge({
   );
 }
 
-// Chronological player_notes feed (Build 6.5b). Each row links back to
-// the practice the note was captured on. Empty state explains where
-// observations come from so a brand-new player isn't a dead card.
-function ObservationsCard({ observations }: { observations: Observation[] }) {
-  const empty = observations.length === 0;
-  return (
-    <div className="w-card" style={{ padding: 14 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 10,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: "var(--uff-text-mute)",
-          }}
-        >
-          Observations
-        </div>
-        {!empty && (
-          <span
-            style={{
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: 11,
-              color: "var(--uff-text-mute)",
-            }}
-          >
-            {observations.length}
-          </span>
-        )}
-      </div>
-
-      {empty ? (
-        <p
-          style={{
-            margin: 0,
-            fontSize: 12.5,
-            color: "var(--uff-text-mute)",
-            lineHeight: 1.5,
-          }}
-        >
-          No observations yet. Captains can write per-player notes from
-          the post-practice log — they&apos;ll show up here.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {observations.map((o) => (
-            <ObservationRow key={o.id} obs={o} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ObservationRow({ obs }: { obs: Observation }) {
-  const dateLabel = obs.practiceDate
-    ? new Date(obs.practiceDate).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "2-digit",
-      })
-    : new Date(obs.createdAt).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "2-digit",
-      });
-  const title = obs.practiceTitle || "Practice";
-  const href = obs.practiceId ? `/practice/${obs.practiceId}` : null;
-
-  return (
-    <div
-      style={{
-        padding: "8px 10px",
-        background: "var(--uff-bg-1)",
-        border: "1px solid var(--uff-line-soft, rgba(255,255,255,0.04))",
-        borderRadius: 8,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 4,
-        }}
-      >
-        {href ? (
-          <Link
-            href={href}
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--uff-orange)",
-              textDecoration: "none",
-              letterSpacing: "0.02em",
-              minWidth: 0,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {title}
-          </Link>
-        ) : (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--uff-text)",
-              opacity: 0.7,
-              letterSpacing: "0.02em",
-            }}
-          >
-            {title}
-          </span>
-        )}
-        <span
-          style={{
-            fontFamily: "var(--font-mono, monospace)",
-            fontSize: 10.5,
-            color: "var(--uff-text-mute)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {dateLabel}
-        </span>
-      </div>
-      <p
-        style={{
-          margin: 0,
-          fontSize: 13,
-          color: "var(--uff-text)",
-          opacity: 0.88,
-          lineHeight: 1.5,
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {obs.noteText}
-      </p>
-    </div>
-  );
-}

@@ -11,26 +11,14 @@ import { useMemo, useState } from "react";
 import BenchmarkProgressChart from "@/components/app/charts/BenchmarkProgressChart";
 import LockedBenchmarkChart from "@/components/app/charts/LockedBenchmarkChart";
 
-type Sample = { date: string; value: number; label: string };
-
-export type PlayerHistoryDrill = {
-  key: string;
-  drillId: string;
-  drillName: string;
-  benchmarkType: string | null;
-  unit: string;
-  better: "higher" | "lower";
-  accent: string;
-  samples: Sample[]; // chronological (oldest → newest)
-};
-
-export type PlayerHistoryLocked = {
-  key: string;
-  drillId: string;
-  drillName: string;
-  benchmarkType: string;
-  accent: string;
-};
+// Canonical history shapes live in the shared transform; imported for local
+// use and re-exported so existing call sites
+// (`import { PlayerHistoryDrill } from "./PlayerHistory"`) keep working.
+import type {
+  PlayerHistoryDrill,
+  PlayerHistoryLocked,
+} from "@/lib/benchmarks/player-history";
+export type { PlayerHistoryDrill, PlayerHistoryLocked };
 
 type Range = "30d" | "90d" | "season";
 const RANGE_DAYS: Record<Range, number | null> = {

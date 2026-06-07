@@ -14,8 +14,12 @@ export type PulseBenchmarkType =
   | "flags"
   | "drops";
 
-// Unit suffix for a benchmark type ("4.52s", "3.2/5", "78%").
-export function pulseUnit(t: PulseBenchmarkType): string {
+// Unit suffix for a benchmark type ("4.52s", "3.2/5", "78%"). `verbose`
+// spells out the count types for detail surfaces (history cards) where a
+// bare number reads ambiguously; the compact default (dashboard pulses,
+// scouting deltas) keeps them blank. timed/rated/pct are identical in both
+// modes, so this stays the single source of truth for benchmark units.
+export function pulseUnit(t: PulseBenchmarkType, verbose = false): string {
   switch (t) {
     case "timed":
       return "s";
@@ -23,8 +27,12 @@ export function pulseUnit(t: PulseBenchmarkType): string {
       return "/5";
     case "pct":
       return "%";
-    default:
-      return "";
+    case "reps":
+      return verbose ? " reps" : "";
+    case "flags":
+      return verbose ? " pulls" : "";
+    case "drops":
+      return verbose ? " drops" : "";
   }
 }
 

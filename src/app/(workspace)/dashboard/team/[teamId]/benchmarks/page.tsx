@@ -15,13 +15,14 @@ import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { teamColorHex } from "@/components/uff/team-colors";
 import { memberCanManage } from "@/lib/team/staff-roles";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
-import { loadTeamScoutingData } from "@/lib/dashboard/team-scouting-data";
+import { loadTeamScoutingData, planFromScoutingHref } from "@/lib/dashboard/team-scouting-data";
 import {
   ScoutingHeadlineCard,
   PositionRooms,
   MovementStrips,
-  PlayerReportGrid,
+  DrillLeaderboards,
 } from "@/components/dashboard/scouting/ScoutingSections";
+import ScoutingPlayers from "@/components/dashboard/scouting/ScoutingPlayers";
 
 export const dynamic = "force-dynamic";
 
@@ -121,10 +122,22 @@ export default async function ScoutingReportPage({
             <ColdStart teamId={teamId} canManage={canManage} />
           ) : (
             <>
-              <ScoutingHeadlineCard headline={data.headline} teamId={teamId} />
-              <PositionRooms rooms={data.rooms} />
+              <ScoutingHeadlineCard
+                decisions={data.decisions}
+                headline={data.headline}
+                teamId={teamId}
+                canManage={canManage}
+              />
+              <PositionRooms rooms={data.rooms} teamId={teamId} canManage={canManage} />
               <MovementStrips movers={data.movers} />
-              <PlayerReportGrid cards={data.playerCards} />
+              {data.drillLeaderboards.length > 0 && (
+                <DrillLeaderboards boards={data.drillLeaderboards} />
+              )}
+              <ScoutingPlayers
+                cards={data.playerCards}
+                teamId={teamId}
+                canManage={canManage}
+              />
               <DoThisNext
                 teamId={teamId}
                 drillName={data.headline.ctaDrillName}
@@ -191,9 +204,7 @@ function DoThisNext({
   focusSkillId: string | null;
   canManage: boolean;
 }) {
-  const href = focusSkillId
-    ? `/dashboard/team/${teamId}/practice/new?focusSkill=${focusSkillId}`
-    : `/dashboard/team/${teamId}/practice/new`;
+  const href = planFromScoutingHref(teamId, focusSkillId);
   const gap = skillLabel ?? roomLabel;
   return (
     <div className="w-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>

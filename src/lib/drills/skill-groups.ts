@@ -71,6 +71,23 @@ export function skillGroupMeta(id: SkillGroup): SkillGroupMeta {
   return BY_ID[id];
 }
 
+// Unambiguous skill-AREA labels for the scouting surface. The short `label`s
+// ("Offense"/"Defense"/"QB") collide with the position-room names ("Receivers"/
+// "Defense"/"QB room") — so a captain reading "Receivers · Weakest: Defense"
+// can't tell a skill area from a position group. These spell the skill area out
+// so the two never read the same. Single source; used wherever a skill group is
+// shown next to room/position context.
+const SKILL_AREA_LABEL: Record<SkillGroup, string> = {
+  athletic: "Athleticism",
+  offense: "Offensive skills",
+  qb: "QB skills",
+  defense: "Defensive skills",
+  iq: "Football IQ",
+};
+export function skillAreaLabel(id: SkillGroup): string {
+  return SKILL_AREA_LABEL[id];
+}
+
 // Guided-tagging map: which skill groups a drill can tag, given its practice
 // phase. Keyed by the phase category slug (CatSlug, see drills/atoms). Athletic
 // is offered in every phase (position-agnostic); IQ surfaces wherever

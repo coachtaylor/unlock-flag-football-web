@@ -95,3 +95,59 @@ export async function getAccessibleTeamIds(
 ): Promise<string[]> {
   return (await getAccessibleTeams(supabase, userId)).map((t) => t.id);
 }
+
+// Scoped variant: resolve ONE team's access for this user (direct membership
+// → league-admin fallback), or null if they can't reach it. Use in server
+// actions that already know the teamId — cheaper than getAccessibleTeams and
+// pairs with canManageTeam() for the write gate. Mirrors the read-side gate
+// in the team dashboard / scouting pages.
+export async function getTeamAccess(
+  supabase: SupabaseClient,
+  userId: string,
+  teamId: string,
+): Promise<AccessibleTeam | null> {
+  const { data: membership } = await supabase
+    .from("team_members")
+    .select("role, captain_view_only")
+    .eq("user_id", userId)
+    .eq("team_id", teamId)
+    .maybeSingle();
+
+  const { data: team } = await supabase
+    .from("teams")
+    .select("league_id")
+    .eq("id", teamId)
+    .maybeSingle();
+  const leagueId = (team?.league_id as string | null) ?? null;
+
+  if (membership) {
+    return {
+      id: teamId,
+      via: "team_member",
+      role: (membership.role as string | null) ?? null,
+      captainViewOnly: (membership.captain_view_only as boolean | null) ?? false,
+      leagueId,
+    };
+  }
+
+  if (leagueId) {
+    const { data: leagueMember } = await supabase
+      .from("league_members")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("league_id", leagueId)
+      .eq("role", "league_admin")
+      .maybeSingle();
+    if (leagueMember) {
+      return {
+        id: teamId,
+        via: "league_admin",
+        role: null,
+        captainViewOnly: false,
+        leagueId,
+      };
+    }
+  }
+
+  return null;
+}
