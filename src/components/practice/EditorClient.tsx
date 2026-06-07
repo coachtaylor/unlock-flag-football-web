@@ -27,7 +27,14 @@ import {
   PIcon,
   formatDateLabel,
 } from "./atoms";
-import { BenchChip, BENCH_TYPES, type BenchKind } from "@/components/uff-web/drills/atoms";
+import {
+  BenchIconRow,
+  BENCH_TYPES,
+  WEB_CAT_DEFS,
+  CatPillWeb,
+  categoryToSlug,
+  type BenchKind,
+} from "@/components/uff-web/drills/atoms";
 import { DurStepper } from "./DurStepper";
 import {
   savePlan,
@@ -130,8 +137,19 @@ function makeBlock(
   drills: EditDrill[] = [],
 ): EditBlock {
   const key = cid("blk");
-  return { id: key, key, name, block_order: order, target_minutes: 15, template_id: templateId, drills };
+  // Seed the block's target from its drills so a populated block doesn't show a
+  // misleading flat 15m; empty blocks keep the 15m default for the coach to set.
+  // Fresh rows never carry a parallel_group, so a plain sum matches blockMinutes.
+  const target = drills.length ? drills.reduce((a, d) => a + d.duration_minutes, 0) : 15;
+  return { id: key, key, name, block_order: order, target_minutes: target, template_id: templateId, drills };
 }
+
+// Name a scouting focus block consistently across the per-skill and batch paths.
+const focusBlockName = (skillName: string) => `${skillName} focus`;
+// Estimated minutes a set of catalog drills adds — mirrors makeDrillRow's 10m
+// fallback so the drawer's estimate matches what actually lands on the plan.
+const drillsMinutes = (drills: DrillCatalogEntry[]) =>
+  drills.reduce((a, d) => a + (d.default_duration_min ?? 10), 0);
 
 // Left-accent border as four longhand sides — never mix the `border` shorthand
 // with a `borderLeft` longhand on the same element (React warns about that during
@@ -2183,13 +2201,14 @@ function RecommendationsSheet({
   // + the checked init, so it can never re-add a drill already on the plan.
   const sessionSpecs = recommendations
     .map((r) => ({
-      name: r.skillName,
+      name: focusBlockName(r.skillName),
       drills: (availableBySkill.get(r.skillId) ?? [])
         .filter((d) => (checked[r.skillId] ?? new Set<string>()).has(d.drillId))
         .map((d) => catalogById.get(d.drillId))
         .filter((e): e is DrillCatalogEntry => Boolean(e)),
     }))
     .filter((s) => s.drills.length > 0);
+  const sessionMinutes = sessionSpecs.reduce((a, s) => a + drillsMinutes(s.drills), 0);
 
   return (
     <SheetShell width={520} anchor="right" onClose={onClose}>
@@ -2217,11 +2236,32 @@ function RecommendationsSheet({
                   style={{ width: "100%", justifyContent: "center" }}
                 >
                   <PIcon.plus size={13} /> Build the focus session ({sessionSpecs.length}{" "}
-                  {sessionSpecs.length === 1 ? "area" : "areas"})
+                  {sessionSpecs.length === 1 ? "area" : "areas"} · ~{sessionMinutes}m)
                 </button>
                 <span style={{ fontSize: 11, color: "var(--uff-text-mute)", lineHeight: 1.4, textAlign: "center" }}>
                   Adds each weak area as its own block — edit, retime, or remove after.
                 </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onBuildSession([
+                      { name: "Warm-up", drills: [] },
+                      ...sessionSpecs,
+                      { name: "Scrimmage", drills: [] },
+                    ])
+                  }
+                  style={{
+                    appearance: "none",
+                    background: "transparent",
+                    border: 0,
+                    cursor: "pointer",
+                    fontSize: 11.5,
+                    color: "var(--uff-orange)",
+                    padding: "2px 0",
+                  }}
+                >
+                  …or build a full practice (adds empty Warm-up + Scrimmage blocks)
+                </button>
               </div>
             )}
             {recommendations.map((r) => {
@@ -2365,13 +2405,20 @@ function RecommendationsSheet({
                               .map((d) => catalogById.get(d.drillId))
                               .filter((e): e is DrillCatalogEntry => Boolean(e));
                             if (drills.length === 0) return;
-                            onAddBlock(r.skillName, drills);
+                            onAddBlock(focusBlockName(r.skillName), drills);
                           }}
                           className="wbtn primary"
                           style={{ opacity: selectedCount === 0 ? 0.5 : 1, marginTop: 2 }}
                         >
                           <PIcon.plus size={13} /> Add as a block
-                          {selectedCount > 0 ? ` (${selectedCount})` : ""}
+                          {selectedCount > 0
+                            ? ` (${selectedCount} · ~${drillsMinutes(
+                                available
+                                  .filter((d) => checkedSet.has(d.drillId))
+                                  .map((d) => catalogById.get(d.drillId))
+                                  .filter((e): e is DrillCatalogEntry => Boolean(e)),
+                              )}m)`
+                            : ""}
                         </button>
                       </>
                     )}
@@ -2686,7 +2733,7 @@ function DrillPickerSheet({
 
         {/* Filter chips: category group + benchmark-type group */}
         {(categories.length > 0 || benchKinds.length > 0) && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
             {categories.map((c) => (
               <PickerChip
                 key={`cat-${c.name}`}
@@ -2795,6 +2842,9 @@ function DrillPickerSheet({
 
         {rows.map((d) => {
           const hovered = hoveredId === d.id;
+          const slug = d.category_name ? categoryToSlug(d.category_name) : null;
+          const accent = slug ? WEB_CAT_DEFS[slug].color : "var(--uff-line)";
+          const benchKinds = d.benchmark_types as BenchKind[];
           return (
             <button
               key={d.id}
@@ -2804,24 +2854,39 @@ function DrillPickerSheet({
               onMouseLeave={() => setHoveredId((cur) => (cur === d.id ? null : cur))}
               aria-label={`Add ${d.name}`}
               style={{
-                padding: "11px 12px 11px 14px",
+                position: "relative",
+                overflow: "hidden",
+                minHeight: 54,
+                padding: "8px 10px 8px 15px",
                 background: hovered ? "var(--uff-surface-raised)" : "var(--uff-surface-2)",
                 border: `1px solid ${hovered ? "var(--uff-line)" : "var(--uff-line-soft)"}`,
                 borderRadius: 10,
                 display: "flex",
                 alignItems: "center",
-                gap: 12,
+                gap: 11,
                 cursor: "pointer",
                 textAlign: "left",
                 transition: "background 120ms ease, border-color 120ms ease",
               }}
             >
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 3,
+                  background: accent,
+                  opacity: hovered ? 1 : 0.8,
+                }}
+              />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span
                     style={{
                       fontSize: 13.5,
-                      fontWeight: 700,
+                      fontWeight: 600,
                       color: "var(--uff-text)",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -2834,16 +2899,17 @@ function DrillPickerSheet({
                     <span
                       style={{
                         flexShrink: 0,
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: 700,
-                        letterSpacing: "0.02em",
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
                         color: "var(--uff-orange)",
-                        border: "1px solid var(--uff-orange)",
-                        borderRadius: 5,
-                        padding: "1px 6px",
+                        background: "color-mix(in srgb, var(--uff-orange) 18%, transparent)",
+                        borderRadius: 4,
+                        padding: "2px 6px",
                       }}
                     >
-                      trains {focusSkillName}
+                      Focus
                     </span>
                   )}
                 </div>
@@ -2851,51 +2917,43 @@ function DrillPickerSheet({
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    flexWrap: "wrap",
                     gap: 8,
                     marginTop: 5,
-                    fontSize: 11,
                   }}
                 >
-                  {d.category_name && <span style={{ color: "var(--uff-text-dim)" }}>{d.category_name}</span>}
+                  {slug && <CatPillWeb slug={slug} mini />}
                   {d.default_duration_min != null && (
                     <span
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 4,
+                        fontSize: 10.5,
                         color: "var(--uff-text-mute)",
                       }}
                     >
                       <PIcon.clock size={11} />
-                      <span
-                        style={{
-                          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-                          fontWeight: 700,
-                        }}
-                      >
+                      <span style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)", fontWeight: 700 }}>
                         {d.default_duration_min}m
                       </span>
                     </span>
                   )}
-                  {d.benchmark_types.map((t) => (
-                    <BenchChip key={t} id={t as BenchKind} mini />
-                  ))}
                 </div>
               </div>
+              {benchKinds.length > 0 && <BenchIconRow types={benchKinds} size={15} />}
               <span
                 aria-hidden
                 style={{
                   flexShrink: 0,
-                  width: 30,
-                  height: 30,
-                  borderRadius: 999,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
                   display: "grid",
                   placeItems: "center",
                   border: `1px solid ${hovered ? "var(--uff-orange)" : "var(--uff-line)"}`,
-                  background: hovered ? "color-mix(in srgb, var(--uff-orange) 16%, transparent)" : "transparent",
-                  color: "var(--uff-orange)",
-                  transition: "background 120ms ease, border-color 120ms ease",
+                  background: hovered ? "var(--uff-orange)" : "transparent",
+                  color: hovered ? "#0a0a0d" : "var(--uff-text-mute)",
+                  transition: "background 120ms ease, border-color 120ms ease, color 120ms ease",
                 }}
               >
                 <PIcon.plus size={14} />
