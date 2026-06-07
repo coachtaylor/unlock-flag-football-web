@@ -57,6 +57,7 @@ export type { RelativeStanding };
 import {
   POSITION_ROOMS,
   roomForPrimaryPosition,
+  roomIdForSkillGroup,
   skillAreaLabel,
 } from "@/lib/drills/skill-groups";
 import type { SkillGroup } from "@/lib/types/skills";
@@ -450,6 +451,18 @@ function buildTeamDecisions(args: {
     const conf = provisional
       ? ` · provisional (${weakestRoom.assessed} assessed — keep benchmarking)`
       : "";
+    // Bridge to the dashboard: how many of the team's top focus skills live in
+    // this room (by skill group -> room). Both surfaces now share one base
+    // (migration 101), so this count is the explicit, honest tie between them.
+    const focusInRoom = focus.skills.filter(
+      (s) => roomIdForSkillGroup(s.skillGroup as SkillGroup) === weakestRoom.id
+    );
+    const focusBridge =
+      focusInRoom.length > 0
+        ? ` · ${focusInRoom.length} of your ${focus.skills.length} dashboard focus ${
+            focusInRoom.length === 1 ? "skill sits" : "skills sit"
+          } here`
+        : "";
     decisions.push({
       id: "room_weakness",
       kind: "room_weakness",
@@ -457,7 +470,7 @@ function buildTeamDecisions(args: {
       claim: `${weakestRoom.label} is your weakest room${
         weakestRoom.weakestSkillLabel ? ` — ${weakestRoom.weakestSkillLabel} is the gap` : ""
       }.`,
-      evidence: `Avg ${weakestRoom.grade ?? "—"} across ${weakestRoom.assessed} assessed${tagPart}${conf}.`,
+      evidence: `Avg ${weakestRoom.grade ?? "—"} across ${weakestRoom.assessed} assessed${focusBridge}${tagPart}${conf}.`,
       actionLabel: weakestRoom.weakestSkillLabel
         ? `Plan ${weakestRoom.weakestSkillLabel}`
         : ctaDrillName

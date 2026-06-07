@@ -1178,9 +1178,10 @@ export async function loadTeamDashboard(
  * two published drills that train it. `hasSignal=false` means no skill cleared
  * the >=3-player bar yet — the card renders the "log more ratings" unlock state.
  *
- * NOTE: timed benchmarks are intentionally excluded from this ranking (they have
- * no absolute reference). They DO feed player-level widgets via
- * v_player_skill_profile. See docs/ACTION_LAYER_SPEC.md.
+ * NOTE: timed benchmarks ARE included as of migration 101 — both this ranking
+ * and v_player_skill_profile now roll up from v_player_drill_score, so the
+ * dashboard focus and the scouting report cannot diverge. Timed is scored
+ * cohort-relative. See docs/2026-06-07-gap-reconciliation-design.md.
  */
 export async function loadTeamFocus(
   supabase: SupabaseClient,

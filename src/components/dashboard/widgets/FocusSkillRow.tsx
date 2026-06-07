@@ -13,6 +13,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
 import Spark from "./Spark";
+import { skillAreaLabel } from "@/lib/drills/skill-groups";
+import type { SkillGroup } from "@/lib/types/skills";
 import type { FocusSkill, FocusTrendPoint } from "@/lib/dashboard/team-home-data";
 
 const pct = (s: number) => `${Math.round(s * 100)}%`;
@@ -109,12 +111,30 @@ export default function FocusSkillRow({
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: 13.5,
-            fontWeight: 500,
-            color: "var(--uff-text)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
           }}
         >
-          {skill.skillName}
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--uff-text)" }}>
+            {skill.skillName}
+          </span>
+          <span
+            style={{
+              alignSelf: "flex-start",
+              fontSize: 9.5,
+              fontWeight: 500,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "var(--uff-text-mute)",
+              border: "1px solid var(--uff-line)",
+              borderRadius: 999,
+              padding: "1px 7px",
+            }}
+            title="Skill area — matches the room grouping on the Scouting report"
+          >
+            {skillAreaLabel(skill.skillGroup as SkillGroup)}
+          </span>
         </span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
           {ti && ti.dir !== "flat" && (

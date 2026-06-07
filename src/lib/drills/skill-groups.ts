@@ -160,3 +160,14 @@ export function roomForPrimaryPosition(
   if (!primary) return null;
   return POSITION_ROOMS.find((r) => r.positions.includes(primary)) ?? null;
 }
+
+// The position room a skill group "belongs" to, for bridging the dashboard's
+// skill view to the scouting report's room view. athletic + iq are universal
+// (cut across every room) -> null. Used by the focus card tag and the scouting
+// headline's focus-skill bridge. Single source so both stay in sync.
+export function roomIdForSkillGroup(
+  group: SkillGroup
+): PositionRoom["id"] | null {
+  const room = POSITION_ROOMS.find((r) => r.signature === group);
+  return room ? room.id : null;
+}

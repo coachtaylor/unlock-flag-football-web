@@ -21,9 +21,9 @@ function UnlockState() {
         lineHeight: 1.6,
       }}
     >
-      Rate players on a few skill drills to unlock your weekly focus. Skill gaps
-      are scored from 1–5 ratings and made/attempts drills — timed drills build
-      player speed but don&apos;t rank team skill gaps.
+      Rate or time players on a few skill drills to unlock your weekly focus.
+      Skill gaps are scored from 1–5 ratings, made/attempts, and timed drills
+      (timed scored against your team&apos;s range).
       <Link
         href="/benchmarks"
         className="wbtn primary"
