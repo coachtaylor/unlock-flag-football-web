@@ -34,7 +34,12 @@ import { buildSkillGroupTrend, WEEKS_WINDOW } from "@/lib/benchmarks/skill-group
 import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { SkillGroup } from "@/lib/types/skills";
 import { gradeColor, gradeLabel } from "@/lib/dashboard/heat-scale";
-import { gradePlayerGroups, groupCompositesFromProfile } from "@/lib/scouting/player-grade";
+import {
+  gradePlayerGroups,
+  groupCompositesFromProfile,
+  relativeStandingFor,
+} from "@/lib/scouting/player-grade";
+import { RelativeStandingLine } from "@/components/dashboard/scouting/ScoutingSections";
 import { formatPhysicals } from "@/lib/format/physicals";
 
 // Player-card "team_players" select. Resilient to schema drift: if migration 101
@@ -136,6 +141,8 @@ export default async function PlayerDetailPage({
     { data: observationsRaw },
     { data: skillProfileRaw },
     skillGroupMaps,
+    { data: cohortPlayersRaw },
+    { data: cohortProfilesRaw },
   ] = await Promise.all([
       fetchPlayerRow(),
       supabase
@@ -168,6 +175,13 @@ export default async function PlayerDetailPage({
       // scoped to this team. Fed (with the benchmark rows above) into
       // buildSkillGroupTrend for the weekly per-group composite line.
       loadSkillGroupMaps(supabase, teamId),
+      // Cohort for relative standing — every team player's positions + the team's
+      // skill-profile rows, so we can rank this player within their room.
+      supabase.from("team_players").select("id, positions").eq("team_id", teamId),
+      supabase
+        .from("v_player_skill_profile")
+        .select("player_id, skill_group, composite_score")
+        .eq("team_id", teamId),
     ]);
 
   if (!player || player.team_id !== teamId) notFound();
@@ -224,6 +238,34 @@ export default async function PlayerDetailPage({
     positions,
   );
   const measuredGroups = groupScores.filter((g) => g.score != null);
+
+  // Relative standing — rank this player within their position room. Needs every
+  // team player's overall score, so build each from the team's skill-profile
+  // rows via the same shared grader (one source of truth with the scouting grid).
+  const cohortProfileByPlayer = new Map<
+    string,
+    { skill_group: SkillGroup; composite_score: number | null }[]
+  >();
+  for (const r of (cohortProfilesRaw ?? []) as {
+    player_id: string;
+    skill_group: SkillGroup;
+    composite_score: number | null;
+  }[]) {
+    const arr = cohortProfileByPlayer.get(r.player_id) ?? [];
+    arr.push({ skill_group: r.skill_group, composite_score: r.composite_score });
+    cohortProfileByPlayer.set(r.player_id, arr);
+  }
+  const standing = relativeStandingFor(
+    { playerId, positions },
+    ((cohortPlayersRaw ?? []) as { id: string; positions: string[] | null }[]).map((p) => ({
+      playerId: p.id,
+      positions: p.positions ?? [],
+      overallScore: gradePlayerGroups(
+        groupCompositesFromProfile(cohortProfileByPlayer.get(p.id) ?? []),
+        p.positions ?? [],
+      ).overallScore,
+    })),
+  );
 
   // Skill-group progression trend (Build 8), fed the same benchmark rows the
   // per-drill history uses + the shared team skill-group maps.
@@ -497,6 +539,12 @@ export default async function PlayerDetailPage({
                   </span>
                 </div>
               </div>
+
+              {standing && (
+                <div style={{ marginTop: 2 }}>
+                  <RelativeStandingLine standing={standing} />
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {isCaptain && (

@@ -47,7 +47,13 @@ import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { ObservationRowData } from "@/components/dashboard/ObservationsFeed";
 import type { PlayerSkill } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
 import { confidenceTier } from "@/lib/benchmarks/confidence";
-import { gradePlayerGroups } from "@/lib/scouting/player-grade";
+import {
+  gradePlayerGroups,
+  relativeStandingFor,
+  type RelativeStanding,
+} from "@/lib/scouting/player-grade";
+// Re-exported so existing importers (ScoutingSections) keep their import path.
+export type { RelativeStanding };
 import {
   POSITION_ROOMS,
   roomForPrimaryPosition,
@@ -137,14 +143,6 @@ export type PlayerVerdict = {
 // ≥ STANDING_MIN assessed members, so a rank is a real read ("3rd of 5
 // receivers"), not noise off one or two players. `null` ⇒ cohort too thin;
 // the UI shows only the absolute grade.
-export type RelativeStanding = {
-  roomLabel: string; // "Receivers", "QB room", "Defense"
-  cohortSize: number; // assessed members in the room
-  rank: number; // 1 = best in room
-  tier: "top" | "upper" | "middle" | "lower" | "bottom";
-  line: string; // "Bottom of the Receivers"
-  detail: string; // "5th of 5 assessed"
-};
 export type PlayerReportCard = {
   playerId: string;
   name: string;
@@ -322,31 +320,10 @@ export function roleReadFromGrade(grade: Grade | null): string {
 //   decision the room grade ALWAYS shows from the first assessment (the §12.2a
 //   "show the number" rule); this only flips the grade to a *provisional* marker
 //   when it rests on 1–2 players. Grading ≠ ranking, so the two are separate.
-const STANDING_MIN = 3;
+// Confidence on a room's ABSOLUTE grade (§1) — flips the grade to a *provisional*
+// marker when it rests on 1–2 players. (Relative ranking lives in the shared
+// relativeStandingFor() in player-grade.ts.)
 const ROOM_RELIABLE_MIN = 3;
-
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
-}
-
-function standingTier(rank: number, size: number): RelativeStanding["tier"] {
-  if (rank === 1) return "top";
-  if (rank === size) return "bottom";
-  const frac = (rank - 1) / (size - 1); // 0 = best … 1 = worst
-  if (frac <= 0.34) return "upper";
-  if (frac >= 0.66) return "lower";
-  return "middle";
-}
-
-const TIER_PREFIX: Record<RelativeStanding["tier"], string> = {
-  top: "Top of",
-  upper: "Upper half of",
-  middle: "Middle of",
-  lower: "Lower half of",
-  bottom: "Bottom of",
-};
 
 // The volume-aware player verdict (§12.2a claim ladder). Reliable skills →
 // a real gap verdict + planner CTA; below that, an honest measurement read that
@@ -778,27 +755,16 @@ export async function loadTeamScoutingData(
      Mutates the same card objects held in cardsByRoom/playerCards. Only rooms
      with ≥ STANDING_MIN assessed members get ranked; thinner rooms keep a null
      standing so the UI shows the absolute grade alone. */
-  for (const room of POSITION_ROOMS) {
-    const assessedMembers = (cardsByRoom.get(room.id) ?? []).filter(
-      (m) => m.overallScore != null
+  const standingCohort = playerCards.map((c) => ({
+    playerId: c.playerId,
+    positions: c.positions,
+    overallScore: c.overallScore,
+  }));
+  for (const card of playerCards) {
+    card.relativeStanding = relativeStandingFor(
+      { playerId: card.playerId, positions: card.positions },
+      standingCohort,
     );
-    if (assessedMembers.length < STANDING_MIN) continue;
-    const ranked = [...assessedMembers].sort(
-      (a, b) => (b.overallScore as number) - (a.overallScore as number)
-    ); // best → worst
-    const size = ranked.length;
-    ranked.forEach((card, i) => {
-      const rank = i + 1;
-      const tier = standingTier(rank, size);
-      card.relativeStanding = {
-        roomLabel: room.label,
-        cohortSize: size,
-        rank,
-        tier,
-        line: `${TIER_PREFIX[tier]} the ${room.label}`,
-        detail: `${ordinal(rank)} of ${size} assessed`,
-      };
-    });
   }
 
   const rooms: RoomCell[] = POSITION_ROOMS.map((room) => {
