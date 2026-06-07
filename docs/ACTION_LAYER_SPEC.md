@@ -35,6 +35,13 @@ captains' logging effort (timed) is invisible to the insight layer.**
 → **Team-weakness ranking is sourced only from absolute signal. Timed feeds
 player-level widgets (needs-attention, movers).**
 
+> **Update 2026-06-07 (migration 101):** Timed is no longer excluded. Cohort-relative
+> timed normalization (`(max−t)/(max−min)`, ≥3 players per drill) is good enough to
+> rank skills, and excluding it on the dashboard while the scouting report included it
+> was the root cause of the two surfaces disagreeing on team gaps. The team focus
+> ranking and the scouting report now both roll up from `v_player_drill_score`, so they
+> cannot name contradictory gaps. See `2026-06-07-gap-reconciliation-design.md`.
+
 ## Slice 1 scope — two prongs
 
 ### Prong 1 — Make timed data count + a clean team-focus source (DB)
