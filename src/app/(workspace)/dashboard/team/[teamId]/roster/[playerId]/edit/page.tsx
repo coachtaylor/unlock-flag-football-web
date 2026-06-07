@@ -20,6 +20,25 @@ export default async function EditPlayerPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Resilient to schema drift: if migration 101 (photo_url/height_in/weight_lb)
+  // hasn't been applied, retry without those columns so Edit still opens.
+  const PLAYER_BASE =
+    "id, team_id, player_name, first_name, last_name, positions, jersey_number, notes, is_captain, captain_access, user_id";
+  const fetchPlayerRow = async () => {
+    const full = await supabase
+      .from("team_players")
+      .select(`${PLAYER_BASE}, photo_url, height_in, weight_lb`)
+      .eq("id", playerId)
+      .maybeSingle();
+    if (!full.error) return { data: full.data };
+    const base = await supabase
+      .from("team_players")
+      .select(PLAYER_BASE)
+      .eq("id", playerId)
+      .maybeSingle();
+    return { data: base.data };
+  };
+
   const [{ data: team }, { data: profile }, { data: membership }, { data: player }] =
     await Promise.all([
       supabase
@@ -38,13 +57,7 @@ export default async function EditPlayerPage({
         .eq("user_id", user.id)
         .eq("team_id", teamId)
         .maybeSingle(),
-      supabase
-        .from("team_players")
-        .select(
-          "id, team_id, player_name, first_name, last_name, positions, jersey_number, notes, is_captain, captain_access, user_id"
-        )
-        .eq("id", playerId)
-        .maybeSingle(),
+      fetchPlayerRow(),
     ]);
 
   if (!team || !player) notFound();
@@ -140,6 +153,9 @@ export default async function EditPlayerPage({
               isCaptain: (player.is_captain as boolean) ?? false,
               captainAccess:
                 (player.captain_access as "full" | "view" | "none" | null) ?? null,
+              photoUrl: (player as { photo_url?: string | null }).photo_url ?? null,
+              heightIn: (player as { height_in?: number | null }).height_in ?? null,
+              weightLb: (player as { weight_lb?: number | null }).weight_lb ?? null,
               accountLinked: !!(player.user_id as string | null),
             }}
           />

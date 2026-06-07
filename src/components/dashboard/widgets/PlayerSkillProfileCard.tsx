@@ -24,6 +24,7 @@ import {
   type ConfidenceTier,
 } from "@/lib/benchmarks/confidence";
 import { scoreToHeatColor } from "@/lib/dashboard/heat-scale";
+import type { ReactNode } from "react";
 
 export type PlayerSkill = {
   skillId: string;
@@ -39,12 +40,35 @@ export type PlayerSkill = {
 // (you can't rank two things), so the card shows a flat "Reliable reads" list.
 const MIN_RELIABLE_FOR_SPLIT = 4;
 
+// Card chrome, or a bare fragment when the caller (CollapsibleSection) supplies
+// the shell. Module-level so it isn't re-created each render.
+function Shell({
+  bare,
+  meta,
+  children,
+}: {
+  bare: boolean;
+  meta: string;
+  children: ReactNode;
+}) {
+  if (bare) return <>{children}</>;
+  return (
+    <div className="w-card" style={{ padding: 14 }}>
+      <SectionHead label="Skill profile" meta={meta} />
+      {children}
+    </div>
+  );
+}
+
 export default function PlayerSkillProfileCard({
   skills,
   playerName,
+  bare = false,
 }: {
   skills: PlayerSkill[];
   playerName: string;
+  // Content only (no card / no SectionHead) — for CollapsibleSection.
+  bare?: boolean;
 }) {
   const first = playerName.trim().split(/\s+/)[0] || "this player";
   const reliable = skills
@@ -59,8 +83,7 @@ export default function PlayerSkillProfileCard({
   // without mistaking it for a verdict.
   if (reliable.length === 0) {
     return (
-      <div className="w-card" style={{ padding: 14 }}>
-        <SectionHead label="Skill profile" meta="EARLY" />
+      <Shell bare={bare} meta="EARLY">
         <div
           style={{
             border: "1px dashed var(--uff-line)",
@@ -94,7 +117,7 @@ export default function PlayerSkillProfileCard({
             <SkillGroupBlock label="Early reads · building confidence" rows={early} tier="early" />
           </div>
         )}
-      </div>
+      </Shell>
     );
   }
 
@@ -105,9 +128,7 @@ export default function PlayerSkillProfileCard({
   const weaknesses = split ? reliable.slice(3).slice(-3).reverse() : [];
 
   return (
-    <div className="w-card" style={{ padding: 14 }}>
-      <SectionHead label="Skill profile" meta="RATED · /5" />
-
+    <Shell bare={bare} meta="RATED · /5">
       {split ? (
         <>
           <SkillGroupBlock label="Top skills" rows={strengths} tier="reliable" />
@@ -147,7 +168,7 @@ export default function PlayerSkillProfileCard({
         <span>3 Inconsistent</span>
         <span>5 Reliable</span>
       </div>
-    </div>
+    </Shell>
   );
 }
 

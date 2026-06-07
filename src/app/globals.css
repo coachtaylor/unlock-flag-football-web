@@ -143,9 +143,9 @@
   /* Text */
   --text-primary: #F4F4F2;
   --text-label: rgba(244, 244, 242, 0.82);
-  --text-secondary: #8A8A92;
-  --text-muted: #5A5A62;
-  --text-subtle: rgba(244, 244, 242, 0.55);
+  --text-secondary: #A2A2AA; /* was #8A8A92 (3.8:1) — raised to clear WCAG AA on cards */
+  --text-muted: #9A9AA2; /* was #5A5A62 (2.2:1) — raised to clear WCAG AA on cards */
+  --text-subtle: rgba(244, 244, 242, 0.64); /* was 0.55 — nudged up for AA */
   --text-faint: rgba(244, 244, 242, 0.14);
   --text-on-brand: #0A0A0D;
 

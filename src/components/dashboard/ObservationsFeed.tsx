@@ -53,15 +53,47 @@ export default function ObservationsFeed({
   rows,
   practiceBase = "/practice",
   footer,
+  bare = false,
 }: {
   rows: ObservationRowData[];
   // Base path for the practice deep-link. Roster uses the legacy "/practice";
   // the scouting sheet passes a team-scoped base.
   practiceBase?: string;
   footer?: React.ReactNode;
+  // When true, render content only (no card / no header) — the caller (e.g.
+  // CollapsibleSection on the player page) supplies the card chrome + count.
+  bare?: boolean;
 }) {
   const observations = mapObservations(rows);
   const empty = observations.length === 0;
+
+  const body = (
+    <>
+      {empty ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12.5,
+            color: "var(--uff-text-mute)",
+            lineHeight: 1.5,
+          }}
+        >
+          No observations yet. Captains can write per-player notes from the
+          post-practice log — they&apos;ll show up here.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {observations.map((o) => (
+            <ObservationRow key={o.id} obs={o} practiceBase={practiceBase} />
+          ))}
+        </div>
+      )}
+
+      {footer && <div style={{ marginTop: 12 }}>{footer}</div>}
+    </>
+  );
+
+  if (bare) return body;
 
   return (
     <div className="w-card" style={{ padding: 14 }}>
@@ -96,28 +128,7 @@ export default function ObservationsFeed({
           </span>
         )}
       </div>
-
-      {empty ? (
-        <p
-          style={{
-            margin: 0,
-            fontSize: 12.5,
-            color: "var(--uff-text-mute)",
-            lineHeight: 1.5,
-          }}
-        >
-          No observations yet. Captains can write per-player notes from the
-          post-practice log — they&apos;ll show up here.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {observations.map((o) => (
-            <ObservationRow key={o.id} obs={o} practiceBase={practiceBase} />
-          ))}
-        </div>
-      )}
-
-      {footer && <div style={{ marginTop: empty ? 12 : 12 }}>{footer}</div>}
+      {body}
     </div>
   );
 }

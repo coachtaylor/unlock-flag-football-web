@@ -1,97 +1,142 @@
 "use client";
 
-// Per-player skill-GROUP progression: one line per position-relevant skill
-// group over the last ~12 weeks. Complements the snapshot skill profile card
-// with trajectory. Multi-series merge + styling mirror BenchmarkTrendsCard so
-// the player and dashboard charts stay in lockstep. Build 8.
+// Per-player skill-GROUP progression. A clustered multi-series line chart over a
+// short window can't show insight — the lines overlap and the change is invisible.
+// So the card is rows only: a one-line headline ("what moved"), then a per-group
+// stat row (its OWN micro-sparkline + current level + the change). No shared axis,
+// so nothing overlaps. Reuses the dashboard's Spark + TrendDelta + heat color so
+// this card speaks the same visual language as the rating bars above it. Build 9.
 
-import {
-  LineChart,
-  Line,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
-import { chartTheme, formatDateShort } from "@/components/app/charts/chartTheme";
 import SectionHead from "@/components/dashboard/widgets/SectionHead";
-import type { SkillGroupTrend } from "@/lib/benchmarks/skill-group-trend";
+import Spark from "@/components/dashboard/widgets/Spark";
+import { TrendDelta } from "@/components/dashboard/widgets/pulse-bits";
+import { scoreToHeatColor } from "@/lib/dashboard/heat-scale";
+import {
+  WEEKS_WINDOW,
+  summarizeSkillGroupTrend,
+  type SkillGroupTrend,
+  type SkillGroupHeadline,
+  type SkillGroupRowStat,
+} from "@/lib/benchmarks/skill-group-trend";
 
-export default function SkillGroupTrendCard({ trend }: { trend: SkillGroupTrend }) {
+export default function SkillGroupTrendCard({
+  trend,
+  bare = false,
+}: {
+  trend: SkillGroupTrend;
+  // Content only (no card / no SectionHead) — for CollapsibleSection.
+  bare?: boolean;
+}) {
+  const summary = trend.hasSignal ? summarizeSkillGroupTrend(trend) : null;
+  const body = summary ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Headline headline={summary.headline} />
+      <Rows rows={summary.rows} />
+    </div>
+  ) : (
+    <Locked />
+  );
+
+  if (bare) return body;
+
   return (
     <div className="w-card" style={{ padding: 16 }}>
-      <SectionHead label="Skill-group progress" meta="12 WK" />
-      {trend.hasSignal ? <TrendChart trend={trend} /> : <Locked />}
+      <SectionHead label="Skill-group progress" meta={`${WEEKS_WINDOW} WK`} />
+      {body}
     </div>
   );
 }
 
-function TrendChart({ trend }: { trend: SkillGroupTrend }) {
-  // Merge series by week into one row array; values rendered on the 1–5 scale.
-  const merged = trend.weeks.map((w) => {
-    const row: Record<string, number | string> = { week: formatDateShort(w) };
-    for (const s of trend.series) {
-      const p = s.points.find((x) => x.week === w);
-      if (p) row[s.label] = Number((p.score * 5).toFixed(2));
-    }
-    return row;
-  });
+// Signed delta on the displayed /5 scale (input is on the 0..1 scale).
+function fmtDelta(d: number): string {
+  const v = d * 5;
+  return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+}
 
+function MoverName({ label, color }: { label: string; color: string }) {
+  return <span style={{ color, fontWeight: 500 }}>{label}</span>;
+}
+
+function Headline({ headline }: { headline: SkillGroupHeadline }) {
+  if (headline.kind === "none") return null;
+  const base = { fontSize: 12.5, lineHeight: 1.5, color: "var(--uff-text-dim)" } as const;
+  const up = { color: "var(--uff-lime)", fontWeight: 700 } as const;
+  const down = { color: "var(--uff-red)", fontWeight: 700 } as const;
+
+  if (headline.kind === "steady") {
+    return <div style={base}>Holding steady across groups this month.</div>;
+  }
+  if (headline.kind === "watch") {
+    const w = headline.watch;
+    return (
+      <div style={base}>
+        <MoverName label={w.label} color={w.color} /> slipping{" "}
+        <span style={down}>{fmtDelta(w.delta)}</span> · rest holding.
+      </div>
+    );
+  }
+  // gain (with optional watch)
+  const r = headline.riser;
   return (
-    <div style={{ width: "100%", height: 210 }}>
-      <ResponsiveContainer>
-        <LineChart data={merged} margin={{ top: 8, right: 12, bottom: 4, left: -12 }}>
-          <CartesianGrid
-            stroke={chartTheme.gridStroke}
-            strokeDasharray={chartTheme.gridDash}
-            vertical={false}
+    <div style={base}>
+      <MoverName label={r.label} color={r.color} /> climbing fastest{" "}
+      <span style={up}>{fmtDelta(r.delta)}</span>
+      {headline.watch ? (
+        <>
+          {" "}
+          · watch <MoverName label={headline.watch.label} color={headline.watch.color} />{" "}
+          <span style={down}>{fmtDelta(headline.watch.delta)}</span>.
+        </>
+      ) : (
+        <> over {WEEKS_WINDOW} weeks.</>
+      )}
+    </div>
+  );
+}
+
+function Rows({ rows }: { rows: SkillGroupRowStat[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {rows.map((r) => (
+        <div
+          key={r.group}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "10px 1fr 110px 44px auto",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span
+            style={{ width: 10, height: 10, borderRadius: 3, background: r.color }}
+            aria-hidden
           />
-          <XAxis
-            dataKey="week"
-            tick={{
-              fill: chartTheme.tickFill,
-              fontSize: chartTheme.tickFontSize,
-              fontFamily: chartTheme.tickFontFamily,
+          <span
+            style={{
+              fontSize: 12.5,
+              color: "var(--uff-text)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
-            axisLine={false}
-            tickLine={false}
-            minTickGap={20}
-          />
-          <YAxis
-            domain={[0, 5]}
-            ticks={[0, 1, 2, 3, 4, 5]}
-            tick={{
-              fill: chartTheme.tickFill,
-              fontSize: chartTheme.tickFontSize,
-              fontFamily: chartTheme.tickFontFamily,
+          >
+            {r.label}
+          </span>
+          <Spark data={r.spark} color={r.color} w={110} h={26} fill={false} />
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 13,
+              fontWeight: 700,
+              textAlign: "right",
+              color: r.latest == null ? "var(--uff-text-mute)" : scoreToHeatColor(r.latest),
             }}
-            axisLine={false}
-            tickLine={false}
-            width={28}
-          />
-          <Tooltip
-            contentStyle={chartTheme.tooltip}
-            cursor={{ stroke: chartTheme.cursorStroke, strokeWidth: 1 }}
-            formatter={(value) => `${Number(value).toFixed(1)}/5`}
-          />
-          <Legend wrapperStyle={{ fontSize: 11.5, color: "#A0A0A8", paddingTop: 4 }} iconType="line" />
-          {trend.series.map((s) => (
-            <Line
-              key={s.group}
-              type="monotone"
-              dataKey={s.label}
-              stroke={s.color}
-              strokeWidth={2}
-              dot={{ r: 2.8, fill: s.color, strokeWidth: 0 }}
-              activeDot={{ r: 4 }}
-              connectNulls
-              isAnimationActive={false}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+          >
+            {r.latest == null ? "—" : (r.latest * 5).toFixed(1)}
+          </span>
+          <TrendDelta delta={r.delta} points={r.points} formatMag={(m) => (m * 5).toFixed(1)} />
+        </div>
+      ))}
     </div>
   );
 }

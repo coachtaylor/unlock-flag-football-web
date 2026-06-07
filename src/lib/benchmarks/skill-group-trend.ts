@@ -64,7 +64,9 @@ export type SkillGroupTrend = {
   hasSignal: boolean; // ≥1 group has ≥2 weekly points (enough to draw a line)
 };
 
-const WEEKS_WINDOW = 12;
+// Trend window in weeks. Single source of truth — the card renders its "N WK"
+// label from this so the axis range and the header can't drift.
+export const WEEKS_WINDOW = 4;
 
 export function buildSkillGroupTrend(args: {
   rows: SkillGroupTrendRow[];
@@ -126,4 +128,84 @@ export function buildSkillGroupTrend(args: {
 
   const hasSignal = series.some((s) => s.points.length >= 2);
   return { weeks, series, hasSignal };
+}
+
+// ---- Summary for the redesigned card (headline takeaway + per-group rows) ----
+//
+// Pure derivation off the trend's points[]: latest level, change over the
+// window, and a sparkline array per group, plus a one-line "what moved" headline.
+// Lives here (not the component) because "what's the biggest gain / what to
+// watch" is logic, not presentation.
+
+export type Mover = { group: SkillGroup; label: string; color: string; delta: number };
+
+export type SkillGroupRowStat = {
+  group: SkillGroup;
+  label: string;
+  color: string;
+  latest: number | null; // 0..1 latest weekly composite
+  delta: number | null; // 0..1 latest − first; null when < 2 weekly points
+  points: number; // # weekly points (drives sparse states)
+  spark: number[]; // weekly scores in ascending-week order (0..1), for <Spark>
+};
+
+export type SkillGroupHeadline =
+  | { kind: "gain"; riser: Mover; watch?: Mover }
+  | { kind: "watch"; watch: Mover }
+  | { kind: "steady" } // signal exists but nothing moved past FLAT_EPS
+  | { kind: "none" }; // no group has ≥2 points → render no headline line
+
+export type SkillGroupTrendSummary = {
+  rows: SkillGroupRowStat[];
+  headline: SkillGroupHeadline;
+};
+
+// A composite must move at least this much (0..1 scale; = 0.1 on the displayed
+// /5 scale) before we call it a gain or a slip rather than flat.
+const FLAT_EPS = 0.02;
+
+export function summarizeSkillGroupTrend(trend: SkillGroupTrend): SkillGroupTrendSummary {
+  const rows: SkillGroupRowStat[] = trend.series.map((s) => {
+    const pts = s.points;
+    return {
+      group: s.group,
+      label: s.label,
+      color: s.color,
+      latest: pts.length ? pts[pts.length - 1].score : null,
+      delta: pts.length >= 2 ? pts[pts.length - 1].score - pts[0].score : null,
+      points: pts.length,
+      spark: pts.map((p) => p.score),
+    };
+  });
+
+  const moved = rows.filter(
+    (r): r is SkillGroupRowStat & { delta: number } => r.delta != null,
+  );
+
+  let headline: SkillGroupHeadline;
+  if (moved.length === 0) {
+    headline = { kind: "none" };
+  } else {
+    const toMover = (r: SkillGroupRowStat & { delta: number }): Mover => ({
+      group: r.group,
+      label: r.label,
+      color: r.color,
+      delta: r.delta,
+    });
+    const top = moved.reduce((a, b) => (b.delta > a.delta ? b : a));
+    const bottom = moved.reduce((a, b) => (b.delta < a.delta ? b : a));
+    const riser = top.delta > FLAT_EPS ? toMover(top) : null;
+    const faller = bottom.delta < -FLAT_EPS ? toMover(bottom) : null;
+    if (riser) {
+      // Never show the same group as both the riser and the thing to watch.
+      const watch = faller && faller.group !== riser.group ? faller : undefined;
+      headline = { kind: "gain", riser, watch };
+    } else if (faller) {
+      headline = { kind: "watch", watch: faller };
+    } else {
+      headline = { kind: "steady" };
+    }
+  }
+
+  return { rows, headline };
 }

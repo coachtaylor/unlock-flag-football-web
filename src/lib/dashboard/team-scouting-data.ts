@@ -47,10 +47,10 @@ import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { ObservationRowData } from "@/components/dashboard/ObservationsFeed";
 import type { PlayerSkill } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
 import { confidenceTier } from "@/lib/benchmarks/confidence";
+import { gradePlayerGroups } from "@/lib/scouting/player-grade";
 import {
   POSITION_ROOMS,
   roomForPrimaryPosition,
-  skillGroupsForPositions,
   skillAreaLabel,
 } from "@/lib/drills/skill-groups";
 import type { SkillGroup } from "@/lib/types/skills";
@@ -297,7 +297,7 @@ function avg(nums: number[]): number | null {
   return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
 }
 
-function roleReadFromGrade(grade: Grade | null): string {
+export function roleReadFromGrade(grade: Grade | null): string {
   switch (grade) {
     case "A":
       return "Anchor";
@@ -712,20 +712,18 @@ export async function loadTeamScoutingData(
   /* ── §3 player report cards — graded ONLY on position-relevant groups ── */
   const playerCards: PlayerReportCard[] = players.map((p) => {
     const positions = p.positions ?? [];
-    const relevant = skillGroupsForPositions(positions); // athletic + iq + side group(s)
     const groups = profileByPlayer.get(p.id);
-    const groupScores: GroupScore[] = relevant.map((id) => {
-      const score = groups?.get(id) ?? null;
-      return { group: id, label: skillAreaLabel(id), score, grade: scoreToGrade(score) };
-    });
+    // Shared grader — one source of truth with the player-card hero.
+    const { groupScores, overallScore, overallGrade } = gradePlayerGroups(
+      groups ?? new Map(),
+      positions,
+    );
     const measured = groupScores.filter((g) => g.score != null) as Required<GroupScore>[];
-    const overallScore = avg(measured.map((g) => g.score as number));
     const weakest = measured.length
       ? measured.reduce((lo, g) => ((g.score as number) < (lo.score as number) ? g : lo))
       : null;
     const room = roomForPrimaryPosition(positions);
     const evidence = evidenceFor(p.id, positions);
-    const overallGrade = scoreToGrade(overallScore);
     const verdict = buildVerdict({
       firstName: p.player_name.trim().split(/\s+/)[0] || p.player_name,
       overallGrade,

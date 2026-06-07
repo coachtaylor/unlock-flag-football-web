@@ -14,6 +14,8 @@ import { Icon } from "@/components/uff/icons";
 import { POSITION_IDS } from "@/lib/positions";
 import { fullName, capitalizeName } from "@/lib/format/name";
 import { FormSection, FormField, formInputStyle } from "@/components/ui/FormSection";
+import { uploadPlayerPhoto } from "@/lib/storage/player-photo";
+import { feetInchesToInches, inchesToFeetInches } from "@/lib/format/physicals";
 import CaptainInvitePrompt from "./CaptainInvitePrompt";
 import CaptainRemovalModal from "./CaptainRemovalModal";
 import { revokeCaptainAccess } from "@/lib/roster/captain-actions";
@@ -37,6 +39,9 @@ export type PlayerFormInitial = {
   notes: string;
   isCaptain: boolean;
   captainAccess: CaptainAccess | null;
+  photoUrl: string | null;
+  heightIn: number | null;
+  weightLb: number | null;
   // True when this player is linked to a login account (team_players.user_id
   // set) — i.e. an invited captain who accepted. Removing the captain tag
   // from such a player revokes their access, so we confirm keep-vs-remove.
@@ -61,6 +66,19 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
   const [isCaptain, setIsCaptain] = useState(initial?.isCaptain ?? false);
   const [captainAccess, setCaptainAccess] = useState<CaptainAccess>(
     initial?.captainAccess ?? "full"
+  );
+
+  // Player card. A stable id is generated up front so a photo can be uploaded to
+  // {teamId}/{id}.ext even on the create flow (before the row exists), then
+  // written into the insert. Height is captured as ft+in, stored as total inches.
+  const [stableId] = useState(() => initial?.id ?? crypto.randomUUID());
+  const [photoUrl, setPhotoUrl] = useState<string | null>(initial?.photoUrl ?? null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const initHt = inchesToFeetInches(initial?.heightIn);
+  const [heightFt, setHeightFt] = useState(initHt.feet != null ? String(initHt.feet) : "");
+  const [heightInch, setHeightInch] = useState(initHt.inches != null ? String(initHt.inches) : "");
+  const [weightLb, setWeightLb] = useState(
+    initial?.weightLb != null ? String(initial.weightLb) : ""
   );
 
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +128,28 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
       is_captain: isCaptain,
       // Permission tier only applies to captains; cleared otherwise.
       captain_access: isCaptain ? captainAccess : null,
+      photo_url: photoUrl,
+      height_in: feetInchesToInches(
+        heightFt.trim() ? parseInt(heightFt, 10) : null,
+        heightInch.trim() ? parseInt(heightInch, 10) : null,
+      ),
+      weight_lb: weightLb.trim() ? parseInt(weightLb, 10) : null,
     };
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    setError(null);
+    setPhotoBusy(true);
+    const res = await uploadPlayerPhoto({ teamId, playerId: stableId, file });
+    setPhotoBusy(false);
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    setPhotoUrl(res.url);
   }
 
   // Keep the invited captain on the roster as a regular player: persist the
@@ -200,7 +239,7 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
     } else {
       const { data: inserted, error: insertErr } = await supabase
         .from("team_players")
-        .insert({ ...payload, status: "active" })
+        .insert({ ...payload, id: stableId, status: "active" })
         .select("id")
         .single();
       if (insertErr || !inserted) {
@@ -296,6 +335,129 @@ export default function PlayerForm({ teamId, rosterBasePath, initial }: Props) {
               style={{ ...formInputStyle, maxWidth: 120 }}
             />
           </FormField>
+        </FormSection>
+
+        <FormSection
+          title="Player card"
+          subtitle="Optional — a photo and measurables for the player's card."
+        >
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <label
+              style={{
+                position: "relative",
+                width: 76,
+                height: 76,
+                borderRadius: "50%",
+                overflow: "hidden",
+                cursor: "pointer",
+                flexShrink: 0,
+                border: "1px solid var(--uff-line)",
+                background: "var(--uff-surface-2)",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrl}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <span style={{ fontSize: 24, color: "var(--uff-text-mute)", lineHeight: 1 }}>+</span>
+              )}
+              {photoBusy && (
+                <span
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    background: "rgba(0,0,0,0.5)",
+                    fontSize: 11,
+                    color: "#fff",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  …
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handlePhotoChange}
+                style={{ display: "none" }}
+              />
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 13, color: "var(--uff-text)" }}>
+                {photoUrl ? "Photo added" : "Add a photo"}
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--uff-text-dim)" }}>
+                JPG, PNG, or WebP · under 5 MB
+              </span>
+              {photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl(null)}
+                  style={{
+                    alignSelf: "flex-start",
+                    marginTop: 2,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "var(--uff-red)",
+                    fontSize: 11.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <FormField label="Height" htmlFor="heightFt">
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  id="heightFt"
+                  type="text"
+                  inputMode="numeric"
+                  value={heightFt}
+                  onChange={(e) => setHeightFt(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="6"
+                  style={{ ...formInputStyle, maxWidth: 56, textAlign: "center" }}
+                />
+                <span style={{ fontSize: 12.5, color: "var(--uff-text-dim)" }}>ft</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Height inches"
+                  value={heightInch}
+                  onChange={(e) => setHeightInch(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="1"
+                  style={{ ...formInputStyle, maxWidth: 56, textAlign: "center" }}
+                />
+                <span style={{ fontSize: 12.5, color: "var(--uff-text-dim)" }}>in</span>
+              </div>
+            </FormField>
+            <FormField label="Weight" htmlFor="weightLb">
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  id="weightLb"
+                  type="text"
+                  inputMode="numeric"
+                  value={weightLb}
+                  onChange={(e) => setWeightLb(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="190"
+                  style={{ ...formInputStyle, maxWidth: 80, textAlign: "center" }}
+                />
+                <span style={{ fontSize: 12.5, color: "var(--uff-text-dim)" }}>lb</span>
+              </div>
+            </FormField>
+          </div>
         </FormSection>
 
         <FormSection

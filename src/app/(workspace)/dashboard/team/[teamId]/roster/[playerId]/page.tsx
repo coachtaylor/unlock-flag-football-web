@@ -29,9 +29,20 @@ import PlayerSkillProfileCard, {
   type PlayerSkill,
 } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
 import SkillGroupTrendCard from "@/components/app/charts/SkillGroupTrendCard";
-import { buildSkillGroupTrend } from "@/lib/benchmarks/skill-group-trend";
+import CollapsibleSection from "@/components/dashboard/CollapsibleSection";
+import { buildSkillGroupTrend, WEEKS_WINDOW } from "@/lib/benchmarks/skill-group-trend";
 import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { SkillGroup } from "@/lib/types/skills";
+import { gradeColor, gradeLabel } from "@/lib/dashboard/heat-scale";
+import { gradePlayerGroups, groupCompositesFromProfile } from "@/lib/scouting/player-grade";
+import { formatPhysicals } from "@/lib/format/physicals";
+
+// Player-card "team_players" select. Resilient to schema drift: if migration 101
+// (photo_url / height_in / weight_lb) hasn't been applied yet, retry without the
+// card columns so the page still renders instead of 404-ing.
+const PLAYER_BASE_COLS =
+  "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at, created_by";
+const PLAYER_CARD_COLS = `${PLAYER_BASE_COLS}, photo_url, height_in, weight_lb`;
 
 function initialsFor(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -103,6 +114,22 @@ export default async function PlayerDetailPage({
       membership?.captain_view_only as boolean | null
     ) || isLeagueAdmin;
 
+  // Resilient player fetch — see PLAYER_CARD_COLS note.
+  const fetchPlayerRow = async () => {
+    const full = await supabase
+      .from("team_players")
+      .select(PLAYER_CARD_COLS)
+      .eq("id", playerId)
+      .maybeSingle();
+    if (!full.error) return { data: full.data };
+    const base = await supabase
+      .from("team_players")
+      .select(PLAYER_BASE_COLS)
+      .eq("id", playerId)
+      .maybeSingle();
+    return { data: base.data };
+  };
+
   const [
     { data: player },
     { data: benchesRaw },
@@ -110,13 +137,7 @@ export default async function PlayerDetailPage({
     { data: skillProfileRaw },
     skillGroupMaps,
   ] = await Promise.all([
-      supabase
-        .from("team_players")
-        .select(
-          "id, team_id, player_name, positions, jersey_number, status, is_captain, is_injured, injury_note, color_index, notes, created_at, created_by"
-        )
-        .eq("id", playerId)
-        .maybeSingle(),
+      fetchPlayerRow(),
       supabase
         .from("benchmark_results")
         .select(
@@ -159,6 +180,12 @@ export default async function PlayerDetailPage({
   const injuryNote = player.injury_note as string | null;
   const colorIndex = (player.color_index as number) ?? 0;
   const playerColor = playerColorForIndex(colorIndex);
+  const photoUrl =
+    (player as { photo_url?: string | null }).photo_url ?? null;
+  const physicals = formatPhysicals(
+    (player as { height_in?: number | null }).height_in ?? null,
+    (player as { weight_lb?: number | null }).weight_lb ?? null,
+  );
 
   // Per-drill benchmark history + locked-insight tail + PB count, via the
   // shared transform (one source of truth with the scouting sheet). Build 8.7.
@@ -184,6 +211,19 @@ export default async function PlayerDetailPage({
       composite: Number(r.composite_score),
       sampleSize: r.drill_sample_size ?? 0,
     }));
+
+  // Overall + per-group grades via the SHARED grader — one source of truth with
+  // the scouting report, so the player card can't disagree with it (Build 9).
+  const { groupScores, overallGrade } = gradePlayerGroups(
+    groupCompositesFromProfile(
+      (skillProfileRaw ?? []) as {
+        skill_group: SkillGroup;
+        composite_score: number | null;
+      }[],
+    ),
+    positions,
+  );
+  const measuredGroups = groupScores.filter((g) => g.score != null);
 
   // Skill-group progression trend (Build 8), fed the same benchmark rows the
   // per-drill history uses + the shared team skill-group maps.
@@ -271,32 +311,48 @@ export default async function PlayerDetailPage({
               className="w-card hero"
               style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: "50%",
-                    background: playerColor,
-                    color: "#1a0f08",
-                    display: "grid",
-                    placeItems: "center",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 26,
-                    fontWeight: 800,
-                    letterSpacing: "-0.04em",
-                    border: "3px solid rgba(255,255,255,0.08)",
-                    flexShrink: 0,
-                    opacity: status === "inactive" ? 0.55 : 1,
-                  }}
-                >
-                  {initialsFor(playerName)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrl}
+                    alt=""
+                    style={{
+                      width: 88,
+                      height: 88,
+                      borderRadius: 16,
+                      objectFit: "cover",
+                      border: "1px solid var(--uff-line)",
+                      flexShrink: 0,
+                      opacity: status === "inactive" ? 0.6 : 1,
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 88,
+                      height: 88,
+                      borderRadius: 16,
+                      background: playerColor,
+                      color: "#1a0f08",
+                      display: "grid",
+                      placeItems: "center",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 30,
+                      fontWeight: 700,
+                      letterSpacing: "-0.04em",
+                      flexShrink: 0,
+                      opacity: status === "inactive" ? 0.55 : 1,
+                    }}
+                  >
+                    {initialsFor(playerName)}
+                  </div>
+                )}
+                <div style={{ flex: "0 1 auto", minWidth: 140, maxWidth: 380 }}>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "var(--uff-text-mute)",
+                      color: "var(--uff-text-dim)",
                       letterSpacing: "0.10em",
                       textTransform: "uppercase",
                       fontWeight: 700,
@@ -307,11 +363,8 @@ export default async function PlayerDetailPage({
                       "No position"
                     ) : (
                       <>
-                        {/* Primary position in orange so the convention reads
-                            at a glance — positions[0] = primary per src/lib/positions.ts. */}
-                        <span style={{ color: "var(--uff-orange)" }}>
-                          {positions[0]}
-                        </span>
+                        {/* Primary position in orange — positions[0] = primary. */}
+                        <span style={{ color: "var(--uff-orange)" }}>{positions[0]}</span>
                         {positions.length > 1 && (
                           <span> · {positions.slice(1).join(" / ")}</span>
                         )}
@@ -329,11 +382,119 @@ export default async function PlayerDetailPage({
                   >
                     {playerName}
                   </div>
+                  {physicals && (
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 12.5,
+                        color: "var(--uff-text-dim)",
+                        marginTop: 3,
+                      }}
+                    >
+                      {physicals}
+                    </div>
+                  )}
                   {addedByName && (
-                    <div style={{ marginTop: 4 }}>
+                    <div style={{ marginTop: 5 }}>
                       <Byline who={addedByName} verb="Added" at={player.created_at as string | null} />
                     </div>
                   )}
+                </div>
+
+                {/* Position skill-group grades — fills the row + reads at a glance. */}
+                {measuredGroups.length > 0 && (
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      alignContent: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {measuredGroups.map((g) => (
+                      <span
+                        key={g.group}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid var(--uff-line-soft)",
+                          fontSize: 11.5,
+                          color: "var(--uff-text-dim)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {g.label}
+                        <span
+                          style={{
+                            fontFamily: "var(--font-mono)",
+                            fontWeight: 700,
+                            color: gradeColor(g.grade),
+                          }}
+                        >
+                          {g.grade ?? "–"}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Verdict — overall grade + plain-language label (Build 9). */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 4,
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      color: "var(--uff-text-mute)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    Overall
+                  </span>
+                  <div
+                    title={overallGrade ? gradeLabel(overallGrade) : "Not enough data to grade yet"}
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: 12,
+                      background: gradeColor(overallGrade),
+                      color: "#0A0A0D",
+                      display: "grid",
+                      placeItems: "center",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 27,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {overallGrade ?? "–"}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      color: "var(--uff-text-dim)",
+                      textAlign: "center",
+                      maxWidth: 110,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {overallGrade ? gradeLabel(overallGrade) : "Not benchmarked"}
+                  </span>
                 </div>
               </div>
 
@@ -399,7 +560,7 @@ export default async function PlayerDetailPage({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr 1fr",
                   gap: 8,
                   marginTop: 4,
                 }}
@@ -410,38 +571,21 @@ export default async function PlayerDetailPage({
                   sub={benchmarkCount === 0 ? "none yet" : "all time"}
                 />
                 <MiniHeroStat
-                  label="Drills"
-                  value={String(drills.length)}
-                  sub="tracked"
-                />
-                <MiniHeroStat
                   label="PBs"
                   value={String(pbCount)}
                   sub={pbCount === 0 ? "—" : "all time"}
                   accent="var(--uff-orange)"
                 />
                 <MiniHeroStat
-                  label="Position"
-                  value={positions[0] ?? "—"}
-                  sub={positions.length > 1 ? `+${positions.length - 1}` : ""}
+                  label="Drills"
+                  value={String(drills.length)}
+                  sub="tracked"
                 />
               </div>
             </div>
 
             {canManage && (
-              <div className="w-card" style={{ padding: 14 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--uff-text-mute)",
-                    marginBottom: 8,
-                  }}
-                >
-                  Quick actions
-                </div>
+              <CollapsibleSection id="quick-actions" title="Quick actions">
                 <QuickRow
                   href="/benchmarks"
                   label="Run a benchmark"
@@ -457,27 +601,15 @@ export default async function PlayerDetailPage({
                   label="Edit player"
                   meta={isInjured ? "Update injury" : "Update profile"}
                 />
-              </div>
+              </CollapsibleSection>
             )}
 
-            <PlayerSkillProfileCard skills={skillProfile} playerName={playerName} />
-
-            <SkillGroupTrendCard trend={skillGroupTrend} />
+            <CollapsibleSection id="skill-profile" title="Skill profile" meta="RATED · /5">
+              <PlayerSkillProfileCard skills={skillProfile} playerName={playerName} bare />
+            </CollapsibleSection>
 
             {(player.notes as string | null) && (
-              <div className="w-card" style={{ padding: 14 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--uff-text-mute)",
-                    marginBottom: 8,
-                  }}
-                >
-                  Notes
-                </div>
+              <CollapsibleSection id="notes" title="Notes">
                 <p
                   style={{
                     margin: 0,
@@ -489,14 +621,42 @@ export default async function PlayerDetailPage({
                 >
                   {player.notes as string}
                 </p>
-              </div>
+              </CollapsibleSection>
             )}
 
-            <ObservationsFeed rows={(observationsRaw ?? []) as ObservationRowData[]} />
+            {/* Skill-group progress + observations side by side (stacks on narrow);
+                each is its own collapsible section. */}
+            <div className="pd-pair">
+              <CollapsibleSection
+                id="skill-group"
+                title="Skill-group progress"
+                meta={`${WEEKS_WINDOW} WK`}
+                pairItem
+              >
+                <SkillGroupTrendCard trend={skillGroupTrend} bare />
+              </CollapsibleSection>
+              <CollapsibleSection
+                id="observations"
+                title="Observations"
+                meta={String((observationsRaw ?? []).length)}
+                pairItem
+              >
+                <ObservationsFeed
+                  rows={(observationsRaw ?? []) as ObservationRowData[]}
+                  bare
+                />
+              </CollapsibleSection>
+            </div>
           </div>
 
           {/* History column */}
-          <PlayerHistory drills={drills} locked={locked} />
+          <CollapsibleSection
+            id="benchmark-history"
+            title="Benchmark history"
+            meta={`${drills.length} ${drills.length === 1 ? "drill" : "drills"}`}
+          >
+            <PlayerHistory drills={drills} locked={locked} bare />
+          </CollapsibleSection>
         </div>
 
         <style>{`
@@ -510,6 +670,15 @@ export default async function PlayerDetailPage({
             .player-detail-grid {
               grid-template-columns: 340px minmax(0, 1fr);
             }
+          }
+          /* Two collapsible sections side by side. Equal height when both are
+             open (each CollapsibleSection stretches via pairItem → no void);
+             a collapsed one self-shrinks to its header. */
+          .pd-pair {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            align-items: stretch;
           }
         `}</style>
       </div>

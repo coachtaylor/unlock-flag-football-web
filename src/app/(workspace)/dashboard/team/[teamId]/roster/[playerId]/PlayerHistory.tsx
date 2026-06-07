@@ -37,9 +37,13 @@ function inRange(iso: string, days: number | null): boolean {
 export default function PlayerHistory({
   drills,
   locked = [],
+  bare = false,
 }: {
   drills: PlayerHistoryDrill[];
   locked?: PlayerHistoryLocked[];
+  // When true, drop the outer title card (CollapsibleSection supplies it) and
+  // render just a compact range-chips row above the history cards.
+  bare?: boolean;
 }) {
   const [range, setRange] = useState<Range>("season");
 
@@ -53,45 +57,58 @@ export default function PlayerHistory({
       .filter((d) => d.samples.length > 0);
   }, [drills, range]);
 
+  const chips = (
+    <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+      {(
+        [
+          { id: "30d", label: "Last 30d" },
+          { id: "90d", label: "Last 90d" },
+          { id: "season", label: "Season" },
+        ] as { id: Range; label: string }[]
+      ).map((r) => (
+        <button
+          key={r.id}
+          type="button"
+          onClick={() => setRange(r.id)}
+          className={`chip ${range === r.id ? "on" : ""}`}
+          style={{ height: 26, fontSize: 11.5 }}
+        >
+          {r.label}
+        </button>
+      ))}
+    </span>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-      <div
-        className="w-card"
-        style={{
-          padding: "14px 18px",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--uff-text)" }}>
-          Benchmark history
-        </span>
-        <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>
-          · {filteredDrills.length}{" "}
-          {filteredDrills.length === 1 ? "drill" : "drills"}
-        </span>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          {(
-            [
-              { id: "30d", label: "Last 30d" },
-              { id: "90d", label: "Last 90d" },
-              { id: "season", label: "Season" },
-            ] as { id: Range; label: string }[]
-          ).map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => setRange(r.id)}
-              className={`chip ${range === r.id ? "on" : ""}`}
-              style={{ height: 26, fontSize: 11.5 }}
-            >
-              {r.label}
-            </button>
-          ))}
-        </span>
-      </div>
+      {bare ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>
+            {filteredDrills.length} {filteredDrills.length === 1 ? "drill" : "drills"} in range
+          </span>
+          {chips}
+        </div>
+      ) : (
+        <div
+          className="w-card"
+          style={{
+            padding: "14px 18px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--uff-text)" }}>
+            Benchmark history
+          </span>
+          <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>
+            · {filteredDrills.length}{" "}
+            {filteredDrills.length === 1 ? "drill" : "drills"}
+          </span>
+          {chips}
+        </div>
+      )}
 
       {drills.length === 0 ? (
         <div

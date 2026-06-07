@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/uff/icons";
 import Spark from "./Spark";
-import { ScaleBar, scaleMaxFor } from "./pulse-bits";
+import { ScaleBar, scaleMaxFor, TrendDelta } from "./pulse-bits";
 import UnpinPulseButton from "./UnpinPulseButton";
 import type { PinnedPulse, PulseSlot, PulseSuggestion } from "@/lib/dashboard/team-home-data";
 import BreakdownPulseCard from "./BreakdownPulseCard";
@@ -23,50 +23,25 @@ function fmtVal(p: PinnedPulse) {
   return Math.round(p.current).toString();
 }
 
-function isGood(p: PinnedPulse): boolean {
-  if (p.delta == null) return false;
-  return p.inverse ? p.delta < 0 : p.delta > 0;
-}
-
-// Trend pill: literal direction arrow, colored by good/bad (timed is inverse).
-// Honest about sparse data — a pulse needs ≥2 readings to claim a trend.
+// Trend pill: thin wrapper over the shared TrendDelta atom (DRY). Maps a
+// PinnedPulse onto primitive props, preserving the per-benchmarkType formatting,
+// inverse (lower-is-better) handling, unit, and "vs prior" suffix.
 function DeltaPill({ p }: { p: PinnedPulse }) {
-  const muted = { fontSize: 10.5, color: "var(--uff-text-mute)", fontFamily: "var(--font-mono)" } as const;
-  if (p.points === 0) {
-    return <span style={muted}>No readings in scope</span>;
-  }
-  if (p.points === 1) {
-    return <span style={muted}>1 reading · log again to trend</span>;
-  }
-  if (p.delta == null || p.delta === 0) {
-    return <span style={muted}>— flat vs prior</span>;
-  }
-  const good = isGood(p);
-  const mag = Math.abs(p.delta);
-  const val =
-    p.benchmarkType === "timed" ? mag.toFixed(2) : p.benchmarkType === "rated" ? mag.toFixed(1) : Math.round(mag).toString();
-  const color = good ? "var(--uff-lime)" : "var(--uff-red)";
+  const fmt = (mag: number) =>
+    p.benchmarkType === "timed"
+      ? mag.toFixed(2)
+      : p.benchmarkType === "rated"
+        ? mag.toFixed(1)
+        : Math.round(mag).toString();
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        alignSelf: "flex-start",
-        fontFamily: "var(--font-mono)",
-        fontSize: 10.5,
-        fontWeight: 700,
-        color,
-        background: good ? "rgba(194,255,61,0.12)" : "rgba(255,77,77,0.12)",
-        padding: "2px 7px",
-        borderRadius: 6,
-      }}
-    >
-      {p.delta < 0 ? "▼" : "▲"}
-      {val}
-      {p.unit}
-      <span style={{ color: "var(--uff-text-mute)", fontWeight: 500 }}>vs prior</span>
-    </span>
+    <TrendDelta
+      delta={p.delta}
+      points={p.points}
+      inverse={p.inverse}
+      formatMag={fmt}
+      unit={p.unit}
+      suffix="vs prior"
+    />
   );
 }
 
