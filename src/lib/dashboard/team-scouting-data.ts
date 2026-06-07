@@ -39,6 +39,11 @@ import {
   type PlayerHistoryDrill,
   type PlayerHistoryLocked,
 } from "@/lib/benchmarks/player-history";
+import {
+  buildSkillGroupTrend,
+  type SkillGroupTrend,
+} from "@/lib/benchmarks/skill-group-trend";
+import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { ObservationRowData } from "@/components/dashboard/ObservationsFeed";
 import type { PlayerSkill } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
 import { confidenceTier } from "@/lib/benchmarks/confidence";
@@ -159,6 +164,7 @@ export type PlayerReportCard = {
   // ── side-sheet evidence (pre-loaded) ──
   historyDrills: PlayerHistoryDrill[];
   historyLocked: PlayerHistoryLocked[];
+  skillGroupTrend: SkillGroupTrend;
   skillProfile: PlayerSkill[];
   observations: ObservationRowData[];
   recentTags: { tag: string; count: number }[];
@@ -553,7 +559,8 @@ export async function loadTeamScoutingData(
   supabase: SupabaseClient,
   teamId: string
 ): Promise<TeamScoutingData> {
-  const [focus, playersRes, profileRes, benchRes, notesRes] = await Promise.all([
+  const [focus, playersRes, profileRes, benchRes, notesRes, skillGroupMaps] =
+    await Promise.all([
     loadTeamFocus(supabase, teamId),
     supabase
       .from("team_players")
@@ -580,6 +587,8 @@ export async function loadTeamScoutingData(
       )
       .eq("team_id", teamId)
       .order("created_at", { ascending: false }),
+    // Skill-group progression maps (Build 8) — one fetch feeds every player's trend.
+    loadSkillGroupMaps(supabase, teamId),
   ]);
 
   const players = (playersRes.data ?? []) as PlayerRow[];
@@ -590,6 +599,10 @@ export async function loadTeamScoutingData(
   })[];
 
   const playerById = new Map(players.map((p) => [p.id, p]));
+
+  // Skill-group progression maps (Build 8) — shared loader, one source of truth.
+  const { drillSkills: drillSkillsMap, skillGroupById } = skillGroupMaps;
+  const trendNow = new Date();
 
   // player → group → composite (group-level score for §1/§3 grading).
   const profileByPlayer = new Map<string, Map<SkillGroup, number | null>>();
@@ -636,9 +649,16 @@ export async function loadTeamScoutingData(
   }
 
   // Build the side-sheet evidence bundle for one player from their rows.
-  function evidenceFor(playerId: string) {
+  function evidenceFor(playerId: string, positions: string[]) {
     const rows = benchesByPlayer.get(playerId) ?? [];
     const { drills, locked, benchmarkCount } = buildPlayerHistory(rows);
+    const skillGroupTrend = buildSkillGroupTrend({
+      rows,
+      drillSkills: drillSkillsMap,
+      skillGroupById,
+      positions,
+      now: trendNow,
+    });
 
     // recentTags: most-frequent benchmark tags this player picked up.
     const tagCount = new Map<string, number>();
@@ -680,6 +700,7 @@ export async function loadTeamScoutingData(
     return {
       historyDrills: drills,
       historyLocked: locked,
+      skillGroupTrend,
       skillProfile: skillsByPlayer.get(playerId) ?? [],
       observations: notesByPlayer.get(playerId) ?? [],
       recentTags,
@@ -703,7 +724,7 @@ export async function loadTeamScoutingData(
       ? measured.reduce((lo, g) => ((g.score as number) < (lo.score as number) ? g : lo))
       : null;
     const room = roomForPrimaryPosition(positions);
-    const evidence = evidenceFor(p.id);
+    const evidence = evidenceFor(p.id, positions);
     const overallGrade = scoreToGrade(overallScore);
     const verdict = buildVerdict({
       firstName: p.player_name.trim().split(/\s+/)[0] || p.player_name,
@@ -730,6 +751,7 @@ export async function loadTeamScoutingData(
       benchmarkCount: evidence.benchmarkCount,
       historyDrills: evidence.historyDrills,
       historyLocked: evidence.historyLocked,
+      skillGroupTrend: evidence.skillGroupTrend,
       skillProfile: evidence.skillProfile,
       observations: evidence.observations,
       recentTags: evidence.recentTags,

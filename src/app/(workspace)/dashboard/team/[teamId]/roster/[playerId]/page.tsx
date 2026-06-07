@@ -28,6 +28,9 @@ import InjuryModal from "@/components/roster/InjuryModal";
 import PlayerSkillProfileCard, {
   type PlayerSkill,
 } from "@/components/dashboard/widgets/PlayerSkillProfileCard";
+import SkillGroupTrendCard from "@/components/app/charts/SkillGroupTrendCard";
+import { buildSkillGroupTrend } from "@/lib/benchmarks/skill-group-trend";
+import { loadSkillGroupMaps } from "@/lib/benchmarks/skill-group-maps";
 import type { SkillGroup } from "@/lib/types/skills";
 
 function initialsFor(name: string) {
@@ -105,6 +108,7 @@ export default async function PlayerDetailPage({
     { data: benchesRaw },
     { data: observationsRaw },
     { data: skillProfileRaw },
+    skillGroupMaps,
   ] = await Promise.all([
       supabase
         .from("team_players")
@@ -139,6 +143,10 @@ export default async function PlayerDetailPage({
         .select("skill_id, skill_name, skill_group, composite_score, drill_sample_size")
         .eq("player_id", playerId)
         .eq("team_id", teamId),
+      // Skill-group progression maps (Build 8): drill→skill weights + skill→group,
+      // scoped to this team. Fed (with the benchmark rows above) into
+      // buildSkillGroupTrend for the weekly per-group composite line.
+      loadSkillGroupMaps(supabase, teamId),
     ]);
 
   if (!player || player.team_id !== teamId) notFound();
@@ -176,6 +184,16 @@ export default async function PlayerDetailPage({
       composite: Number(r.composite_score),
       sampleSize: r.drill_sample_size ?? 0,
     }));
+
+  // Skill-group progression trend (Build 8), fed the same benchmark rows the
+  // per-drill history uses + the shared team skill-group maps.
+  const skillGroupTrend = buildSkillGroupTrend({
+    rows: (benchesRaw ?? []) as { drill_id: string; assessment_date: string; rating: number | null; made_count: number | null; attempts_count: number | null }[],
+    drillSkills: skillGroupMaps.drillSkills,
+    skillGroupById: skillGroupMaps.skillGroupById,
+    positions,
+    now: new Date(),
+  });
 
   const teamColor = teamColorHex(team.team_color);
   const userInitials =
@@ -443,6 +461,8 @@ export default async function PlayerDetailPage({
             )}
 
             <PlayerSkillProfileCard skills={skillProfile} playerName={playerName} />
+
+            <SkillGroupTrendCard trend={skillGroupTrend} />
 
             {(player.notes as string | null) && (
               <div className="w-card" style={{ padding: 14 }}>

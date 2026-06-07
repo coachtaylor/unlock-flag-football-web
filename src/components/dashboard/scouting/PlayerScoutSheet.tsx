@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PlayerHistory from "@/app/(workspace)/dashboard/team/[teamId]/roster/[playerId]/PlayerHistory";
 import PlayerSkillProfileCard from "@/components/dashboard/widgets/PlayerSkillProfileCard";
+import SkillGroupTrendCard from "@/components/app/charts/SkillGroupTrendCard";
 import ObservationsFeed from "@/components/dashboard/ObservationsFeed";
 import { Avatar, GradeBadge, GroupPill, PosBadge, RelativeStandingLine } from "./ScoutingSections";
 import { gradeLabel } from "@/lib/dashboard/heat-scale";
@@ -160,6 +161,9 @@ export default function PlayerScoutSheet({
 
         {/* Per-skill profile (reused) */}
         <PlayerSkillProfileCard skills={card.skillProfile} playerName={card.name} />
+
+        {/* Skill-group progression (Build 8) */}
+        <SkillGroupTrendCard trend={card.skillGroupTrend} />
 
         {/* Per-drill trend (reused) */}
         <PlayerHistory drills={card.historyDrills} locked={card.historyLocked} />
