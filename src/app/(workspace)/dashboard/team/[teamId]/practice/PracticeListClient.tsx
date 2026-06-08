@@ -29,6 +29,7 @@ import {
 } from "@/lib/practice/actions";
 import { PastDueChip, isPlanPastDue } from "@/components/practice/PastDueBanner";
 import DeletePlanModal from "@/components/practice/DeletePlanModal";
+import { Icon } from "@/components/uff/icons";
 
 // Pencil icon used by the hero card's edit affordance. PIcon doesn't ship
 // an edit glyph yet, so inline a minimal one here rather than touching the
@@ -1187,6 +1188,7 @@ function CompactDate({ iso, pastDue }: { iso: string; pastDue?: boolean }) {
 function EmptyListState({ teamId }: { teamId: string }) {
   const [isPending, startTransition] = useTransition();
   const canManage = useContext(CanManageContext);
+  const base = useBase();
   return (
     <div
       style={{
@@ -1222,16 +1224,32 @@ function EmptyListState({ teamId }: { teamId: string }) {
         </div>
       </div>
       {canManage && (
-        <form
-          action={(fd) => {
-            startTransition(() => newPlanAndRedirect(fd));
-          }}
-        >
-          <input type="hidden" name="teamId" value={teamId} />
-          <button type="submit" className="wbtn primary" disabled={isPending}>
-            <PIcon.plus size={14} /> New practice plan
-          </button>
-        </form>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <form
+            action={(fd) => {
+              startTransition(() => newPlanAndRedirect(fd));
+            }}
+          >
+            <input type="hidden" name="teamId" value={teamId} />
+            <button type="submit" className="wbtn primary" disabled={isPending}>
+              <PIcon.plus size={14} /> New practice plan
+            </button>
+          </form>
+          <Link
+            href={`${base}/generate`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--uff-orange)",
+              textDecoration: "none",
+            }}
+          >
+            <Icon.bolt size={13} /> Or generate one with AI
+          </Link>
+        </div>
       )}
     </div>
   );

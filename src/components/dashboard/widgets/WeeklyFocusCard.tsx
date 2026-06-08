@@ -98,6 +98,12 @@ export default function WeeklyFocusCard({
               Turn these gaps into a session
             </span>
             <Link
+              href={`/dashboard/team/${teamId}/practice/generate`}
+              className="wbtn ghost"
+            >
+              <Icon.bolt size={13} /> Generate with AI
+            </Link>
+            <Link
               href={`/dashboard/team/${teamId}/practice/new`}
               className="wbtn primary"
             >

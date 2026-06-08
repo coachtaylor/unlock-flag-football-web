@@ -1,5 +1,10 @@
 "use client";
 
+// AI plan generator — preview + per-block control. Styled in the --uff-*
+// console idiom to match the planner. Logic is unchanged from the keyless
+// build: regenerate a block, swap/reject a drill, adopt a gap-proposal drill
+// into the library, then Accept → create plan → open the editor.
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -9,8 +14,11 @@ import {
   recordGenerationFeedback,
 } from "@/lib/practice/generate/actions";
 import { toSavePayload } from "@/lib/practice/generate/to-payload";
+import { Icon } from "@/components/uff/icons";
 import type { GeneratedBlock } from "@/lib/practice/generate/types";
 import type { PreviewState } from "./generate-view-types";
+
+const MONO = "var(--font-mono, 'JetBrains Mono', monospace)";
 
 function nextSundayISO(): string {
   const d = new Date();
@@ -124,64 +132,109 @@ export default function PreviewClient({
   }
 
   return (
-    <div className="mx-auto max-w-[760px] px-xl py-2xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-title font-medium text-text-primary">Review your plan</h1>
-        <span className="label-micro text-text-muted tabular-nums">{totalPlanned} min</span>
+    <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--uff-text)" }}>
+          Review your plan
+        </div>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--uff-text)",
+          }}
+        >
+          {totalPlanned}
+          <span style={{ color: "var(--uff-text-mute)", fontWeight: 500 }}> min</span>
+        </span>
       </div>
       {state.generated.usedFallback && (
-        <p className="mt-xs text-caption text-text-muted">Generated without AI assist — drills auto-selected.</p>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--uff-text-mute)" }}>
+          Generated without AI assist — drills auto-selected.
+        </p>
       )}
 
-      <div className="mt-2xl flex flex-col gap-lg">
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
         {skeleton.blocks.map((sb) => {
           const gen = blockByKey.get(sb.key);
           const cands = candByKey.get(sb.key)?.candidates ?? [];
           const isSkill = sb.kind === "skill";
           return (
-            <div key={sb.key} className="rounded-lg bg-surface-raised p-lg">
-              <div className="flex items-center justify-between">
+            <div key={sb.key} className="w-card">
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                 <div>
-                  <div className="text-body font-medium text-text-primary">{sb.name}</div>
-                  <div className="label-micro text-text-muted tabular-nums">{sb.targetMinutes} min</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--uff-text)", letterSpacing: "-0.005em" }}>
+                    {sb.name}
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 11, color: "var(--uff-text-mute)", marginTop: 2 }}>
+                    {sb.targetMinutes} min
+                  </div>
                 </div>
                 {isSkill && (
                   <button
                     type="button"
+                    className="wbtn ghost"
                     disabled={busyKey === sb.key}
                     onClick={() => handleRegenerate(sb.key)}
-                    className="rounded-pill px-md py-xs text-caption font-medium text-orange-400 disabled:opacity-50"
-                    style={{ border: "1px solid rgba(212,138,48,0.4)" }}
+                    style={{ height: 30, padding: "0 12px", fontSize: 12, color: "var(--uff-orange)" }}
                   >
                     {busyKey === sb.key ? "…" : "↻ Regenerate"}
                   </button>
                 )}
               </div>
 
-              {gen?.rationale && <p className="mt-sm text-caption text-text-secondary">{gen.rationale}</p>}
+              {gen?.rationale && (
+                <p style={{ margin: "8px 0 0", fontSize: 12.5, lineHeight: 1.5, color: "var(--uff-text-dim)" }}>
+                  {gen.rationale}
+                </p>
+              )}
 
               {/* Drills */}
               {gen && gen.drills.length > 0 && (
-                <div className="mt-md flex flex-col gap-sm">
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                   {gen.drills.map((d, i) => (
-                    <div key={`${d.drillId}-${i}`} className="rounded-md bg-surface-base p-md">
-                      <div className="flex items-center justify-between gap-sm">
-                        <span className="text-body text-text-primary">{names.get(d.drillId) ?? "Drill"}</span>
+                    <div
+                      key={`${d.drillId}-${i}`}
+                      style={{
+                        background: "var(--uff-surface-2)",
+                        border: "1px solid var(--uff-line-soft)",
+                        borderRadius: 10,
+                        padding: 12,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--uff-text)" }}>
+                          {names.get(d.drillId) ?? "Drill"}
+                        </span>
                         <button
                           type="button"
                           onClick={() => rejectDrill(sb.key, i)}
-                          className="text-caption text-text-muted"
                           aria-label="Remove drill"
+                          style={{
+                            appearance: "none",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            color: "var(--uff-text-mute)",
+                          }}
                         >
                           Remove
                         </button>
                       </div>
-                      {d.coachingCue && <p className="mt-xs text-caption text-text-secondary">{d.coachingCue}</p>}
+                      {d.coachingCue && (
+                        <p style={{ margin: "6px 0 0", fontSize: 12.5, lineHeight: 1.45, color: "var(--uff-text-dim)" }}>
+                          {d.coachingCue}
+                        </p>
+                      )}
                       {cands.length > 1 && (
                         <select
                           value={d.drillId}
                           onChange={(e) => swapDrill(sb.key, i, e.target.value)}
-                          className="mt-sm w-full rounded-md bg-surface-raised p-xs text-caption text-text-secondary"
+                          className="fr-input"
+                          style={{ marginTop: 10, width: "100%", height: 34, fontSize: 12.5 }}
                         >
                           {cands.map((c) => (
                             <option key={c.drillId} value={c.drillId}>
@@ -199,19 +252,46 @@ export default function PreviewClient({
               {gen?.gapProposals.map((g) => (
                 <div
                   key={g.skillId}
-                  className="mt-md rounded-md p-md"
-                  style={{ border: "1px dashed rgba(212,138,48,0.5)", backgroundColor: "rgba(212,138,48,0.06)" }}
+                  style={{
+                    marginTop: 12,
+                    borderRadius: 10,
+                    padding: 12,
+                    border: "1px dashed rgba(255,106,26,0.5)",
+                    background: "rgba(255,106,26,0.06)",
+                  }}
                 >
-                  <div className="label-micro text-orange-400">No drill covers this skill</div>
-                  <div className="mt-xs text-body text-text-primary">{g.name}</div>
-                  <p className="mt-xs text-caption text-text-secondary">{g.description}</p>
-                  <div className="mt-sm flex gap-sm">
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: ".12em",
+                      textTransform: "uppercase",
+                      color: "var(--uff-orange)",
+                    }}
+                  >
+                    No drill covers this skill
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 14, fontWeight: 600, color: "var(--uff-text)" }}>{g.name}</div>
+                  <p style={{ margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.45, color: "var(--uff-text-dim)" }}>
+                    {g.description}
+                  </p>
+                  <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12 }}>
                     <button
                       type="button"
                       disabled={busyKey === sb.key}
                       onClick={() => adoptGap(sb.key, g.skillId)}
-                      className="rounded-pill px-md py-xs text-caption font-medium disabled:opacity-50"
-                      style={{ backgroundColor: "#5C3308", color: "#F0B870", border: "1px solid #D48A30" }}
+                      style={{
+                        appearance: "none",
+                        cursor: busyKey === sb.key ? "not-allowed" : "pointer",
+                        opacity: busyKey === sb.key ? 0.55 : 1,
+                        padding: "8px 14px",
+                        borderRadius: 999,
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        background: "#5C3308",
+                        color: "#F0B870",
+                        border: "1px solid #D48A30",
+                      }}
                     >
                       Add to library &amp; include
                     </button>
@@ -223,7 +303,14 @@ export default function PreviewClient({
                           gapProposals: (gen as GeneratedBlock).gapProposals.filter((x) => x.skillId !== g.skillId),
                         })
                       }
-                      className="text-caption text-text-muted"
+                      style={{
+                        appearance: "none",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 12.5,
+                        color: "var(--uff-text-mute)",
+                      }}
                     >
                       Skip
                     </button>
@@ -236,43 +323,77 @@ export default function PreviewClient({
       </div>
 
       {/* Footer */}
-      <div className="mt-2xl flex flex-wrap items-center gap-md">
+      <div style={{ marginTop: 24, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
         <button
           type="button"
+          className="wbtn primary"
           disabled={accepting}
           onClick={handleAccept}
-          className="rounded-xl px-2xl py-lg text-body font-medium tracking-wide disabled:opacity-50"
-          style={{ backgroundColor: "#D48A30", color: "#FFFFFF", letterSpacing: "0.3px" }}
+          style={{ height: 44, padding: "0 22px", fontSize: 14 }}
         >
-          {accepting ? "Saving…" : "Accept & open in editor"}
+          {accepting ? "Saving…" : (<><Icon.check size={14} /> Accept &amp; open in editor</>)}
         </button>
-        <button type="button" onClick={onRegenerateAll} className="text-caption font-medium text-text-secondary">
+        <button type="button" className="wbtn ghost" onClick={onRegenerateAll} style={{ height: 44 }}>
           Regenerate all
         </button>
-        <button type="button" onClick={onDiscard} className="text-caption text-text-muted">
+        <button
+          type="button"
+          onClick={onDiscard}
+          style={{
+            appearance: "none",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 13,
+            color: "var(--uff-text-mute)",
+          }}
+        >
           Discard
         </button>
-        <div className="ml-auto flex items-center gap-sm">
-          <button
-            type="button"
-            aria-pressed={feedback === 1}
-            onClick={() => sendFeedback(1)}
-            className="text-body"
-            style={{ opacity: feedback === 1 ? 1 : 0.5 }}
-          >
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <FeedbackButton active={feedback === 1} onClick={() => sendFeedback(1)} label="Helpful">
             👍
-          </button>
-          <button
-            type="button"
-            aria-pressed={feedback === -1}
-            onClick={() => sendFeedback(-1)}
-            className="text-body"
-            style={{ opacity: feedback === -1 ? 1 : 0.5 }}
-          >
+          </FeedbackButton>
+          <FeedbackButton active={feedback === -1} onClick={() => sendFeedback(-1)} label="Not helpful">
             👎
-          </button>
+          </FeedbackButton>
         </div>
       </div>
     </div>
+  );
+}
+
+function FeedbackButton({
+  children,
+  active,
+  label,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={label}
+      onClick={onClick}
+      style={{
+        appearance: "none",
+        background: active ? "var(--uff-surface-2)" : "none",
+        border: active ? "1px solid var(--uff-line)" : "1px solid transparent",
+        borderRadius: 9,
+        width: 34,
+        height: 34,
+        fontSize: 15,
+        cursor: "pointer",
+        opacity: active ? 1 : 0.5,
+        transition: "opacity .12s, background .12s",
+      }}
+    >
+      {children}
+    </button>
   );
 }
