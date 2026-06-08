@@ -54,6 +54,7 @@ import type {
   Skill,
   SkillGroup,
 } from "@/lib/types/skills";
+import type { DrillDraft } from "@/lib/ai-drill/types";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -99,6 +100,9 @@ export type DrillFormInitial = {
   defaultReps: number;
   otherEquipment: string[];
   notes: string[];
+  // First-class coaching cues (team_drills.coaching_cues). Separate from the
+  // free-form `notes` list. Empty for drills created before build-11.
+  coachingCues: string[];
   status: Exclude<DrillStatus, "archived">;
   isDashboardPinned: boolean;
   setupDiagram: DiagramData | null;
@@ -123,6 +127,14 @@ type Props = {
   skills: Skill[];
   initial?: DrillFormInitial;
   sidebarWorkspaces?: SidebarWorkspace[];
+  // AI Drill Drafter (build-11) — all optional so existing call sites still
+  // compile. When seeded from an ai_drill_jobs draft, the create form
+  // pre-fills its state and the save path stamps source provenance + links
+  // the job to the new drill.
+  initialDraft?: DrillDraft | null;
+  aiJobId?: string | null;
+  sourceUrl?: string | null;
+  sourcePlatform?: string | null;
 };
 
 // ── Per-type default targets (used when a type is freshly toggled on) ──
@@ -199,9 +211,23 @@ const BENCH_SAMPLE: Record<BenchKind, string> = {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export default function DrillForm({ team, user, categories, skills, initial, sidebarWorkspaces }: Props) {
+export default function DrillForm({
+  team,
+  user,
+  categories,
+  skills,
+  initial,
+  sidebarWorkspaces,
+  initialDraft,
+  aiJobId,
+  sourceUrl: sourceUrlProp,
+  sourcePlatform,
+}: Props) {
   const router = useRouter();
   const isEditing = !!initial;
+  // Only seed from an AI draft when creating (no existing drill). On edit the
+  // stored drill always wins.
+  const seedDraft = !initial ? initialDraft ?? null : null;
   // Team-scoped drills base (Build 8): /dashboard/team/<id>/drills.
   const base = `/dashboard/team/${team.id}/drills`;
 
@@ -229,9 +255,13 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     return m;
   }, [skills]);
 
-  const [name, setName] = useState(initial?.drillName ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [sourceUrl, setSourceUrl] = useState(initial?.sourceUrl ?? "");
+  const [name, setName] = useState(seedDraft?.name ?? initial?.drillName ?? "");
+  const [description, setDescription] = useState(
+    seedDraft?.description ?? initial?.description ?? "",
+  );
+  const [sourceUrl, setSourceUrl] = useState(
+    sourceUrlProp ?? initial?.sourceUrl ?? "",
+  );
   const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(() => {
     // Only phase categories are managed now — the Skill category axis was
     // retired in favor of the skill taxonomy. Strip any legacy skill-cat
@@ -239,6 +269,14 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     const phaseIds = new Set(
       categories.filter((c) => c.type === "phase").map((c) => c.id),
     );
+    // Seed phase from the AI draft (create mode): the draft carries a phase
+    // slug; resolve it to the matching category id.
+    if (seedDraft?.phase) {
+      const match = categories.find(
+        (c) => c.type === "phase" && c.slug === seedDraft.phase,
+      );
+      if (match) return new Set([match.id]);
+    }
     return new Set(
       (initial?.categoryIds ?? []).filter((id) => phaseIds.has(id)),
     );
@@ -246,6 +284,12 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
   const [pickedSkills, setPickedSkills] = useState<SkillPickerValue>(
     () => {
       const m = new Map<string, DrillSkillWeight>();
+      // AI draft (create mode) supplies a flat skill_ids list — seed each as a
+      // primary (1.0) tag. Persisted drills win when editing.
+      if (seedDraft?.skill_ids?.length) {
+        for (const sid of seedDraft.skill_ids) m.set(sid, 1.0 as DrillSkillWeight);
+        return m;
+      }
       (initial?.skills ?? []).forEach((s) => m.set(s.skill_id, s.weight));
       return m;
     },
@@ -254,12 +298,30 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
     initial?.defaultDurationMin ?? 10,
   );
   const [reps, setReps] = useState<number>(initial?.defaultReps ?? 5);
-  const [otherEquipment, setOtherEquipment] = useState<string[]>(
-    initial?.otherEquipment ?? [],
-  );
+  const [otherEquipment, setOtherEquipment] = useState<string[]>(() => {
+    // AI draft (create mode): seed the manual equipment list from the draft's
+    // `other` items. Cones live on the diagram here, so when the draft reports
+    // a cone count with no diagram we carry it as a readable equipment line so
+    // the signal isn't dropped.
+    if (seedDraft) {
+      const items = [...(seedDraft.equipment?.other ?? [])];
+      const cones = seedDraft.equipment?.cones ?? null;
+      if (cones && cones > 0) {
+        items.unshift(`${cones} cone${cones === 1 ? "" : "s"}`);
+      }
+      return items;
+    }
+    return initial?.otherEquipment ?? [];
+  });
   const [newEquipment, setNewEquipment] = useState("");
   const [notes, setNotes] = useState<string[]>(initial?.notes ?? []);
   const [newNote, setNewNote] = useState("");
+  // Coaching cues — first-class for both manual and AI drills. Seeded from the
+  // AI draft on create, the persisted drill's cues on edit, else empty. The UI
+  // is a simple textarea (one cue per non-empty line) near the description.
+  const [coachingCues, setCoachingCues] = useState<string[]>(
+    seedDraft?.coaching_cues ?? initial?.coachingCues ?? [],
+  );
 
   // Seed scope + the three parallel position groups from the stored canonical
   // config (benchmarkConfigRaw). Web now authors the full scope-grouped shape
@@ -508,7 +570,15 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
       category_id: primaryCategoryId,
       additional_category_ids: orderedCatIds,
       description: description.trim() || null,
-      source_url: sourceUrl.trim() || null,
+      source_url: sourceUrl.trim() || sourceUrlProp || null,
+      // Provenance (build-11). AI-drafted drills are stamped with the platform
+      // + original author; manual drills stay `manual` with null provenance.
+      source: aiJobId ? "ai" : "manual",
+      source_platform: aiJobId ? sourcePlatform ?? null : null,
+      source_author: seedDraft?.source_author ?? null,
+      coaching_cues: coachingCues
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0),
       benchmark_type: legacyBenchType,
       benchmark_types: usesBench ? types : [],
       benchmark_config: cfgToSave,
@@ -612,6 +682,15 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
         setSubmitting(false);
         return;
       }
+    }
+
+    // When this drill was created from an AI draft job, back-link the job to
+    // the new drill so the job row points at its published result.
+    if (aiJobId && drillId) {
+      await supabase
+        .from("ai_drill_jobs")
+        .update({ drill_id: drillId })
+        .eq("id", aiJobId);
     }
 
     router.refresh();
@@ -748,6 +827,33 @@ export default function DrillForm({ team, user, categories, skills, initial, sid
                     placeholder="https://…"
                     value={sourceUrl}
                     onChange={(e) => setSourceUrl(e.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  label="Coaching cues (one per line)"
+                  optional="optional"
+                >
+                  <textarea
+                    className="fr-input"
+                    style={{
+                      height: 92,
+                      padding: "12px 14px",
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      lineHeight: 1.45,
+                    }}
+                    placeholder={
+                      "Eyes downfield\nDrive off the back hip\nSnap the wrist"
+                    }
+                    value={coachingCues.join("\n")}
+                    onChange={(e) =>
+                      setCoachingCues(e.target.value.split("\n"))
+                    }
+                    onBlur={() =>
+                      setCoachingCues((prev) =>
+                        prev.map((c) => c.trim()).filter((c) => c.length > 0),
+                      )
+                    }
                   />
                 </FormField>
               </Section>

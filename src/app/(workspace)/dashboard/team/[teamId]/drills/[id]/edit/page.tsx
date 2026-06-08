@@ -43,7 +43,7 @@ export default async function EditDrillPage({ params }: Props) {
   const { data: drill } = await supabase
     .from("team_drills")
     .select(
-      "id, drill_name, category_id, additional_category_ids, description, source_url, benchmark_type, benchmark_types, benchmark_config, is_dashboard_pinned, default_duration_min, default_reps, status, setup_diagram, setup_instructions, equipment, notes, team_id",
+      "id, drill_name, category_id, additional_category_ids, description, source_url, benchmark_type, benchmark_types, benchmark_config, is_dashboard_pinned, default_duration_min, default_reps, status, setup_diagram, setup_instructions, equipment, notes, coaching_cues, team_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -148,6 +148,11 @@ export default async function EditDrillPage({ params }: Props) {
     otherEquipment,
     notes: Array.isArray(drill.notes)
       ? (drill.notes as unknown[]).filter(
+          (x): x is string => typeof x === "string",
+        )
+      : [],
+    coachingCues: Array.isArray(drill.coaching_cues)
+      ? (drill.coaching_cues as unknown[]).filter(
           (x): x is string => typeof x === "string",
         )
       : [],

@@ -52,7 +52,7 @@ export default async function DrillsPage({
         .maybeSingle(),
       supabase
         .from("teams")
-        .select("id, team_name, format, team_color, league_id")
+        .select("id, team_name, format, team_color, league_id, plan")
         .eq("id", teamId)
         .maybeSingle(),
       supabase
@@ -88,6 +88,9 @@ export default async function DrillsPage({
     ) || isLeagueAdmin;
 
   const base = `/dashboard/team/${teamId}/drills`;
+  // AI Drill Drafter (build-11) is a Pro feature. The "Paste a link" entry is
+  // shown to everyone but disabled with a "Pro" hint off-plan.
+  const isPro = (team.plan as string | null) === "pro";
 
   const [{ data: categories }, { data: drills }] = await Promise.all([
     supabase
@@ -321,9 +324,44 @@ export default async function DrillsPage({
                 <Icon.search size={13} /> Browse library
               </Link>
               {canManage && (
-                <Link href={`${base}/new`} className="wbtn primary">
-                  <Icon.plus size={13} /> New drill
-                </Link>
+                <>
+                  {isPro ? (
+                    <Link href={`${base}/paste`} className="wbtn primary">
+                      <Icon.plus size={13} /> Paste a link
+                    </Link>
+                  ) : (
+                    <span
+                      className="wbtn primary"
+                      aria-disabled="true"
+                      title="AI drafting is a Pro feature"
+                      style={{
+                        opacity: 0.5,
+                        cursor: "not-allowed",
+                        pointerEvents: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <Icon.plus size={13} /> Paste a link
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          letterSpacing: ".12em",
+                          padding: "1px 5px",
+                          borderRadius: 4,
+                          background: "rgba(255,255,255,0.14)",
+                        }}
+                      >
+                        PRO
+                      </span>
+                    </span>
+                  )}
+                  <Link href={`${base}/new`} className="wbtn">
+                    <Icon.plus size={13} /> Build by hand
+                  </Link>
+                </>
               )}
             </>
           }
@@ -338,6 +376,7 @@ export default async function DrillsPage({
             canManage={canManage}
             base={base}
             teamId={teamId}
+            plan={(team.plan as string | null) ?? null}
           />
         </div>
       </div>

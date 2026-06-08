@@ -91,7 +91,7 @@ export default async function DrillDetailPage({ params }: Props) {
   const { data: drill } = await supabase
     .from("team_drills")
     .select(
-      "id, team_id, drill_name, description, source_url, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, preset_drill_id, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by, updated_by"
+      "id, team_id, drill_name, description, source_url, source_platform, source_author, coaching_cues, benchmark_type, benchmark_types, benchmark_config, default_duration_min, default_reps, status, preset_drill_id, setup_diagram, setup_instructions, equipment, notes, category_id, additional_category_ids, is_dashboard_pinned, created_at, updated_at, created_by, updated_by"
     )
     .eq("id", id)
     .maybeSingle();
@@ -277,6 +277,17 @@ export default async function DrillDetailPage({ params }: Props) {
   const description = (drill.description as string | null) ?? "";
   const sourceUrl = (drill.source_url as string | null) ?? "";
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : "";
+  // Provenance (build-11). The credit line renders only when a platform is set
+  // (AI-drafted drills); manual drills leave these null.
+  const sourcePlatform = (drill.source_platform as string | null) ?? null;
+  const sourceAuthor = (drill.source_author as string | null) ?? null;
+  // First-class coaching cues column — distinct from the free-form `notes`
+  // list rendered as "Coaching cues" above. Shown as a bulleted list when set.
+  const coachingCues = Array.isArray(drill.coaching_cues)
+    ? (drill.coaching_cues as unknown[]).filter(
+        (x): x is string => typeof x === "string" && x.trim().length > 0,
+      )
+    : [];
   // Pin state (Branch 2): backed by team_dashboard_pins. A drill is
   // "pinned" if any slice exists for it. Multi-type drills get richer
   // metadata for the PinButton popover.
@@ -406,6 +417,9 @@ export default async function DrillDetailPage({ params }: Props) {
             durationMin={(drill.default_duration_min as number | null) ?? 0}
             notesCount={notes.length}
             lastRunDate={lastRunDate}
+            sourcePlatform={sourcePlatform}
+            sourceAuthor={sourceAuthor}
+            sourceUrl={sourceUrl}
           />
 
           {/* Body — two columns at desktop */}
@@ -576,6 +590,36 @@ export default async function DrillDetailPage({ params }: Props) {
                   </div>
                 )}
               </DetailSection>
+
+              {coachingCues.length > 0 && (
+                <DetailSection
+                  label="Coaching cues"
+                  meta={`${coachingCues.length} cue${coachingCues.length === 1 ? "" : "s"}`}
+                >
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: 20,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    {coachingCues.map((c, i) => (
+                      <li
+                        key={i}
+                        style={{
+                          fontSize: 13.5,
+                          color: "var(--uff-text)",
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </DetailSection>
+              )}
 
               <DetailSection label="Setup" meta={equipmentSummary}>
                 <div
@@ -804,6 +848,9 @@ function Hero({
   durationMin,
   notesCount,
   lastRunDate,
+  sourcePlatform,
+  sourceAuthor,
+  sourceUrl,
 }: {
   drillName: string;
   description: string;
@@ -817,6 +864,9 @@ function Hero({
   durationMin: number;
   notesCount: number;
   lastRunDate: string | null;
+  sourcePlatform: string | null;
+  sourceAuthor: string | null;
+  sourceUrl: string;
 }) {
   return (
     <div
@@ -910,6 +960,41 @@ function Hero({
             >
               {description}
             </p>
+          )}
+          {sourcePlatform && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: ".12em",
+                color: "var(--uff-text-mute)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                VIA {sourcePlatform.toUpperCase()}
+                {sourceAuthor ? ` · ${sourceAuthor}` : ""}
+              </span>
+              {sourceUrl && (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    color: "var(--uff-orange)",
+                    textDecoration: "underline dotted",
+                    textUnderlineOffset: 2,
+                    letterSpacing: ".04em",
+                  }}
+                >
+                  View source ↗
+                </a>
+              )}
+            </div>
           )}
           {types.length > 0 && (
             <div
