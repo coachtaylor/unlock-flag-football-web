@@ -1,4 +1,4 @@
-import type { SkillGroup } from "@/lib/drills/skill-groups";
+import type { SkillGroup } from "@/lib/types/skills";
 
 export type PracticeFormat = "5v5" | "7v7";
 
