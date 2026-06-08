@@ -1,0 +1,51 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { generatePlan } from "@/lib/practice/generate/actions";
+import GenerateDialog from "./GenerateDialog";
+import PreviewClient from "./PreviewClient";
+import type { GeneratePageData, PreviewState } from "./generate-view-types";
+
+export default function GenerateClient({ data }: { data: GeneratePageData }) {
+  const router = useRouter();
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate(input: { totalMinutes: number; format: "5v5" | "7v7"; skillIds: string[] }) {
+    setPending(true);
+    setError(null);
+    const res = await generatePlan({ teamId: data.teamId, ...input });
+    setPending(false);
+    if (!res.ok) {
+      setError(
+        res.error === "no_skills"
+          ? "No scouting data yet — run a benchmark first to unlock generation."
+          : "Couldn't generate a plan. Try again.",
+      );
+      return;
+    }
+    setPreview({
+      generationId: res.generationId,
+      skeleton: res.skeleton,
+      blockCandidates: res.blockCandidates,
+      generated: res.generated,
+    });
+  }
+
+  if (preview) {
+    return (
+      <PreviewClient
+        teamId={data.teamId}
+        state={preview}
+        onRegenerateAll={() => setPreview(null)}
+        onDiscard={() => router.push(`/dashboard/team/${data.teamId}/practice`)}
+      />
+    );
+  }
+
+  return (
+    <GenerateDialog data={data} pending={pending} error={error} onGenerate={handleGenerate} />
+  );
+}
