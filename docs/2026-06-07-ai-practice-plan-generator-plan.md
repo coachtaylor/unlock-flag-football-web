@@ -103,12 +103,13 @@ git add package.json package-lock.json vitest.config.ts
 git commit -m "chore: add vitest test runner"
 ```
 
-### Task 2: Add Anthropic SDK + shared client
+### Task 2: Add Anthropic SDK + shared client (NO API key needed yet)
 
 **Files:**
 - Modify: `package.json`
 - Create: `src/lib/ai/anthropic.ts`
-- Modify: `.env.local` (local only; not committed)
+
+> **No key required to build or test the whole feature.** `getAnthropic()` is lazy — it only throws when *called* (inside `callPlanModel`), which `generatePlan`/`regenerateBlock` wrap in try/catch → `buildFallbackPlan`. So with no key the entire flow runs via the rules-only fallback (top-ranked candidate per block + generic rationale), and every unit test in Phases 1–3 is offline. **Do NOT add the key here.** The key + live-quality verification is the final task (Task 21).
 
 - [ ] **Step 1: Install SDK**
 
@@ -122,7 +123,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 let client: Anthropic | null = null;
 
-/** Lazily-constructed server-only Anthropic client. Throws if the key is missing. */
+/** Lazily-constructed server-only Anthropic client. Throws if the key is missing
+ *  (callers catch this and fall back to a rules-only plan). */
 export function getAnthropic(): Anthropic {
   if (client) return client;
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -132,11 +134,7 @@ export function getAnthropic(): Anthropic {
 }
 ```
 
-- [ ] **Step 3: Add the key locally**
-
-Add `ANTHROPIC_API_KEY=...` to `.env.local` (do NOT commit; do NOT print the key in chat).
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add package.json package-lock.json src/lib/ai/anthropic.ts
@@ -1631,8 +1629,8 @@ git commit -m "feat(generate): in-editor AI fill + editor mapping helper"
 
 ### Task 20: Full verification + docs
 
-- [ ] **Step 1:** `npx tsc --noEmit && npm test && npm run lint` — all clean.
-- [ ] **Step 2:** Manual end-to-end in-browser for each of the 3 entry points → generate → per-block edits (regenerate/swap/reject) → gap adoption → accept → plan opens in editor → save → appears on practice list → feeds dashboard cadence/drill-mix.
+- [ ] **Step 1:** `npx tsc --noEmit && npm test && npm run lint` — all clean. (Runs fully offline, **no API key**.)
+- [ ] **Step 2:** Manual end-to-end in-browser **without an API key** for each of the 3 entry points → generate → per-block edits (regenerate/swap/reject) → gap adoption → accept → plan opens in editor → save → appears on practice list → feeds dashboard cadence/drill-mix. Expect every generation to use the **rules-only fallback** (top-ranked candidate per block, generic "Targets … (auto-selected)" rationale, empty cues). This confirms all plumbing works before any key is added.
 - [ ] **Step 3:** Confirm the user ran migration 102 in Supabase (engine fails soft without it, but `ai_plan_generations` inserts error until applied).
 - [ ] **Step 4:** Add "Web Build 12 — AI Practice Plan Generator" to `unlock-web/CLAUDE.md` Build status and the root `CLAUDE.md` Build Status.
 - [ ] **Step 5: Commit**
@@ -1641,6 +1639,17 @@ git commit -m "feat(generate): in-editor AI fill + editor mapping helper"
 git add unlock-web/CLAUDE.md CLAUDE.md
 git commit -m "docs: record Web Build 12 — AI practice plan generator"
 ```
+
+### Task 21: Add API key + verify live AI quality (FINAL — only when ready)
+
+> Everything above works keyless via fallback. This task is purely to switch on the AI *quality* layer (smart selection, written cues, real rationale). Do it last.
+
+- [ ] **Step 1:** Add `ANTHROPIC_API_KEY=...` to `unlock-web/.env.local` (do NOT commit; do NOT print the key in chat). Restart `npm run dev` so the env var loads.
+- [ ] **Step 2:** Verify `MODEL_ID` in `src/lib/practice/generate/ai.ts` against the current Claude model id (use the `claude-api` skill / Anthropic docs — do not assume).
+- [ ] **Step 3:** Generate a plan in-browser and confirm the AI path (not fallback) ran: each skill block has a non-empty coaching cue + a specific, data-referencing rationale; `ai_plan_generations.used_fallback = false` and `input_tokens`/`output_tokens`/`model` are populated for the new row.
+- [ ] **Step 4:** Exercise a gap: target a skill with no published drill → confirm the AI returns a sensible `gapProposal` and "Add to library & include" creates a `team_drills` draft with `source = 'ai'`.
+- [ ] **Step 5:** Regenerate a single block → confirm only that block changes and the new drill differs from the excluded one. Submit 👍/👎 → confirm `ai_plan_generations.user_feedback` persists.
+- [ ] **Step 6:** No commit needed (no tracked files change). `.env.local` stays local; production key goes in Vercel env settings.
 
 ---
 
