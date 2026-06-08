@@ -62,6 +62,7 @@ import type {
   SkillGroup,
 } from "@/lib/types/skills";
 import { requestDrillDraft } from "@/lib/ai-drill/actions";
+import { isAiDrillMockEnabled, runMockDraft } from "@/lib/ai-drill/mock";
 import type {
   DrillDraft,
   DrillJob,
@@ -440,6 +441,18 @@ export default function DrillForm({
     setTranscribeError(null);
     setTranscribeStatus("queued");
     setTranscribing(true);
+
+    // Dev-only: exercise the draft→form UX without the backend pipeline (no
+    // edge function, vendor, Realtime, or API key). Steps through the same
+    // status states the live handler would, then applies the draft in place.
+    // Disabled in production builds — see lib/ai-drill/mock.ts.
+    if (isAiDrillMockEnabled()) {
+      const draft = await runMockDraft(setTranscribeStatus);
+      applyDraft(draft);
+      setTranscribeStatus("ready");
+      setTranscribing(false);
+      return;
+    }
 
     const res = await requestDrillDraft(team.id, url);
     if (!res.ok) {
