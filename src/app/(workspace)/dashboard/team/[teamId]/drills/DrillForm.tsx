@@ -897,14 +897,13 @@ export default function DrillForm({
           style={{ maxWidth: 1180, margin: "0 auto", width: "100%" }}
         >
           <div className="drillform-grid">
-            {/* LEFT — sectioned form */}
+            {/* LEFT — sectioned form: each Section is its own raised card so
+                they read as discrete steps instead of one blended surface. */}
             <div
-              className="w-card"
               style={{
-                padding: 28,
                 display: "flex",
                 flexDirection: "column",
-                gap: 28,
+                gap: 16,
               }}
             >
               <Section
@@ -1401,7 +1400,10 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <section
+      className="w-card"
+      style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}
+    >
       <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
         <span
           style={{
@@ -1429,7 +1431,7 @@ function Section({
         <div
           style={{
             fontSize: 12,
-            color: "var(--uff-text)",
+            color: "var(--uff-text-dim)",
             lineHeight: 1.5,
             paddingLeft: 28,
           }}
@@ -1440,7 +1442,7 @@ function Section({
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
