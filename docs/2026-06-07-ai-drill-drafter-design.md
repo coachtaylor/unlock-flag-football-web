@@ -242,3 +242,17 @@ A heavy team at 50 drills/mo ≈ ~$2.50 COGS — negligible against a per-team P
 - Chosen extraction vendor: current pricing, ToS, and whether it returns frames as well as transcript.
 - Edge Function insert-trigger vs `pg_cron` poll — which is cleaner for the worker trigger.
 - Mobile parity surface for the paste-a-link entry + live-status component.
+
+## 14. Field priority (decided 2026-06-08)
+
+The AI draft's value is **not** evenly weighted. Build/verify in this order:
+
+1. **Description + coaching cues — the core value.** These are why the feature exists; they must be good. Handled in the MVP (text fields, no taxonomy dependency).
+2. **Diagram** (Phase 2 fast-follow, §10).
+3. **Phase + skills — lowest priority.** It's acceptable if the AI mis-tags or omits phase/skills; the coach sets them in the form. Do **not** block or over-invest here.
+
+## 15. Follow-up — phase/skill data model (deferred, low priority)
+
+Discovered during migration apply (2026-06-08): **a drill's phase is NOT a `team_drills` column.** Phases are `drill_categories` rows with `category_type='phase'`, linked to a drill via the **`team_drill_categories(drill_id, category_id)` junction**. Skills are the `skills` table joined via **`drill_skills`**. The migration 105 RPC was corrected to read phases from `drill_categories` (committed `8c9f9ea`).
+
+**Not yet verified:** the end-to-end phase-**save** path — edge `draft.ts` returns a phase id → `from-link` → `DrillForm.save()` must persist it as a `team_drill_categories` junction row (and skills as `drill_skills` rows), not a column write. This is a **low-priority** follow-up per §14 — the coach can set phase/skills in the form regardless. Verify in a fresh session before relying on auto-tagging; until then, treat AI phase/skills as best-effort suggestions, not guaranteed saves.
