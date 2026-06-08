@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch planning docs (specs, designs, plans, build prompts) — kept local, not versioned
+docs/
+prompts/
