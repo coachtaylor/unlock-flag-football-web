@@ -114,6 +114,14 @@ export default async function PracticeEditPage({
     for (const r of drillSkillRows ?? []) focusDrillIds.add(r.drill_id as string);
   }
 
+  // Hydrate each drill with its tagged player skills (same loader the drill
+  // library + detail view use) so the picker can show + filter/sort by skill.
+  const { loadDrillSkills } = await import("@/lib/drills/skills-data");
+  const skillsByDrill = await loadDrillSkills(
+    supabase,
+    (drills ?? []).map((d) => d.id as string),
+  );
+
   const drillCatalog: DrillCatalogEntry[] = (drills ?? []).map((d) => {
     const types = new Set<string>((d.benchmark_types as string[] | null) ?? []);
     if (d.benchmark_type) types.add(d.benchmark_type as string);
@@ -126,6 +134,7 @@ export default async function PracticeEditPage({
       default_reps: (d.default_reps as number | null) ?? null,
       description: (d.description as string | null) ?? null,
       trainsFocus: focusDrillIds.has(d.id as string),
+      skills: skillsByDrill[d.id as string] ?? [],
     };
   });
 
