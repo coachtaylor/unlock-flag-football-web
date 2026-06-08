@@ -32,7 +32,7 @@ export default async function NewDrillPage({
         .maybeSingle(),
       supabase
         .from("teams")
-        .select("id, team_name, team_color, league_id")
+        .select("id, team_name, team_color, league_id, plan")
         .eq("id", teamId)
         .maybeSingle(),
       supabase
@@ -107,6 +107,7 @@ export default async function NewDrillPage({
       categories={cats}
       skills={skillsCatalog.skills}
       sidebarWorkspaces={sidebarWorkspaces}
+      teamPlan={(team.plan as string | null) ?? null}
     />
   );
 }

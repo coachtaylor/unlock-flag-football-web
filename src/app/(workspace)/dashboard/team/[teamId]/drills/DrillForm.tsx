@@ -13,7 +13,14 @@
 // chrome wrapping a second time.
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import DashTopBar from "@/components/dashboard/DashTopBar";
@@ -54,7 +61,13 @@ import type {
   Skill,
   SkillGroup,
 } from "@/lib/types/skills";
-import type { DrillDraft } from "@/lib/ai-drill/types";
+import { requestDrillDraft } from "@/lib/ai-drill/actions";
+import type {
+  DrillDraft,
+  DrillJob,
+  DrillJobStatus,
+} from "@/lib/ai-drill/types";
+import { resolvePlatform } from "@/lib/ai-drill/platform";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -127,14 +140,10 @@ type Props = {
   skills: Skill[];
   initial?: DrillFormInitial;
   sidebarWorkspaces?: SidebarWorkspace[];
-  // AI Drill Drafter (build-11) — all optional so existing call sites still
-  // compile. When seeded from an ai_drill_jobs draft, the create form
-  // pre-fills its state and the save path stamps source provenance + links
-  // the job to the new drill.
-  initialDraft?: DrillDraft | null;
-  aiJobId?: string | null;
-  sourceUrl?: string | null;
-  sourcePlatform?: string | null;
+  // AI Drill Drafter (build-11). Pro teams get an opt-in "Transcribe drill"
+  // prompt inside this form, next to the source-link field. Non-pro teams
+  // (or null plan) just don't see the button — the link field stays for all.
+  teamPlan?: string | null;
 };
 
 // ── Per-type default targets (used when a type is freshly toggled on) ──
@@ -218,16 +227,11 @@ export default function DrillForm({
   skills,
   initial,
   sidebarWorkspaces,
-  initialDraft,
-  aiJobId,
-  sourceUrl: sourceUrlProp,
-  sourcePlatform,
+  teamPlan,
 }: Props) {
   const router = useRouter();
   const isEditing = !!initial;
-  // Only seed from an AI draft when creating (no existing drill). On edit the
-  // stored drill always wins.
-  const seedDraft = !initial ? initialDraft ?? null : null;
+  const isPro = teamPlan === "pro";
   // Team-scoped drills base (Build 8): /dashboard/team/<id>/drills.
   const base = `/dashboard/team/${team.id}/drills`;
 
@@ -255,13 +259,9 @@ export default function DrillForm({
     return m;
   }, [skills]);
 
-  const [name, setName] = useState(seedDraft?.name ?? initial?.drillName ?? "");
-  const [description, setDescription] = useState(
-    seedDraft?.description ?? initial?.description ?? "",
-  );
-  const [sourceUrl, setSourceUrl] = useState(
-    sourceUrlProp ?? initial?.sourceUrl ?? "",
-  );
+  const [name, setName] = useState(initial?.drillName ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [sourceUrl, setSourceUrl] = useState(initial?.sourceUrl ?? "");
   const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(() => {
     // Only phase categories are managed now — the Skill category axis was
     // retired in favor of the skill taxonomy. Strip any legacy skill-cat
@@ -269,59 +269,43 @@ export default function DrillForm({
     const phaseIds = new Set(
       categories.filter((c) => c.type === "phase").map((c) => c.id),
     );
-    // Seed phase from the AI draft (create mode): the draft carries a phase
-    // slug; resolve it to the matching category id.
-    if (seedDraft?.phase) {
-      const match = categories.find(
-        (c) => c.type === "phase" && c.slug === seedDraft.phase,
-      );
-      if (match) return new Set([match.id]);
-    }
     return new Set(
       (initial?.categoryIds ?? []).filter((id) => phaseIds.has(id)),
     );
   });
-  const [pickedSkills, setPickedSkills] = useState<SkillPickerValue>(
-    () => {
-      const m = new Map<string, DrillSkillWeight>();
-      // AI draft (create mode) supplies a flat skill_ids list — seed each as a
-      // primary (1.0) tag. Persisted drills win when editing.
-      if (seedDraft?.skill_ids?.length) {
-        for (const sid of seedDraft.skill_ids) m.set(sid, 1.0 as DrillSkillWeight);
-        return m;
-      }
-      (initial?.skills ?? []).forEach((s) => m.set(s.skill_id, s.weight));
-      return m;
-    },
-  );
+  const [pickedSkills, setPickedSkills] = useState<SkillPickerValue>(() => {
+    const m = new Map<string, DrillSkillWeight>();
+    (initial?.skills ?? []).forEach((s) => m.set(s.skill_id, s.weight));
+    return m;
+  });
   const [duration, setDuration] = useState<number>(
     initial?.defaultDurationMin ?? 10,
   );
   const [reps, setReps] = useState<number>(initial?.defaultReps ?? 5);
-  const [otherEquipment, setOtherEquipment] = useState<string[]>(() => {
-    // AI draft (create mode): seed the manual equipment list from the draft's
-    // `other` items. Cones live on the diagram here, so when the draft reports
-    // a cone count with no diagram we carry it as a readable equipment line so
-    // the signal isn't dropped.
-    if (seedDraft) {
-      const items = [...(seedDraft.equipment?.other ?? [])];
-      const cones = seedDraft.equipment?.cones ?? null;
-      if (cones && cones > 0) {
-        items.unshift(`${cones} cone${cones === 1 ? "" : "s"}`);
-      }
-      return items;
-    }
-    return initial?.otherEquipment ?? [];
-  });
+  const [otherEquipment, setOtherEquipment] = useState<string[]>(
+    initial?.otherEquipment ?? [],
+  );
   const [newEquipment, setNewEquipment] = useState("");
   const [notes, setNotes] = useState<string[]>(initial?.notes ?? []);
   const [newNote, setNewNote] = useState("");
   // Coaching cues — first-class for both manual and AI drills. Seeded from the
-  // AI draft on create, the persisted drill's cues on edit, else empty. The UI
-  // is a simple textarea (one cue per non-empty line) near the description.
+  // persisted drill's cues on edit, else empty. AI transcription fills these in
+  // place via applyDraft(). The UI is a simple textarea (one cue per line).
   const [coachingCues, setCoachingCues] = useState<string[]>(
-    seedDraft?.coaching_cues ?? initial?.coachingCues ?? [],
+    initial?.coachingCues ?? [],
   );
+
+  // ── AI transcription (build-11) — opt-in Pro prompt, runs on click only ──
+  // aiContributed flips true the moment a draft is applied; it stamps source
+  // provenance on save. sourceAuthor/sourcePlatform are captured from the draft
+  // + URL. jobId links the ai_drill_jobs row to the new drill after save.
+  const [aiContributed, setAiContributed] = useState(false);
+  const [sourceAuthor, setSourceAuthor] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeStatus, setTranscribeStatus] =
+    useState<DrillJobStatus | null>(null);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
 
   // Seed scope + the three parallel position groups from the stored canonical
   // config (benchmarkConfigRaw). Web now authors the full scope-grouped shape
@@ -379,6 +363,133 @@ export default function DrillForm({
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Live channel for the active transcription job; torn down on unmount and on
+  // every terminal status so we never leak subscriptions.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const teardownChannel = useCallback(() => {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+  }, []);
+  useEffect(() => teardownChannel, [teardownChannel]);
+
+  // Apply an AI draft to the EXISTING form state in place. Never replaces the
+  // whole form — fills description / coaching cues / equipment, sets the name
+  // only when still empty, and best-effort maps phase + skills (low priority;
+  // never blocks if the mapping is unavailable).
+  const applyDraft = useCallback(
+    (draft: DrillDraft) => {
+      setDescription(draft.description ?? "");
+      setCoachingCues(draft.coaching_cues ?? []);
+      // Name only fills an empty field — never clobber what the coach typed.
+      setName((prev) => (prev.trim() ? prev : draft.name ?? ""));
+      setSourceAuthor(draft.source_author ?? null);
+
+      // Equipment: cones live on the diagram here, so a draft cone count with
+      // no diagram is carried as a readable equipment line so the signal isn't
+      // dropped. Other items append.
+      const equip = [...(draft.equipment?.other ?? [])];
+      const cones = draft.equipment?.cones ?? null;
+      if (cones && cones > 0) {
+        equip.unshift(`${cones} cone${cones === 1 ? "" : "s"}`);
+      }
+      if (equip.length > 0) {
+        setOtherEquipment((prev) => {
+          const seen = new Set(prev.map((e) => e.toLowerCase()));
+          const add = equip.filter((e) => !seen.has(e.toLowerCase()));
+          return add.length > 0 ? [...prev, ...add] : prev;
+        });
+      }
+
+      // Best-effort phase mapping: resolve the draft slug to a phase category.
+      const phaseMatch = draft.phase
+        ? categories.find((c) => c.type === "phase" && c.slug === draft.phase)
+        : null;
+      if (phaseMatch) setSelectedCatIds(new Set([phaseMatch.id]));
+
+      // Best-effort skill mapping: only tag skills whose group the resolved
+      // phase actually offers. If no phase resolved, skip — leave skills for
+      // the coach. Each draft skill seeds as a primary (1.0) tag.
+      if (draft.skill_ids?.length) {
+        const phaseSlugs = phaseMatch ? [phaseMatch.slug] : [];
+        const allowed = new Set(allowedSkillGroupsForPhases(phaseSlugs));
+        const next = new Map<string, DrillSkillWeight>();
+        for (const sid of draft.skill_ids) {
+          const g = skillGroupById.get(sid);
+          if (g && allowed.has(g)) next.set(sid, 1.0 as DrillSkillWeight);
+        }
+        if (next.size > 0) setPickedSkills(next);
+      }
+
+      setAiContributed(true);
+    },
+    [categories, skillGroupById],
+  );
+
+  // Kick off a transcription on explicit click (never on mount). Validates the
+  // URL, calls the server action, then subscribes to the job row for live
+  // status + the finished draft.
+  const runTranscribe = useCallback(async () => {
+    if (!isPro || transcribing) return;
+    const url = sourceUrl.trim();
+    if (!url || resolvePlatform(url) === null) return;
+
+    teardownChannel();
+    setTranscribeError(null);
+    setTranscribeStatus("queued");
+    setTranscribing(true);
+
+    const res = await requestDrillDraft(team.id, url);
+    if (!res.ok) {
+      setTranscribeError(res.error);
+      setTranscribeStatus(null);
+      setTranscribing(false);
+      return;
+    }
+    setJobId(res.jobId);
+
+    const channel = supabase
+      .channel("ai_drill_jobs:" + res.jobId)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "ai_drill_jobs",
+          filter: "id=eq." + res.jobId,
+        },
+        (payload) => {
+          const job = payload.new as DrillJob;
+          setTranscribeStatus(job.status);
+          if (job.status === "ready" && job.draft_json) {
+            applyDraft(job.draft_json);
+            setTranscribing(false);
+            teardownChannel();
+          }
+          if (job.status === "no_signal" || job.status === "failed") {
+            setTranscribeError(
+              "Couldn't read this clip — fill the drill in by hand.",
+            );
+            setTranscribing(false);
+            teardownChannel();
+          }
+        },
+      )
+      .subscribe();
+    channelRef.current = channel;
+  }, [isPro, transcribing, sourceUrl, team.id, teardownChannel, applyDraft]);
+
+  const transcribeUrlValid = resolvePlatform(sourceUrl.trim()) !== null;
+  const transcribeStatusText =
+    transcribeStatus === "extracting"
+      ? "Reading the clip…"
+      : transcribeStatus === "drafting"
+        ? "Drafting…"
+        : transcribeStatus === "queued"
+          ? "Starting…"
+          : null;
 
   const toggleCat = (id: string) => {
     const n = new Set(selectedCatIds);
@@ -570,12 +681,15 @@ export default function DrillForm({
       category_id: primaryCategoryId,
       additional_category_ids: orderedCatIds,
       description: description.trim() || null,
-      source_url: sourceUrl.trim() || sourceUrlProp || null,
-      // Provenance (build-11). AI-drafted drills are stamped with the platform
-      // + original author; manual drills stay `manual` with null provenance.
-      source: aiJobId ? "ai" : "manual",
-      source_platform: aiJobId ? sourcePlatform ?? null : null,
-      source_author: seedDraft?.source_author ?? null,
+      // Source link saves for EVERYONE — manual drills included.
+      source_url: sourceUrl.trim() || null,
+      // Provenance (build-11). Drills the in-form AI transcription contributed
+      // to are stamped with the platform + original author; everything else
+      // stays `manual` with null provenance.
+      source: aiContributed ? "ai" : "manual",
+      source_platform:
+        aiContributed ? resolvePlatform(sourceUrl.trim()) ?? null : null,
+      source_author: aiContributed ? sourceAuthor : null,
       coaching_cues: coachingCues
         .map((c) => c.trim())
         .filter((c) => c.length > 0),
@@ -684,13 +798,13 @@ export default function DrillForm({
       }
     }
 
-    // When this drill was created from an AI draft job, back-link the job to
-    // the new drill so the job row points at its published result.
-    if (aiJobId && drillId) {
+    // When an AI transcription contributed to this drill, back-link the job to
+    // the saved drill so the job row points at its published result.
+    if (jobId && drillId) {
       await supabase
         .from("ai_drill_jobs")
         .update({ drill_id: drillId })
-        .eq("id", aiJobId);
+        .eq("id", jobId);
     }
 
     router.refresh();
@@ -821,13 +935,85 @@ export default function DrillForm({
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </FormField>
-                <FormField label="Source URL" optional="YouTube, blog, PDF">
-                  <input
-                    className="fr-input"
-                    placeholder="https://…"
-                    value={sourceUrl}
-                    onChange={(e) => setSourceUrl(e.target.value)}
-                  />
+                <FormField
+                  label="Source link"
+                  optional="YouTube, TikTok, Instagram, blog"
+                >
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      className="fr-input"
+                      style={{ flex: 1 }}
+                      placeholder="https://…"
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                    />
+                    {isPro && transcribeUrlValid && (
+                      <button
+                        type="button"
+                        className="wbtn primary"
+                        onClick={runTranscribe}
+                        disabled={transcribing}
+                        style={{
+                          whiteSpace: "nowrap",
+                          opacity: transcribing ? 0.55 : 1,
+                          cursor: transcribing ? "default" : "pointer",
+                        }}
+                      >
+                        {transcribing ? "Transcribing…" : "Transcribe drill"}
+                      </button>
+                    )}
+                  </div>
+                  {isPro && transcribeUrlValid && !transcribing && !transcribeError && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--uff-text-mute)",
+                        lineHeight: 1.5,
+                        marginTop: 2,
+                      }}
+                    >
+                      Pull a draft from this clip — description, coaching cues,
+                      and equipment auto-fill. You review everything before
+                      saving.
+                    </div>
+                  )}
+                  {transcribeStatusText && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--uff-orange)",
+                        lineHeight: 1.5,
+                        marginTop: 2,
+                      }}
+                    >
+                      {transcribeStatusText}
+                    </div>
+                  )}
+                  {transcribeError && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "#FF8A8A",
+                        lineHeight: 1.5,
+                        marginTop: 2,
+                      }}
+                    >
+                      {transcribeError}
+                    </div>
+                  )}
+                  {aiContributed && !transcribing && !transcribeError && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--uff-lime)",
+                        lineHeight: 1.5,
+                        marginTop: 2,
+                      }}
+                    >
+                      Draft applied — review and edit the fields below before
+                      saving.
+                    </div>
+                  )}
                 </FormField>
                 <FormField
                   label="Coaching cues (one per line)"

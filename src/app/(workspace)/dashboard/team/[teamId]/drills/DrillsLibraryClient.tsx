@@ -122,15 +122,12 @@ export default function DrillsLibraryClient({
   canManage,
   base,
   teamId,
-  plan,
 }: {
   drills: DrillRow[];
   canManage: boolean;
   // Team-scoped base path, e.g. /dashboard/team/<id>/drills (Build 8).
   base: string;
   teamId: string;
-  // Team plan tier (build-11). "Paste a link" AI drafting is Pro-only.
-  plan?: string | null;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -345,7 +342,7 @@ export default function DrillsLibraryClient({
 
         <div className="drill-lib-cards">
           {rows.length === 0 ? (
-            <EmptyState onClear={clearAll} base={base} plan={plan} />
+            <EmptyState onClear={clearAll} base={base} />
           ) : (
             <div className="drill-card-grid">
               {rows.map((d) => (
@@ -1351,16 +1348,7 @@ function DrillCard({
 }
 
 // ── Empty state ───────────────────────────────────────────────────────
-function EmptyState({
-  onClear,
-  base,
-  plan,
-}: {
-  onClear: () => void;
-  base: string;
-  plan?: string | null;
-}) {
-  const isPro = plan === "pro";
+function EmptyState({ onClear, base }: { onClear: () => void; base: string }) {
   return (
     <div
       className="w-card"
@@ -1392,18 +1380,6 @@ function EmptyState({
         >
           Clear filters
         </button>
-        {isPro && (
-          <Link
-            href={`${base}/paste`}
-            style={{
-              color: "var(--uff-orange)",
-              textDecoration: "none",
-              fontSize: 12,
-            }}
-          >
-            Paste a link →
-          </Link>
-        )}
         <Link
           href={`${base}/new`}
           style={{
@@ -1412,7 +1388,7 @@ function EmptyState({
             fontSize: 12,
           }}
         >
-          Build by hand →
+          Create a new drill →
         </Link>
       </div>
     </div>
