@@ -59,7 +59,10 @@ export async function fetchCandidatesBySkill(
   const { data, error } = await supabase
     .from("drill_skills")
     .select(
-      "skill_id, weight, team_drills!inner(id, drill_name, status, team_id, benchmark_type, drill_categories(name))",
+      // Qualify the FK: team_drills has two paths to drill_categories (the
+      // category_id FK + the team_drill_categories junction), so an unqualified
+      // embed is ambiguous (PGRST201). Column is category_name, not name.
+      "skill_id, weight, team_drills!inner(id, drill_name, status, team_id, benchmark_type, drill_categories!team_drills_category_id_fkey(category_name))",
     )
     .in("skill_id", skillIds)
     .eq("team_drills.team_id", teamId)
@@ -72,11 +75,11 @@ export async function fetchCandidatesBySkill(
   for (const row of (data ?? []) as Record<string, unknown>[]) {
     const d = row.team_drills as Record<string, unknown> | null;
     if (!d) continue;
-    const cat = d.drill_categories as { name?: string } | null;
+    const cat = d.drill_categories as { category_name?: string } | null;
     const c: CandidateDrill = {
       drillId: d.id as string,
       drillName: d.drill_name as string,
-      categoryName: cat?.name ?? null,
+      categoryName: cat?.category_name ?? null,
       benchmarkTypes: d.benchmark_type ? [d.benchmark_type as string] : [],
       defaultDurationMin: null,
       skillWeight: Number(row.weight ?? 1),
