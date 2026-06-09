@@ -83,7 +83,9 @@ export default function GenerateWizard({
   const patch = (p: Partial<WizardValue>) => setV((s) => ({ ...s, ...p }));
 
   const hasAnyBlock = v.includeWarmup || v.includeSkills || v.includeTeamSituational || v.customBlocks.length > 0;
-  const nextDisabled = (step === 1 && !v.title.trim()) || (step === 2 && !hasAnyBlock);
+  const customNamesMissing = v.customBlocks.some((c) => !c.name.trim());
+  const nextDisabled =
+    (step === 1 && !v.title.trim()) || (step === 2 && (!hasAnyBlock || customNamesMissing));
 
   const goNext = () => {
     if (nextDisabled) return;
@@ -368,9 +370,15 @@ function BasicsStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
 
 function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardValue>) => void }) {
   const setCustom = (next: CustomBlockSpec[]) => patch({ customBlocks: next });
-  const addCustom = () => setCustom([...v.customBlocks, { name: "", source: "conditioning", share: 1 }]);
+  const labelForSource = (src: CatSlug | "manual") => (src === "manual" ? "" : WEB_CAT_DEFS[src].label);
+  const addCustom = () => setCustom([...v.customBlocks, { name: WEB_CAT_DEFS.conditioning.label, source: "conditioning", share: 1 }]);
   const updateCustom = (i: number, p: Partial<CustomBlockSpec>) =>
     setCustom(v.customBlocks.map((c, j) => (j === i ? { ...c, ...p } : c)));
+  // Switching the source auto-updates the name UNLESS the coach typed their own.
+  const changeSource = (i: number, c: CustomBlockSpec, src: CatSlug | "manual") => {
+    const untouched = !c.name.trim() || c.name.trim() === labelForSource(c.source);
+    updateCustom(i, { source: src, name: untouched ? labelForSource(src) : c.name });
+  };
   const removeCustom = (i: number) => setCustom(v.customBlocks.filter((_, j) => j !== i));
 
   return (
@@ -386,64 +394,71 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
       <Field label="Custom blocks" hint="Add a closer like conditioning or agilities.">
         {v.customBlocks.length > 0 && (
           <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-            {v.customBlocks.map((c, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  padding: 10,
-                  borderRadius: 13,
-                  background: "var(--uff-surface-2)",
-                  border: "1px solid var(--uff-line-soft)",
-                }}
-              >
-                <input
-                  className="fr-input"
-                  value={c.name}
-                  onChange={(e) => updateCustom(i, { name: e.target.value })}
-                  placeholder="Block name"
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <select
-                  className="fr-input"
-                  value={c.source}
-                  onChange={(e) => updateCustom(i, { source: e.target.value as CatSlug | "manual" })}
-                  style={{ width: 150, flexShrink: 0 }}
-                  aria-label="Fill from category"
-                >
-                  {PHASE_CATS.map((slug) => (
-                    <option key={slug} value={slug}>
-                      {WEB_CAT_DEFS[slug].label}
-                    </option>
-                  ))}
-                  <option value="manual">Manual (no fill)</option>
-                </select>
-                <button
-                  type="button"
-                  aria-label="Remove block"
-                  onClick={() => removeCustom(i)}
-                  className="gw-press"
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 11,
-                    flexShrink: 0,
-                    background: "transparent",
-                    border: "1px solid var(--uff-line)",
-                    color: "var(--uff-text-mute)",
-                    cursor: "pointer",
-                    fontSize: 18,
-                    lineHeight: 1,
-                    display: "grid",
-                    placeItems: "center",
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {v.customBlocks.map((c, i) => {
+              const missing = !c.name.trim();
+              return (
+                <div key={i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "var(--uff-surface-2)",
+                      border: `1px solid ${missing ? "var(--uff-orange)" : "var(--uff-line-soft)"}`,
+                    }}
+                  >
+                    <input
+                      className="fr-input"
+                      value={c.name}
+                      onChange={(e) => updateCustom(i, { name: e.target.value })}
+                      placeholder={c.source === "manual" ? "Name this block" : "Block name"}
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <select
+                      className="fr-input"
+                      value={c.source}
+                      onChange={(e) => changeSource(i, c, e.target.value as CatSlug | "manual")}
+                      style={{ width: 150, flexShrink: 0 }}
+                      aria-label="Fill from category"
+                    >
+                      {PHASE_CATS.map((slug) => (
+                        <option key={slug} value={slug}>
+                          {WEB_CAT_DEFS[slug].label}
+                        </option>
+                      ))}
+                      <option value="manual">Manual (no fill)</option>
+                    </select>
+                    <button
+                      type="button"
+                      aria-label="Remove block"
+                      onClick={() => removeCustom(i)}
+                      className="gw-press"
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 11,
+                        flexShrink: 0,
+                        background: "transparent",
+                        border: "1px solid var(--uff-line)",
+                        color: "var(--uff-text-mute)",
+                        cursor: "pointer",
+                        fontSize: 18,
+                        lineHeight: 1,
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {missing && (
+                    <span style={{ fontSize: 11.5, color: "var(--uff-orange)", paddingLeft: 2 }}>Enter a name for this block.</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         <button type="button" className="wbtn ghost gw-press" onClick={addCustom} style={{ marginTop: 14, height: 42 }}>

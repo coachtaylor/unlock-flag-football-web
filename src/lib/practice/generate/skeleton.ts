@@ -1,6 +1,6 @@
 import type { WizardInput, Skeleton, SkeletonBlock, TargetSkill } from "./types";
 import { TEAM_SITUATIONAL_SLUGS } from "./types";
-import type { CatSlug } from "@/components/uff-web/drills/atoms";
+import { WEB_CAT_DEFS, type CatSlug } from "@/components/uff-web/drills/atoms";
 
 const MIN_SKILL_BLOCK = 12;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
@@ -33,7 +33,9 @@ export function buildSkeleton(input: WizardInput): Skeleton {
   }
   input.customBlocks.forEach((cb, i) => {
     pending.push({
-      key: `custom-${i + 1}`, name: cb.name || `Block ${i + 1}`, kind: "custom",
+      key: `custom-${i + 1}`,
+      name: cb.name?.trim() || (cb.source !== "manual" ? WEB_CAT_DEFS[cb.source].label : `Block ${i + 1}`),
+      kind: "custom",
       skillIds: [], categorySlugs: cb.source === "manual" ? [] : [cb.source], share: Math.max(0.1, cb.share),
     });
   });
