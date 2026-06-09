@@ -1,10 +1,12 @@
 "use client";
 
-// AI plan generator — guided 5-step wizard (Basics → Blocks → Skills → Density
-// → Review), styled in the --uff-* console idiom to match the coach console.
-// Stays on one page; a numbered stepper + footer drive a linear step machine
-// (you can jump back to any visited step). Step 5's Next is "Generate" and
-// hands a full WizardInput (minus teamId) to onGenerate.
+// AI plan generator — guided wizard (Basics → Blocks → Skills → Density →
+// Review) in a two-column layout: a live "plan rail" on the left that builds
+// as you go, the active step on the right. Styled in the --uff-* console idiom
+// but tuned for craft: crisp orange selection (no muddy fills), selectable
+// cards instead of iOS toggles, editorial type, tabular numerals, scoped
+// transitions and tactile press states. Step 5's Next is "Generate" and hands
+// a full WizardInput (minus teamId) to onGenerate.
 
 import { Fragment, useState } from "react";
 import Link from "next/link";
@@ -12,7 +14,7 @@ import { scoreToGrade } from "@/lib/dashboard/heat-scale";
 import { Icon } from "@/components/uff/icons";
 import { PHASE_CATS, WEB_CAT_DEFS, type CatSlug } from "@/components/uff-web/drills/atoms";
 import type { WizardInput, TargetSkill, CustomBlockSpec } from "@/lib/practice/generate/types";
-import type { GeneratePageData } from "./generate-view-types";
+import type { GeneratePageData, SelectableSkill } from "./generate-view-types";
 
 type WizardValue = Omit<WizardInput, "teamId">;
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -24,6 +26,34 @@ const MAX_MINUTES = 180;
 const MIN_DRILLS = 1;
 const MAX_DRILLS = 4;
 const MONO = "var(--font-mono, 'JetBrains Mono', monospace)";
+
+// Crisp selected treatment — replaces the old muddy #5C3308 brown fill.
+const SEL_BG = "rgba(255,106,26,0.10)";
+const SEL_BORDER = "var(--uff-orange)";
+
+const STYLE = `
+.gw-root{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+.gw-num{font-variant-numeric:tabular-nums;}
+.gw-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
+.gw-step{order:1;}
+.gw-rail{order:2;}
+@media(min-width:880px){
+  .gw-grid{grid-template-columns:236px minmax(0,1fr);gap:22px;}
+  .gw-rail{grid-column:1;grid-row:1;position:sticky;top:16px;}
+  .gw-step{grid-column:2;grid-row:1;}
+}
+.gw-press{transition-property:transform,background-color,border-color,color,box-shadow;transition-duration:130ms;transition-timing-function:ease-out;}
+.gw-press:active{transform:scale(.975);}
+.gw-card-enter{animation:gwIn .22s ease-out both;}
+@keyframes gwIn{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:none;}}
+.gw-balance{text-wrap:balance;}
+.gw-pretty{text-wrap:pretty;}
+@media(prefers-reduced-motion:reduce){
+  .gw-card-enter{animation:none;}
+  .gw-press{transition:none;}
+  .gw-press:active{transform:none;}
+}
+`;
 
 export default function GenerateWizard({
   data,
@@ -51,7 +81,6 @@ export default function GenerateWizard({
     autoWaterBreaks: true,
   });
 
-  // Skill step is skipped entirely when the Skills block is turned off.
   const order: Step[] = v.includeSkills ? [1, 2, 3, 4, 5] : [1, 2, 4, 5];
   const idx = order.indexOf(step);
   const isLast = idx === order.length - 1;
@@ -66,21 +95,22 @@ export default function GenerateWizard({
     else setStep(order[idx + 1]);
   };
   const goBack = () => idx > 0 && setStep(order[idx - 1]);
-  // Jump straight to a previously-visited step (stepper nodes + review pencils).
   const goToStep = (s: Step) => {
     const ti = order.indexOf(s);
     if (ti !== -1 && ti <= idx) setStep(s);
   };
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", width: "100%" }}>
+    <div className="gw-root" style={{ maxWidth: 900, margin: "0 auto", width: "100%" }}>
+      <style>{STYLE}</style>
+
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
         <span
           style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
+            width: 36,
+            height: 36,
+            borderRadius: 11,
             display: "grid",
             placeItems: "center",
             background: "rgba(255,106,26,0.14)",
@@ -89,74 +119,193 @@ export default function GenerateWizard({
             flexShrink: 0,
           }}
         >
-          <Icon.bolt size={16} />
+          <Icon.bolt size={17} />
         </span>
         <div>
-          <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: "-0.015em", color: "var(--uff-text)" }}>
+          <h1 className="gw-balance" style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--uff-text)" }}>
             Build a practice plan
           </h1>
-          <p style={{ margin: "2px 0 0", fontSize: 12.5, lineHeight: 1.45, color: "var(--uff-text-mute)" }}>
-            We&apos;ll fill every block from your library &amp; scouting weaknesses — with water breaks.
+          <p className="gw-pretty" style={{ margin: "2px 0 0", fontSize: 12.5, lineHeight: 1.45, color: "var(--uff-text-mute)" }}>
+            Answer a few questions — we fill every block from your library and scouting weaknesses.
           </p>
         </div>
       </div>
 
-      {/* Stepper */}
-      <Stepper order={order} current={step} onJump={goToStep} />
+      <div className="gw-grid">
+        <PlanRail className="gw-rail" v={v} step={step} order={order} onJump={goToStep} />
 
-      <div className="w-card" style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 16, padding: 22 }}>
-        {step === 1 && <BasicsStep v={v} patch={patch} />}
-        {step === 2 && <BlocksStep v={v} patch={patch} />}
-        {step === 3 && <SkillsStep v={v} patch={patch} data={data} />}
-        {step === 4 && <DensityStep v={v} patch={patch} />}
-        {step === 5 && <ReviewStep v={v} onEdit={goToStep} />}
+        <div className="gw-step">
+          <div key={step} className="w-card gw-card-enter" style={{ display: "flex", flexDirection: "column", gap: 20, padding: 24 }}>
+            <StepHead n={order.indexOf(step) + 1} total={order.length} label={LABELS[step]} />
 
-        {error && (
-          <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--uff-orange)" }}>
-            {error}
-          </p>
-        )}
+            {step === 1 && <BasicsStep v={v} patch={patch} />}
+            {step === 2 && <BlocksStep v={v} patch={patch} />}
+            {step === 3 && <SkillsStep v={v} patch={patch} data={data} />}
+            {step === 4 && <DensityStep v={v} patch={patch} />}
+            {step === 5 && <ReviewStep v={v} onEdit={goToStep} />}
 
-        {/* Footer */}
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderTop: "1px solid var(--uff-line-soft)",
-            paddingTop: 18,
-            marginTop: 2,
-          }}
-        >
-          <button
-            type="button"
-            className="wbtn ghost"
-            onClick={goBack}
-            disabled={idx === 0 || pending}
-            style={{ height: 44, opacity: idx === 0 ? 0.4 : 1 }}
-          >
-            <Icon.arrowLeft size={14} /> Back
-          </button>
-          <div style={{ fontSize: 11, color: "var(--uff-text-mute)", fontFamily: MONO }}>
-            {idx + 1} / {order.length}
-          </div>
-          <button
-            type="button"
-            className="wbtn primary"
-            onClick={goNext}
-            disabled={nextDisabled || pending}
-            style={{ height: 44, justifyContent: "center", minWidth: 148 }}
-          >
-            {isLast ? (
-              pending ? "Generating…" : (<><Icon.bolt size={14} /> Generate</>)
-            ) : (
-              <>Next <Icon.arrowRight size={14} /></>
+            {error && (
+              <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--uff-orange)" }}>
+                {error}
+              </p>
             )}
-          </button>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderTop: "1px solid var(--uff-line-soft)",
+                paddingTop: 18,
+              }}
+            >
+              <button
+                type="button"
+                className="wbtn ghost gw-press"
+                onClick={goBack}
+                disabled={idx === 0 || pending}
+                style={{ height: 44, opacity: idx === 0 ? 0.4 : 1 }}
+              >
+                <Icon.arrowLeft size={14} /> Back
+              </button>
+              <button
+                type="button"
+                className="wbtn primary gw-press"
+                onClick={goNext}
+                disabled={nextDisabled || pending}
+                style={{ height: 44, justifyContent: "center", minWidth: 150 }}
+              >
+                {isLast ? (
+                  pending ? "Generating…" : (<><Icon.bolt size={14} /> Generate plan</>)
+                ) : (
+                  <>Next <Icon.arrowRight size={14} /></>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// --------------------------------------------------------------------------
+// Live plan rail
+// --------------------------------------------------------------------------
+
+function PlanRail({
+  className,
+  v,
+  step,
+  order,
+  onJump,
+}: {
+  className?: string;
+  v: WizardValue;
+  step: Step;
+  order: Step[];
+  onJump: (s: Step) => void;
+}) {
+  const blocks: { label: string; sub: string }[] = [];
+  if (v.includeWarmup) blocks.push({ label: "Warm-up", sub: "Activation" });
+  if (v.includeSkills) blocks.push({ label: "Skills", sub: v.skills.length ? `${v.skills.length} targeted` : "Auto — weakest" });
+  if (v.includeTeamSituational) blocks.push({ label: "Team / Situational", sub: "Off · Def · Scrim" });
+  v.customBlocks.forEach((c) => blocks.push({ label: c.name.trim() || "Custom block", sub: c.source === "manual" ? "Manual" : WEB_CAT_DEFS[c.source as CatSlug].label }));
+
+  const dateLabel = formatDate(v.practiceDate);
+
+  return (
+    <aside className={`w-card ${className ?? ""}`} style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div>
+        <Eyebrow>Your plan</Eyebrow>
+        <div className="gw-balance" style={{ marginTop: 6, fontSize: 17, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--uff-text)", lineHeight: 1.2 }}>
+          {v.title.trim() || "Untitled practice"}
+        </div>
+        <div style={{ marginTop: 3, fontSize: 12, color: "var(--uff-text-mute)" }}>
+          {dateLabel} · <span style={{ color: "var(--uff-text-dim)" }}>{v.format}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span className="gw-num" style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--uff-orange)" }}>
+          {v.totalMinutes}
+        </span>
+        <span style={{ fontSize: 12, color: "var(--uff-text-mute)", fontWeight: 600 }}>min total</span>
+      </div>
+
+      <div style={{ height: 1, background: "var(--uff-line-soft)" }} />
+
+      {/* Block timeline */}
+      <div>
+        <Eyebrow>Blocks</Eyebrow>
+        {blocks.length === 0 ? (
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--uff-text-mute)" }}>No blocks selected yet.</p>
+        ) : (
+          <ol style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            {blocks.map((b, i) => (
+              <Fragment key={`${b.label}-${i}`}>
+                <li style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <span
+                    className="gw-num"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                      marginTop: 1,
+                      display: "grid",
+                      placeItems: "center",
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "var(--uff-orange)",
+                      background: "rgba(255,106,26,0.12)",
+                      border: "1px solid rgba(255,106,26,0.3)",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--uff-text)", lineHeight: 1.3 }}>{b.label}</span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--uff-text-mute)" }}>{b.sub}</span>
+                  </span>
+                </li>
+                {v.autoWaterBreaks && i < blocks.length - 1 && (
+                  <li style={{ display: "flex", gap: 10, alignItems: "center", padding: "1px 0 1px 4px" }}>
+                    <Droplet />
+                    <span style={{ fontSize: 11, color: "var(--uff-text-mute)" }}>Water break</span>
+                  </li>
+                )}
+              </Fragment>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <div style={{ height: 1, background: "var(--uff-line-soft)" }} />
+
+      <button
+        type="button"
+        className="gw-press"
+        onClick={() => onJump(4)}
+        disabled={order.indexOf(4) > order.indexOf(step)}
+        style={{
+          appearance: "none",
+          background: "none",
+          border: "none",
+          padding: 0,
+          textAlign: "left",
+          cursor: order.indexOf(4) <= order.indexOf(step) ? "pointer" : "default",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 12, color: "var(--uff-text-mute)" }}>Drills / block</span>
+        <span className="gw-num" style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: "var(--uff-text)" }}>{v.drillsPerBlock}</span>
+      </button>
+    </aside>
   );
 }
 
@@ -180,7 +329,7 @@ function BasicsStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
         <Field label="Date" style={{ flex: "1 1 160px" }}>
           <input
             type="date"
-            className="fr-input"
+            className="fr-input gw-num"
             value={v.practiceDate}
             onChange={(e) => patch({ practiceDate: e.target.value })}
             style={{ width: "100%" }}
@@ -189,7 +338,7 @@ function BasicsStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
       </div>
       <Hairline />
       <Field label="Total time">
-        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16 }}>
           <StepperButton
             label="Decrease time"
             disabled={v.totalMinutes <= MIN_MINUTES}
@@ -209,12 +358,12 @@ function BasicsStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
       </Field>
       <Hairline />
       <Field label="Format">
-        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-          {(["5v5", "7v7"] as const).map((f) => (
-            <Chip key={f} on={v.format === f} onClick={() => patch({ format: f })}>
-              {f}
-            </Chip>
-          ))}
+        <div style={{ marginTop: 12 }}>
+          <Segmented
+            options={[{ value: "5v5", label: "5v5" }, { value: "7v7", label: "7v7" }]}
+            value={v.format}
+            onChange={(f) => patch({ format: f as "5v5" | "7v7" })}
+          />
         </div>
       </Field>
     </>
@@ -230,17 +379,17 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
 
   return (
     <>
-      <Field label="Core blocks" hint="Ordered warm-up → skills → team / situational. Toggle off what you don't need.">
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          <ToggleRow on={v.includeWarmup} onClick={() => patch({ includeWarmup: !v.includeWarmup })} label="Warm-up" hint="Activation & movement prep" />
-          <ToggleRow on={v.includeSkills} onClick={() => patch({ includeSkills: !v.includeSkills })} label="Skills" hint="Targeted skill work from scouting" />
-          <ToggleRow on={v.includeTeamSituational} onClick={() => patch({ includeTeamSituational: !v.includeTeamSituational })} label="Team / Situational" hint="Offense, defense & scrimmage" />
+      <Field label="Core blocks" hint="Run in order: warm-up → skills → team. Tap to include or skip.">
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <SelectCard on={v.includeWarmup} onClick={() => patch({ includeWarmup: !v.includeWarmup })} title="Warm-up" hint="Activation & movement prep" />
+          <SelectCard on={v.includeSkills} onClick={() => patch({ includeSkills: !v.includeSkills })} title="Skills" hint="Targeted skill work from scouting" />
+          <SelectCard on={v.includeTeamSituational} onClick={() => patch({ includeTeamSituational: !v.includeTeamSituational })} title="Team / Situational" hint="Offense, defense & scrimmage" />
         </div>
       </Field>
       <Hairline />
       <Field label="Custom blocks" hint="Add a closer like conditioning or agilities.">
         {v.customBlocks.length > 0 && (
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
             {v.customBlocks.map((c, i) => (
               <div
                 key={i}
@@ -249,7 +398,7 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
                   gap: 8,
                   alignItems: "center",
                   padding: 10,
-                  borderRadius: 12,
+                  borderRadius: 13,
                   background: "var(--uff-surface-2)",
                   border: "1px solid var(--uff-line-soft)",
                 }}
@@ -265,7 +414,7 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
                   className="fr-input"
                   value={c.source}
                   onChange={(e) => updateCustom(i, { source: e.target.value as CatSlug | "manual" })}
-                  style={{ width: 148, flexShrink: 0 }}
+                  style={{ width: 150, flexShrink: 0 }}
                   aria-label="Fill from category"
                 >
                   {PHASE_CATS.map((slug) => (
@@ -279,17 +428,20 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
                   type="button"
                   aria-label="Remove block"
                   onClick={() => removeCustom(i)}
+                  className="gw-press"
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 11,
                     flexShrink: 0,
                     background: "transparent",
                     border: "1px solid var(--uff-line)",
                     color: "var(--uff-text-mute)",
                     cursor: "pointer",
-                    fontSize: 17,
+                    fontSize: 18,
                     lineHeight: 1,
+                    display: "grid",
+                    placeItems: "center",
                   }}
                 >
                   ×
@@ -298,7 +450,7 @@ function BlocksStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
             ))}
           </div>
         )}
-        <button type="button" className="wbtn ghost" onClick={addCustom} style={{ marginTop: 12, height: 40 }}>
+        <button type="button" className="wbtn ghost gw-press" onClick={addCustom} style={{ marginTop: 14, height: 42 }}>
           <Icon.plus size={13} /> Add block
         </button>
       </Field>
@@ -327,13 +479,10 @@ function SkillsStep({
     return (
       <Field label="Target skills">
         <div className="w-card subdued" style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
+          <p className="gw-pretty" style={{ margin: 0, fontSize: 13, color: "var(--uff-text-dim)", lineHeight: 1.5 }}>
             No skills in your library yet. You can still generate with warm-up and team blocks.
           </p>
-          <Link
-            href={`/dashboard/team/${data.teamId}/benchmarks`}
-            style={{ fontSize: 13, fontWeight: 600, color: "var(--uff-orange)", textDecoration: "none" }}
-          >
+          <Link href={`/dashboard/team/${data.teamId}/benchmarks`} style={{ fontSize: 13, fontWeight: 600, color: "var(--uff-orange)", textDecoration: "none" }}>
             Go to benchmarks →
           </Link>
         </div>
@@ -341,11 +490,9 @@ function SkillsStep({
     );
   }
 
-  // Suggested = the team's weakest measured skills (in weakest-first order).
   const byId = new Map(data.availableSkills.map((s) => [s.skillId, s]));
-  const suggested = data.suggestedSkillIds.map((id) => byId.get(id)).filter((s): s is TargetSkill => !!s);
+  const suggested = data.suggestedSkillIds.map((id) => byId.get(id)).filter((s): s is SelectableSkill => !!s);
   const suggestedSet = new Set(data.suggestedSkillIds);
-  // Everything else: measured (weakest first) then unmeasured (alphabetical).
   const others = data.availableSkills
     .filter((s) => !suggestedSet.has(s.skillId))
     .sort((a, b) => {
@@ -356,41 +503,41 @@ function SkillsStep({
     });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <Field
-        label={`Target skills${v.skills.length ? ` · ${v.skills.length} selected` : ""}`}
-        hint="Pick what to work on — or leave empty to auto-target your weakest skills."
-      >
+    <Field
+      label={`Target skills${v.skills.length ? ` · ${v.skills.length} selected` : ""}`}
+      hint="Pick what to drill — or leave empty to auto-target your weakest skills."
+    >
+      <div style={{ marginTop: 14, maxHeight: 460, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: 2 }}>
         {suggested.length > 0 && (
-          <div style={{ marginTop: 12 }}>
+          <div>
             <GroupLabel>Suggested — your weak spots</GroupLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {suggested.map((s) => (
-                <SkillRow key={s.skillId} s={s} on={selectedIds.has(s.skillId)} suggested onToggle={() => toggle(s)} />
+                <SkillRow key={s.skillId} s={s} on={selectedIds.has(s.skillId)} weak onToggle={() => toggle(s)} />
               ))}
             </div>
           </div>
         )}
         {others.length > 0 && (
-          <div style={{ marginTop: suggested.length ? 16 : 12 }}>
+          <div>
             <GroupLabel>All skills</GroupLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {others.map((s) => (
                 <SkillRow key={s.skillId} s={s} on={selectedIds.has(s.skillId)} onToggle={() => toggle(s)} />
               ))}
             </div>
           </div>
         )}
-      </Field>
-    </div>
+      </div>
+    </Field>
   );
 }
 
 function DensityStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardValue>) => void }) {
   return (
     <>
-      <Field label="Drills per block">
-        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 14 }}>
+      <Field label="Drills per block" hint="How many drills to slot into each block.">
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16 }}>
           <StepperButton
             label="Fewer drills"
             disabled={v.drillsPerBlock <= MIN_DRILLS}
@@ -410,12 +557,13 @@ function DensityStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVa
       </Field>
       <Hairline />
       <Field label="Water breaks">
-        <div style={{ marginTop: 10 }}>
-          <ToggleRow
+        <div style={{ marginTop: 14 }}>
+          <SelectCard
             on={v.autoWaterBreaks}
             onClick={() => patch({ autoWaterBreaks: !v.autoWaterBreaks })}
-            label="Auto water breaks"
+            title="Auto water breaks"
             hint="A 3-minute break roughly every 30 minutes"
+            icon={<Droplet />}
           />
         </div>
       </Field>
@@ -431,9 +579,12 @@ function ReviewStep({ v, onEdit }: { v: WizardValue; onEdit: (s: Step) => void }
   v.customBlocks.forEach((c) => blocks.push(c.name.trim() || "Custom block"));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <p className="gw-pretty" style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--uff-text-mute)", lineHeight: 1.45 }}>
+        Looks good? Generate to draft the plan — you can tweak every block before saving.
+      </p>
       <ReviewRow label="Title" value={v.title.trim() || "Practice"} onEdit={() => onEdit(1)} />
-      <ReviewRow label="Date" value={v.practiceDate} mono onEdit={() => onEdit(1)} />
+      <ReviewRow label="Date" value={formatDate(v.practiceDate)} onEdit={() => onEdit(1)} />
       <ReviewRow label="Length" value={`${v.totalMinutes} min`} mono onEdit={() => onEdit(1)} />
       <ReviewRow label="Format" value={v.format} mono onEdit={() => onEdit(1)} />
       <ReviewRow label="Blocks" value={blocks.join("  →  ")} onEdit={() => onEdit(2)} />
@@ -445,89 +596,32 @@ function ReviewStep({ v, onEdit }: { v: WizardValue; onEdit: (s: Step) => void }
         />
       )}
       <ReviewRow label="Drills / block" value={String(v.drillsPerBlock)} mono onEdit={() => onEdit(4)} />
-      <ReviewRow label="Water breaks" value={v.autoWaterBreaks ? "On" : "Off"} onEdit={() => onEdit(4)} />
+      <ReviewRow label="Water breaks" value={v.autoWaterBreaks ? "On" : "Off"} onEdit={() => onEdit(4)} last />
     </div>
   );
 }
 
 // --------------------------------------------------------------------------
-// Presentational atoms (local — single consumer is this wizard)
+// Presentational atoms
 // --------------------------------------------------------------------------
 
-function Stepper({ order, current, onJump }: { order: Step[]; current: Step; onJump: (s: Step) => void }) {
-  const ci = order.indexOf(current);
+function StepHead({ n, total, label }: { n: number; total: number; label: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      {order.map((s, i) => {
-        const done = i < ci;
-        const active = s === current;
-        const clickable = i <= ci;
-        return (
-          <Fragment key={s}>
-            <button
-              type="button"
-              onClick={() => clickable && onJump(s)}
-              disabled={!clickable}
-              aria-current={active ? "step" : undefined}
-              style={{
-                appearance: "none",
-                background: "none",
-                border: "none",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                cursor: clickable ? "pointer" : "default",
-              }}
-            >
-              <span
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: "50%",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fontFamily: MONO,
-                  flexShrink: 0,
-                  transition: "background .15s, border-color .15s, color .15s",
-                  ...(done
-                    ? { background: "var(--uff-orange)", border: "1px solid var(--uff-orange)", color: "#1a0e02" }
-                    : active
-                      ? { background: "rgba(255,106,26,0.14)", border: "1px solid var(--uff-orange)", color: "var(--uff-orange)" }
-                      : { background: "var(--uff-surface-2)", border: "1px solid var(--uff-line)", color: "var(--uff-text-mute)" }),
-                }}
-              >
-                {done ? <Icon.check size={13} /> : i + 1}
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: active ? "var(--uff-text)" : "var(--uff-text-mute)",
-                }}
-              >
-                {LABELS[s]}
-              </span>
-            </button>
-            {i < order.length - 1 && (
-              <span
-                style={{
-                  flex: 1,
-                  height: 2,
-                  margin: "0 10px",
-                  borderRadius: 2,
-                  background: i < ci ? "var(--uff-orange)" : "var(--uff-line)",
-                  transition: "background .15s",
-                }}
-              />
-            )}
-          </Fragment>
-        );
-      })}
+    <div>
+      <div className="gw-num" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--uff-orange)" }}>
+        Step {n} / {total}
+      </div>
+      <h2 className="gw-balance" style={{ margin: "3px 0 0", fontSize: 18, fontWeight: 800, letterSpacing: "-0.015em", color: "var(--uff-text)" }}>
+        {label}
+      </h2>
+    </div>
+  );
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--uff-text-mute)" }}>
+      {children}
     </div>
   );
 }
@@ -545,38 +639,70 @@ function Field({
 }) {
   return (
     <section style={style}>
-      <div
-        style={{
-          fontSize: 10.5,
-          fontWeight: 700,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          color: "var(--uff-text-mute)",
-        }}
-      >
-        {label}
-      </div>
-      {hint && <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--uff-text-mute)", lineHeight: 1.45 }}>{hint}</p>}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--uff-text-dim)" }}>{label}</div>
+      {hint && <p className="gw-pretty" style={{ margin: "6px 0 0", fontSize: 12, color: "var(--uff-text-mute)", lineHeight: 1.45 }}>{hint}</p>}
       {children}
     </section>
   );
 }
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 11, fontWeight: 700, color: "var(--uff-text-dim)", letterSpacing: ".02em" }}>{children}</div>;
+}
+
+function SelectCard({
+  on,
+  onClick,
+  title,
+  hint,
+  icon,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  hint: string;
+  icon?: React.ReactNode;
+}) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--uff-text-dim)", letterSpacing: ".02em" }}>{children}</div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onClick}
+      className="gw-press"
+      style={{
+        appearance: "none",
+        cursor: "pointer",
+        textAlign: "left",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "13px 15px",
+        borderRadius: 14,
+        width: "100%",
+        background: on ? SEL_BG : "var(--uff-surface-2)",
+        border: on ? `1.5px solid ${SEL_BORDER}` : "1.5px solid var(--uff-line-soft)",
+      }}
+    >
+      <Check on={on} />
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: 14.5, fontWeight: 700, color: "var(--uff-text)", letterSpacing: "-0.005em" }}>{title}</span>
+        <span style={{ fontSize: 12, color: "var(--uff-text-mute)" }}>{hint}</span>
+      </span>
+      {icon && <span style={{ color: "var(--uff-text-mute)", flexShrink: 0 }}>{icon}</span>}
+    </button>
   );
 }
 
 function SkillRow({
   s,
   on,
-  suggested,
+  weak,
   onToggle,
 }: {
-  s: TargetSkill;
+  s: SelectableSkill;
   on: boolean;
-  suggested?: boolean;
+  weak?: boolean;
   onToggle: () => void;
 }) {
   const grade = scoreToGrade(s.avgScore);
@@ -585,66 +711,93 @@ function SkillRow({
       type="button"
       aria-pressed={on}
       onClick={onToggle}
+      className="gw-press"
       style={{
         appearance: "none",
         cursor: "pointer",
         textAlign: "left",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
+        alignItems: "flex-start",
         gap: 12,
-        padding: "11px 14px",
-        borderRadius: 11,
-        background: on ? "#5C3308" : "var(--uff-surface-2)",
-        border: on ? "1px solid var(--uff-orange)" : "1px solid var(--uff-line-soft)",
-        transition: "background .12s, border-color .12s",
+        padding: "12px 14px",
+        borderRadius: 13,
+        background: on ? SEL_BG : "var(--uff-surface-2)",
+        border: on ? `1.5px solid ${SEL_BORDER}` : "1.5px solid var(--uff-line-soft)",
       }}
     >
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <CheckBox on={on} />
-        <span style={{ fontSize: 14, fontWeight: 600, color: on ? "#F0B870" : "var(--uff-text)" }}>{s.skillName}</span>
+      <span style={{ marginTop: 1 }}>
+        <Check on={on} />
       </span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        {suggested && <Tag>Weak</Tag>}
-        {grade && <GradeChip grade={grade} dimmed={!on} />}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--uff-text)" }}>{s.skillName}</span>
+          {weak && <Tag>Weak</Tag>}
+          {grade && <GradeChip grade={grade} />}
+        </span>
+        {s.description && (
+          <span className="gw-pretty" style={{ display: "block", marginTop: 3, fontSize: 12, lineHeight: 1.45, color: "var(--uff-text-mute)" }}>
+            {s.description}
+          </span>
+        )}
       </span>
     </button>
   );
 }
 
-function Tag({ children }: { children: React.ReactNode }) {
+function Segmented({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
-    <span
+    <div
+      role="radiogroup"
       style={{
-        fontSize: 9.5,
-        fontWeight: 700,
-        letterSpacing: ".08em",
-        textTransform: "uppercase",
-        padding: "3px 7px",
-        borderRadius: 999,
-        color: "#F0B870",
-        background: "rgba(255,106,26,0.12)",
-        border: "1px solid rgba(255,106,26,0.3)",
+        display: "inline-flex",
+        padding: 4,
+        gap: 4,
+        borderRadius: 12,
+        background: "var(--uff-surface-2)",
+        border: "1px solid var(--uff-line-soft)",
       }}
     >
-      {children}
-    </span>
+      {options.map((o) => {
+        const on = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className="gw-press"
+            style={{
+              appearance: "none",
+              padding: "8px 22px",
+              borderRadius: 9,
+              fontSize: 13.5,
+              fontWeight: 700,
+              cursor: "pointer",
+              border: "none",
+              background: on ? "var(--uff-orange)" : "transparent",
+              color: on ? "#1a0e02" : "var(--uff-text-mute)",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 function MonoStat({ value, unit }: { value: number; unit: string }) {
   return (
-    <span
-      style={{
-        fontFamily: MONO,
-        fontSize: 26,
-        fontWeight: 800,
-        letterSpacing: "-0.02em",
-        color: "var(--uff-text)",
-        minWidth: 112,
-        textAlign: "center",
-      }}
-    >
+    <span className="gw-num" style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--uff-text)", minWidth: 124, textAlign: "center" }}>
       {value}
       <span style={{ fontSize: 14, color: "var(--uff-text-mute)", fontWeight: 600 }}> {unit}</span>
     </span>
@@ -668,10 +821,11 @@ function StepperButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
+      className="gw-press"
       style={{
-        width: 42,
-        height: 42,
-        borderRadius: 12,
+        width: 46,
+        height: 46,
+        borderRadius: 13,
         background: "var(--uff-surface-2)",
         border: "1px solid var(--uff-line)",
         color: "var(--uff-text)",
@@ -681,7 +835,6 @@ function StepperButton({
         opacity: disabled ? 0.4 : 1,
         display: "grid",
         placeItems: "center",
-        transition: "background .12s",
       }}
     >
       {children}
@@ -689,134 +842,51 @@ function StepperButton({
   );
 }
 
-function Chip({ children, on, onClick }: { children: React.ReactNode; on: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      style={{
-        padding: "8px 18px",
-        borderRadius: 999,
-        fontSize: 13,
-        fontWeight: 600,
-        cursor: "pointer",
-        transition: "background .12s, border-color .12s, color .12s",
-        ...(on
-          ? { background: "#5C3308", color: "#F0B870", border: "1px solid #D48A30" }
-          : {
-              background: "rgba(255,255,255,0.04)",
-              color: "rgba(255,255,255,0.5)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }),
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ToggleRow({
-  on,
-  onClick,
-  label,
-  hint,
-}: {
-  on: boolean;
-  onClick: () => void;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onClick}
-      style={{
-        appearance: "none",
-        cursor: "pointer",
-        textAlign: "left",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "12px 14px",
-        borderRadius: 12,
-        width: "100%",
-        background: on ? "#5C3308" : "var(--uff-surface-2)",
-        border: on ? "1px solid var(--uff-orange)" : "1px solid var(--uff-line-soft)",
-        transition: "background .12s, border-color .12s",
-      }}
-    >
-      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: on ? "#F0B870" : "var(--uff-text)" }}>{label}</span>
-        <span style={{ fontSize: 11.5, color: "var(--uff-text-mute)" }}>{hint}</span>
-      </span>
-      <span
-        aria-hidden
-        style={{
-          width: 40,
-          height: 23,
-          borderRadius: 999,
-          flexShrink: 0,
-          background: on ? "#D48A30" : "var(--uff-line)",
-          position: "relative",
-          transition: "background .12s",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 2,
-            left: on ? 19 : 2,
-            width: 19,
-            height: 19,
-            borderRadius: "50%",
-            background: "#fff",
-            transition: "left .12s",
-          }}
-        />
-      </span>
-    </button>
-  );
-}
-
-function CheckBox({ on }: { on: boolean }) {
+function Check({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
+      className="gw-press"
       style={{
-        width: 17,
-        height: 17,
-        borderRadius: 6,
+        width: 20,
+        height: 20,
+        borderRadius: 7,
         flexShrink: 0,
         display: "grid",
         placeItems: "center",
-        border: on ? "1px solid #F0B870" : "1px solid var(--uff-line)",
-        background: on ? "#F0B870" : "transparent",
-        color: "#3a2206",
-        fontSize: 11,
-        fontWeight: 800,
+        border: on ? "1.5px solid var(--uff-orange)" : "1.5px solid var(--uff-line)",
+        background: on ? "var(--uff-orange)" : "transparent",
+        color: "#1a0e02",
       }}
     >
-      {on ? "✓" : ""}
+      {on && <Icon.check size={13} />}
     </span>
   );
 }
 
-function GradeChip({ grade, dimmed }: { grade: string; dimmed?: boolean }) {
+function Tag({ children }: { children: React.ReactNode }) {
   return (
     <span
       style={{
-        fontFamily: MONO,
-        fontSize: 11,
+        fontSize: 9.5,
         fontWeight: 700,
-        letterSpacing: ".06em",
-        color: "var(--uff-text-mute)",
-        opacity: dimmed ? 0.8 : 1,
+        letterSpacing: ".08em",
+        textTransform: "uppercase",
+        padding: "3px 7px",
+        borderRadius: 999,
+        color: "var(--uff-orange)",
+        background: "rgba(255,106,26,0.12)",
+        border: "1px solid rgba(255,106,26,0.3)",
       }}
     >
+      {children}
+    </span>
+  );
+}
+
+function GradeChip({ grade }: { grade: string }) {
+  return (
+    <span className="gw-num" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--uff-text-mute)" }}>
       {grade}
     </span>
   );
@@ -824,19 +894,17 @@ function GradeChip({ grade, dimmed }: { grade: string; dimmed?: boolean }) {
 
 function PencilIcon({ size = 13 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function Droplet({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 2.7 6.4 9.5a7 7 0 1 0 11.2 0Z" />
     </svg>
   );
 }
@@ -845,11 +913,13 @@ function ReviewRow({
   label,
   value,
   mono,
+  last,
   onEdit,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  last?: boolean;
   onEdit: () => void;
 }) {
   return (
@@ -859,13 +929,14 @@ function ReviewRow({
         justifyContent: "space-between",
         gap: 12,
         alignItems: "center",
-        padding: "10px 0",
-        borderBottom: "1px solid var(--uff-line-soft)",
+        padding: "11px 0",
+        borderBottom: last ? "none" : "1px solid var(--uff-line-soft)",
       }}
     >
       <span style={{ fontSize: 12, color: "var(--uff-text-mute)", flexShrink: 0 }}>{label}</span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <span
+          className={mono ? "gw-num" : undefined}
           style={{
             fontSize: 13,
             fontWeight: 600,
@@ -883,11 +954,12 @@ function ReviewRow({
           type="button"
           aria-label={`Edit ${label}`}
           onClick={onEdit}
+          className="gw-press"
           style={{
             appearance: "none",
-            width: 28,
-            height: 28,
-            borderRadius: 8,
+            width: 30,
+            height: 30,
+            borderRadius: 9,
             flexShrink: 0,
             display: "grid",
             placeItems: "center",
@@ -895,7 +967,6 @@ function ReviewRow({
             border: "1px solid var(--uff-line-soft)",
             color: "var(--uff-text-mute)",
             cursor: "pointer",
-            transition: "color .12s, border-color .12s",
           }}
         >
           <PencilIcon />
@@ -907,4 +978,15 @@ function ReviewRow({
 
 function Hairline() {
   return <div style={{ height: 1, background: "var(--uff-line-soft)" }} />;
+}
+
+// yyyy-mm-dd → "Sun Jun 14" (date-only, no timezone drift).
+function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const [, y, mo, d] = m;
+  const dt = new Date(Number(y), Number(mo) - 1, Number(d));
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const mons = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${days[dt.getDay()]} ${mons[dt.getMonth()]} ${dt.getDate()}`;
 }

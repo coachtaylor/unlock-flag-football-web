@@ -67,6 +67,7 @@ export default async function GeneratePage({
     skillName: s.skill_name,
     skillGroup: s.skill_group,
     avgScore: scoreById.get(s.id) ?? null,
+    description: s.description ?? null,
   }));
 
   const teamColor = teamColorHex(team.team_color as string);
