@@ -12,8 +12,7 @@ import { teamColorHex } from "@/components/uff/team-colors";
 import DashTopBar from "@/components/dashboard/DashTopBar";
 import TeamSidebar from "@/components/dashboard/TeamSidebar";
 import { loadSidebarWorkspaces } from "@/lib/dashboard/sidebar-workspaces";
-import { loadTeamFocus } from "@/lib/dashboard/team-home-data";
-import type { SkillGroup } from "@/lib/types/skills";
+import { loadAllSkills } from "@/lib/drills/skills-data";
 import GenerateClient from "@/components/practice/generate/GenerateClient";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +34,7 @@ export default async function GeneratePage({
   if (!access) notFound();
   if (!canManageTeam(access)) notFound();
 
-  const [{ data: profile }, { data: team }, focus] = await Promise.all([
+  const [{ data: profile }, { data: team }, catalog, { data: focusRows }] = await Promise.all([
     supabase
       .from("profiles")
       .select("first_name, last_name")
@@ -46,9 +45,29 @@ export default async function GeneratePage({
       .select("id, team_name, team_color, league_id")
       .eq("id", teamId)
       .maybeSingle(),
-    loadTeamFocus(supabase, teamId),
+    // Full skill taxonomy — the coach can target ANY skill, not just weaknesses.
+    loadAllSkills(supabase),
+    // Measured team scores (weakest first) drive the "Suggested" highlights.
+    supabase
+      .from("v_team_skill_focus")
+      .select("skill_id, avg_score")
+      .eq("team_id", teamId)
+      .order("avg_score", { ascending: true }),
   ]);
   if (!team) notFound();
+
+  // Merge: every skill from the taxonomy, scored where the team has signal.
+  // The weakest three measured skills are flagged as suggestions in the wizard.
+  const scoreById = new Map<string, number>(
+    (focusRows ?? []).map((r) => [r.skill_id as string, Number(r.avg_score)]),
+  );
+  const suggestedSkillIds = (focusRows ?? []).slice(0, 3).map((r) => r.skill_id as string);
+  const availableSkills = catalog.skills.map((s) => ({
+    skillId: s.id,
+    skillName: s.skill_name,
+    skillGroup: s.skill_group,
+    avgScore: scoreById.get(s.id) ?? null,
+  }));
 
   const teamColor = teamColorHex(team.team_color as string);
   const sidebarWorkspaces = await loadSidebarWorkspaces(
@@ -94,16 +113,12 @@ export default async function GeneratePage({
           <GenerateClient
             data={{
               teamId,
-              defaultMinutes: 90,
+              defaultMinutes: 120,
               defaultFormat: "7v7",
               defaultTitle: "Practice",
               defaultDate,
-              availableSkills: focus.skills.map((s) => ({
-                skillId: s.skillId,
-                skillName: s.skillName,
-                skillGroup: s.skillGroup as SkillGroup,
-                avgScore: s.avgScore,
-              })),
+              availableSkills,
+              suggestedSkillIds,
             }}
           />
         </div>
