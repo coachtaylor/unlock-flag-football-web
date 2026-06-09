@@ -27,10 +27,6 @@ const MIN_DRILLS = 1;
 const MAX_DRILLS = 4;
 const MONO = "var(--font-mono, 'JetBrains Mono', monospace)";
 
-// Crisp selected treatment — replaces the old muddy #5C3308 brown fill.
-const SEL_BG = "rgba(255,106,26,0.10)";
-const SEL_BORDER = "var(--uff-orange)";
-
 const STYLE = `
 .gw-root{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
 .gw-num{font-variant-numeric:tabular-nums;}
@@ -680,8 +676,10 @@ function SelectCard({
         padding: "13px 15px",
         borderRadius: 14,
         width: "100%",
-        background: on ? SEL_BG : "var(--uff-surface-2)",
-        border: on ? `1.5px solid ${SEL_BORDER}` : "1.5px solid var(--uff-line-soft)",
+        background: "var(--uff-surface-2)",
+        border: on ? "1px solid var(--uff-line)" : "1px solid var(--uff-line-soft)",
+        boxShadow: on ? "0 1px 2px rgba(0,0,0,0.28)" : "none",
+        opacity: on ? 1 : 0.72,
       }}
     >
       <Check on={on} />
@@ -721,8 +719,9 @@ function SkillRow({
         gap: 12,
         padding: "12px 14px",
         borderRadius: 13,
-        background: on ? SEL_BG : "var(--uff-surface-2)",
-        border: on ? `1.5px solid ${SEL_BORDER}` : "1.5px solid var(--uff-line-soft)",
+        background: "var(--uff-surface-2)",
+        border: on ? "1px solid var(--uff-line)" : "1px solid var(--uff-line-soft)",
+        boxShadow: on ? "0 1px 2px rgba(0,0,0,0.28)" : "none",
       }}
     >
       <span style={{ marginTop: 1 }}>
