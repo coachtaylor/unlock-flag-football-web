@@ -7,14 +7,15 @@ import { loadTeamFocus } from "@/lib/dashboard/team-home-data";
 import { savePlan, createPlanDraft, type SavePlanPayload } from "@/lib/practice/actions";
 import type { SkillGroup } from "@/lib/types/skills";
 import { buildSkeleton } from "./skeleton";
-import { assembleBlockCandidates, fetchCandidatesBySkill } from "./candidates";
+import { assembleBlockCandidates, fetchCandidatesBySkill, fetchCandidatesByCategory } from "./candidates";
 import { callPlanModel } from "./ai";
 import { buildFallbackPlan } from "./fallback";
 import { resolveTargetSkills } from "./resolve-skills";
-import type { BlockCandidates, GeneratedPlan, Skeleton, TargetSkill } from "./types";
+import { computeWaterBreaks, type WaterBreak } from "./water-breaks";
+import type { BlockCandidates, CandidateDrill, GeneratedPlan, Skeleton, TargetSkill, WizardInput } from "./types";
 
 export type GenerateResult =
-  | { ok: true; generationId: string; skeleton: Skeleton; blockCandidates: BlockCandidates[]; generated: GeneratedPlan }
+  | { ok: true; generationId: string; skeleton: Skeleton; blockCandidates: BlockCandidates[]; generated: GeneratedPlan; waterBreaks: WaterBreak[] }
   | { ok: false; error: string };
 
 async function teamFocusSkills(supabase: SupabaseClient, teamId: string): Promise<TargetSkill[]> {
@@ -27,36 +28,36 @@ async function teamFocusSkills(supabase: SupabaseClient, teamId: string): Promis
   }));
 }
 
-export async function generatePlan(input: {
-  teamId: string;
-  totalMinutes: number;
-  format: "5v5" | "7v7";
-  skillIds: string[];
-}): Promise<GenerateResult> {
+export async function generatePlan(input: WizardInput): Promise<GenerateResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "not_authenticated" };
 
-  const focus = await teamFocusSkills(supabase, input.teamId);
-  const skills = resolveTargetSkills(input.skillIds, focus);
-  if (skills.length === 0) return { ok: false, error: "no_skills" };
+  // Skills drive only the Skills block. If the coach included it but picked
+  // nothing, fall back to the team's auto-weaknesses.
+  let skills: TargetSkill[] = input.includeSkills ? input.skills : [];
+  if (input.includeSkills && skills.length === 0) {
+    skills = await teamFocusSkills(supabase, input.teamId);
+  }
 
-  const skeleton = buildSkeleton({
-    teamId: input.teamId,
-    totalMinutes: input.totalMinutes,
-    format: input.format,
-    skills,
-  });
+  const skeleton = buildSkeleton({ ...input, skills });
 
-  const candidatesBySkill = await fetchCandidatesBySkill(
-    supabase,
-    input.teamId,
-    skills.map((s) => s.skillId),
+  // One candidate map carries skill-id-keyed entries (skill blocks) AND
+  // block-key-keyed entries (category blocks). assembleBlockCandidates reads
+  // the right keys per block kind.
+  const candMap = new Map<string, CandidateDrill[]>(
+    await fetchCandidatesBySkill(supabase, input.teamId, skills.map((s) => s.skillId)),
   );
+  for (const b of skeleton.blocks) {
+    if (b.kind !== "skill" && b.categorySlugs.length) {
+      candMap.set(b.key, await fetchCandidatesByCategory(supabase, input.teamId, b.categorySlugs));
+    }
+  }
   const nowISO = new Date().toISOString();
-  const blockCandidates = skeleton.blocks.map((b) => assembleBlockCandidates(b, candidatesBySkill, nowISO));
+  const blockCandidates = skeleton.blocks.map((b) => assembleBlockCandidates(b, candMap, nowISO));
+  const waterBreaks = computeWaterBreaks(skeleton.blocks, { everyMin: 30, durationMin: 3, enabled: input.autoWaterBreaks });
 
   let generated: GeneratedPlan;
   let model: string | null = null;
@@ -69,7 +70,7 @@ export async function generatePlan(input: {
     inputTokens = r.inputTokens;
     outputTokens = r.outputTokens;
   } catch {
-    generated = buildFallbackPlan(skeleton, blockCandidates);
+    generated = buildFallbackPlan(skeleton, blockCandidates, input.drillsPerBlock);
   }
 
   const { data: logRow, error: logErr } = await supabase
@@ -77,8 +78,16 @@ export async function generatePlan(input: {
     .insert({
       team_id: input.teamId,
       created_by: user.id,
-      input_json: { totalMinutes: input.totalMinutes, format: input.format, skillIds: skills.map((s) => s.skillId) },
-      output_json: { skeleton, generated },
+      input_json: {
+        title: input.title,
+        practiceDate: input.practiceDate,
+        totalMinutes: input.totalMinutes,
+        format: input.format,
+        skillIds: skills.map((s) => s.skillId),
+        drillsPerBlock: input.drillsPerBlock,
+        autoWaterBreaks: input.autoWaterBreaks,
+      },
+      output_json: { skeleton, generated, waterBreaks },
       model,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
@@ -88,7 +97,7 @@ export async function generatePlan(input: {
     .single();
   if (logErr) return { ok: false, error: logErr.message };
 
-  return { ok: true, generationId: logRow.id as string, skeleton, blockCandidates, generated };
+  return { ok: true, generationId: logRow.id as string, skeleton, blockCandidates, generated, waterBreaks };
 }
 
 export async function regenerateBlock(args: {
@@ -118,8 +127,16 @@ export async function regenerateBlock(args: {
   const skills = resolveTargetSkills(gen.input_json.skillIds ?? [], focus).filter((s) =>
     block.skillIds.includes(s.skillId),
   );
-  const candidatesBySkill = await fetchCandidatesBySkill(supabase, args.teamId, block.skillIds);
-  const blockCandidates = [assembleBlockCandidates(block, candidatesBySkill, new Date().toISOString())];
+
+  // Build candidates for just this block, by its kind (skill vs category).
+  const candMap = new Map<string, CandidateDrill[]>();
+  if (block.kind === "skill") {
+    for (const [k, v] of await fetchCandidatesBySkill(supabase, args.teamId, block.skillIds)) candMap.set(k, v);
+  } else if (block.categorySlugs?.length) {
+    candMap.set(block.key, await fetchCandidatesByCategory(supabase, args.teamId, block.categorySlugs));
+  }
+  const blockCandidates = [assembleBlockCandidates(block, candMap, new Date().toISOString())];
+  const drillsPerBlock = gen.input_json.drillsPerBlock ?? 2;
 
   const emptyBlock = { blockKey: args.blockKey, rationale: "", drills: [], gapProposals: [] };
   try {
@@ -132,7 +149,7 @@ export async function regenerateBlock(args: {
     });
     return { ok: true, block: r.plan.blocks.find((b) => b.blockKey === args.blockKey) ?? emptyBlock };
   } catch {
-    const fb = buildFallbackPlan({ ...skeleton, blocks: [block] }, blockCandidates);
+    const fb = buildFallbackPlan({ ...skeleton, blocks: [block] }, blockCandidates, drillsPerBlock);
     return { ok: true, block: fb.blocks[0] ?? emptyBlock };
   }
 }

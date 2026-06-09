@@ -5,9 +5,9 @@ import type { BlockCandidates, Skeleton } from "../types";
 const skeleton: Skeleton = {
   totalMinutes: 60, mergedSkillCount: 0,
   blocks: [
-    { key: "warmup", name: "Warm-Up", kind: "warmup", skillIds: [], targetMinutes: 8 },
-    { key: "skill-1", name: "Zone", kind: "skill", skillIds: ["zone", "press"], targetMinutes: 40 },
-    { key: "cooldown", name: "Cool-Down", kind: "cooldown", skillIds: [], targetMinutes: 12 },
+    { key: "warmup", name: "Warm-Up", kind: "warmup", skillIds: [], categorySlugs: ["warmup"], targetMinutes: 8 },
+    { key: "skill-1", name: "Zone", kind: "skill", skillIds: ["zone", "press"], categorySlugs: [], targetMinutes: 40 },
+    { key: "team", name: "Team / Situational", kind: "team", skillIds: [], categorySlugs: ["offense", "defense", "scrimmage"], targetMinutes: 12 },
   ],
 };
 const blockCandidates: BlockCandidates[] = [
@@ -15,7 +15,7 @@ const blockCandidates: BlockCandidates[] = [
   { blockKey: "skill-1", candidates: [
       { drillId: "d1", drillName: "D1", categoryName: null, benchmarkTypes: [], defaultDurationMin: 10, skillWeight: 1, drillScore: 0.3, lastRunISO: null },
     ], gapSkillIds: ["press"] },
-  { blockKey: "cooldown", candidates: [], gapSkillIds: [] },
+  { blockKey: "team", candidates: [], gapSkillIds: [] },
 ];
 
 describe("validatePlanOutput", () => {
