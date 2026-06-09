@@ -29,6 +29,8 @@ export default function GenerateClient({ data }: { data: GeneratePageData }) {
     }
     setPreview({
       generationId: res.generationId,
+      title: input.title,
+      practiceDate: input.practiceDate,
       skeleton: res.skeleton,
       blockCandidates: res.blockCandidates,
       generated: res.generated,

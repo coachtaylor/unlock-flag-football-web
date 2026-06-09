@@ -3,9 +3,10 @@
 // AI plan generator — preview + per-block control. Styled in the --uff-*
 // console idiom to match the planner. Logic is unchanged from the keyless
 // build: regenerate a block, swap/reject a drill, adopt a gap-proposal drill
-// into the library, then Accept → create plan → open the editor.
+// into the library, then Accept → create plan → open the editor. Water breaks
+// (computed by the wizard) render as thin rows between blocks and are saved.
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   regenerateBlock,
@@ -19,14 +20,6 @@ import type { GeneratedBlock } from "@/lib/practice/generate/types";
 import type { PreviewState } from "./generate-view-types";
 
 const MONO = "var(--font-mono, 'JetBrains Mono', monospace)";
-
-function nextSundayISO(): string {
-  const d = new Date();
-  const day = d.getDay();
-  const add = day === 0 ? 7 : 7 - day;
-  d.setDate(d.getDate() + add);
-  return d.toISOString().slice(0, 10);
-}
 
 export default function PreviewClient({
   teamId,
@@ -52,6 +45,10 @@ export default function PreviewClient({
 
   const blockByKey = useMemo(() => new Map(blocks.map((b) => [b.blockKey, b])), [blocks]);
   const candByKey = useMemo(() => new Map(blockCandidates.map((bc) => [bc.blockKey, bc])), [blockCandidates]);
+  const breakByKey = useMemo(
+    () => new Map(state.waterBreaks.map((w) => [w.afterBlockKey, w.minutes])),
+    [state.waterBreaks],
+  );
 
   const totalPlanned = skeleton.totalMinutes;
 
@@ -114,10 +111,11 @@ export default function PreviewClient({
     setAccepting(true);
     const payload = toSavePayload({
       planId: "",
-      title: `AI practice — ${nextSundayISO()}`,
-      practiceDate: nextSundayISO(),
+      title: state.title,
+      practiceDate: state.practiceDate,
       skeleton,
       generated: { blocks, usedFallback: state.generated.usedFallback },
+      waterBreaks: state.waterBreaks,
     });
     const { plan_id: _omit, ...rest } = payload;
     void _omit;
@@ -161,8 +159,10 @@ export default function PreviewClient({
           const gen = blockByKey.get(sb.key);
           const cands = candByKey.get(sb.key)?.candidates ?? [];
           const isSkill = sb.kind === "skill";
+          const breakMin = breakByKey.get(sb.key);
           return (
-            <div key={sb.key} className="w-card">
+            <Fragment key={sb.key}>
+            <div className="w-card">
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--uff-text)", letterSpacing: "-0.005em" }}>
@@ -318,6 +318,8 @@ export default function PreviewClient({
                 </div>
               ))}
             </div>
+            {breakMin != null && <WaterBreakRow minutes={breakMin} />}
+            </Fragment>
           );
         })}
       </div>
@@ -359,6 +361,28 @@ export default function PreviewClient({
           </FeedbackButton>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WaterBreakRow({ minutes }: { minutes: number }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 14px",
+        borderRadius: 10,
+        border: "1px dashed var(--uff-line-soft)",
+        background: "var(--uff-surface-2)",
+        fontSize: 12.5,
+        color: "var(--uff-text-mute)",
+      }}
+    >
+      <span aria-hidden>💧</span>
+      <span style={{ fontWeight: 600, color: "var(--uff-text-dim)" }}>Water break</span>
+      <span style={{ fontFamily: MONO, marginLeft: "auto" }}>{minutes} min</span>
     </div>
   );
 }

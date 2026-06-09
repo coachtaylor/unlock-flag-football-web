@@ -12,6 +12,8 @@ export type GeneratePageData = {
 
 export type PreviewState = {
   generationId: string;
+  title: string; // from the wizard — carried through to the saved plan
+  practiceDate: string; // ISO yyyy-mm-dd
   skeleton: Skeleton;
   blockCandidates: BlockCandidates[];
   generated: GeneratedPlan;
