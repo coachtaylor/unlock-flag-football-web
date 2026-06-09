@@ -27,17 +27,26 @@ export interface DrillDraft {
   confidence: Record<string, number>;
 }
 
-export const GEMINI_MODEL = "gemini-2.5-flash"; // swap to "gemini-2.5-pro" if cue quality is weak
-export const GEMINI_IN_PER_M = 0.30;
-export const GEMINI_OUT_PER_M = 2.50;
+export const GEMINI_MODEL = "gemini-2.5-flash"; // original config; Pro + prompt/fps tuning tested worse for descriptions
+
+// Per-million-token pricing by model, so cost_usd stays correct across a model swap.
+const GEMINI_PRICING: Record<string, { in: number; out: number }> = {
+  "gemini-2.5-flash": { in: 0.30, out: 2.50 },
+  "gemini-2.5-pro": { in: 1.25, out: 10.0 },
+};
 
 const SYSTEM_PROMPT =
-  "You draft FLAG FOOTBALL drills only. Output must be specific to flag football " +
-  "(5v5/7v7), never generic or other-sport. You are watching a short drill VIDEO: " +
-  "describe the drill from what you SEE — setup, cones, players, movement, sequence. " +
-  "The audio may be music; ignore it unless a coach is clearly instructing. Use ONLY " +
-  "the provided phase and skill ids. If the clip is not a runnable drill, set phase=null " +
-  "and keep the description short. Skills must belong to the chosen phase.";
+  "You draft FLAG FOOTBALL drills only (5v5/7v7), never generic or other-sport.\n\n" +
+  "Write the DESCRIPTION strictly from what you SEE in the video: count the players and " +
+  "cones actually shown, describe the real setup and the sequence of movements in order, " +
+  "and what success looks like. Do NOT invent rules, player counts, distances, or mechanics " +
+  "that aren't visible. The caption may give the drill's NAME but not its mechanics (and can " +
+  "be wrong) — derive how the drill works ONLY from the video, never from the name or a " +
+  "textbook version of a similarly-named drill. If a detail isn't clearly visible, describe " +
+  "it loosely instead of guessing. 3-5 sentences: setup, execution, objective.\n\n" +
+  "Coaching cues: short, specific, drawn from what's shown. Audio may be music; ignore it " +
+  "unless a coach is clearly instructing. Use ONLY the provided phase and skill ids; skills " +
+  "must belong to the chosen phase. If it is not a runnable drill, set phase=null.";
 
 // Base64-encode raw bytes without Node Buffer (works in Deno + vitest/node).
 function bytesToBase64(bytes: Uint8Array): string {
@@ -47,9 +56,12 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export function buildGeminiRequest(media: ClipMedia, taxonomy: Taxonomy) {
+  // Sample at 5 fps (vs Gemini's 1 fps default) so the model sees the actual movement
+  // sequence — denser frames are what let it describe the real drill instead of a generic one.
+  const videoMetadata = { fps: 5 };
   const mediaPart = media.youtubeUrl
-    ? { file_data: { file_uri: media.youtubeUrl } }
-    : { inline_data: { mime_type: "video/mp4", data: bytesToBase64(media.mp4Bytes ?? new Uint8Array()) } };
+    ? { file_data: { file_uri: media.youtubeUrl }, videoMetadata }
+    : { inline_data: { mime_type: "video/mp4", data: bytesToBase64(media.mp4Bytes ?? new Uint8Array()) }, videoMetadata };
 
   const contextLines = [
     media.author ? `Author: @${media.author}` : null,
@@ -91,13 +103,15 @@ export function buildGeminiRequest(media: ClipMedia, taxonomy: Taxonomy) {
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema,
-      temperature: 0.2,
+      temperature: 0.1,
+      mediaResolution: "MEDIA_RESOLUTION_HIGH", // sharper frames → reads cones/players/setup more reliably
     },
   };
 }
 
-export function geminiCostUsd(inputTokens: number, outputTokens: number): number {
-  return (inputTokens / 1e6) * GEMINI_IN_PER_M + (outputTokens / 1e6) * GEMINI_OUT_PER_M;
+export function geminiCostUsd(inputTokens: number, outputTokens: number, model: string = GEMINI_MODEL): number {
+  const p = GEMINI_PRICING[model] ?? GEMINI_PRICING["gemini-2.5-flash"];
+  return (inputTokens / 1e6) * p.in + (outputTokens / 1e6) * p.out;
 }
 
 export function parseGeminiDraft(data: any, taxonomy: Taxonomy):

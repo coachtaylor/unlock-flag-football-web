@@ -112,8 +112,10 @@ describe("parseGeminiDraft", () => {
 });
 
 describe("geminiCostUsd", () => {
-  it("uses Flash pricing", () => {
-    // 8000 in @ $0.30/M + 600 out @ $2.50/M
-    expect(geminiCostUsd(8000, 600)).toBeCloseTo(0.0024 + 0.0015, 6);
+  it("prices Flash and Pro per model", () => {
+    // Flash: 8000 in @ $0.30/M + 600 out @ $2.50/M
+    expect(geminiCostUsd(8000, 600, "gemini-2.5-flash")).toBeCloseTo(0.0024 + 0.0015, 6);
+    // Pro: 8000 in @ $1.25/M + 600 out @ $10/M
+    expect(geminiCostUsd(8000, 600, "gemini-2.5-pro")).toBeCloseTo(0.010 + 0.006, 6);
   });
 });
