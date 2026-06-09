@@ -1,4 +1,5 @@
 import type { SkillGroup } from "@/lib/types/skills";
+import type { CatSlug } from "@/components/uff-web/drills/atoms";
 
 export type PracticeFormat = "5v5" | "7v7";
 
@@ -18,13 +19,14 @@ export type GenerateInput = {
   skills: TargetSkill[];
 };
 
-export type BlockKind = "warmup" | "skill" | "team" | "cooldown";
+export type BlockKind = "warmup" | "skill" | "team" | "custom";
 
 export type SkeletonBlock = {
-  key: string; // stable within one skeleton, e.g. "warmup", "skill-1", "team", "cooldown"
+  key: string; // stable within one skeleton, e.g. "warmup", "skill-1", "team", "custom-1"
   name: string; // display name
   kind: BlockKind;
-  skillIds: string[]; // [] for warmup/team/cooldown
+  skillIds: string[]; // skill blocks only; [] otherwise
+  categorySlugs: CatSlug[]; // category blocks (warmup/team/custom); [] for skill
   targetMinutes: number;
 };
 
@@ -72,4 +74,33 @@ export type GeneratedBlock = {
 export type GeneratedPlan = {
   blocks: GeneratedBlock[];
   usedFallback: boolean;
+};
+
+// --- Guided wizard (v2) ---
+
+/** Which drill categories feed the Team/Situational core block. */
+export const TEAM_SITUATIONAL_SLUGS: CatSlug[] = ["offense", "defense", "scrimmage"];
+
+/** A coach-added block beyond the three core ones. */
+export type CustomBlockSpec = {
+  name: string;
+  /** Category to pull candidates from, or "manual" = no auto-fill. */
+  source: CatSlug | "manual";
+  share: number; // relative weight for minute allocation
+};
+
+/** Full guided-wizard input (superset of the v1 GenerateInput). */
+export type WizardInput = {
+  teamId: string;
+  title: string;
+  practiceDate: string; // ISO yyyy-mm-dd
+  totalMinutes: number;
+  format: PracticeFormat;
+  includeWarmup: boolean;
+  includeSkills: boolean;
+  includeTeamSituational: boolean;
+  customBlocks: CustomBlockSpec[];
+  skills: TargetSkill[]; // drives the Skills block; [] => auto-weaknesses
+  drillsPerBlock: number; // 1..4
+  autoWaterBreaks: boolean;
 };
