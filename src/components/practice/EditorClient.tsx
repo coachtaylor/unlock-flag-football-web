@@ -42,8 +42,6 @@ import {
   saveAttendance,
   type SaveBlockInput,
 } from "@/lib/practice/actions";
-import { generatePlan } from "@/lib/practice/generate/actions";
-import { toEditorBlocks } from "@/lib/practice/generate/to-editor";
 import { Icon } from "@/components/uff/icons";
 
 // ── Drill catalog passed in from the server ────────────────────────────
@@ -369,33 +367,8 @@ export default function EditorClient({
       ),
     ]);
   }
-  // AI fill — generate a full session and inject it via addBlocksWithDrills.
-  // Auto-targets the team's biggest weaknesses (skillIds: []) and uses the
-  // standalone generator's 90-min default; the coach tweaks from there. Runs
-  // on the keyless fallback until ANTHROPIC_API_KEY is set. Drills the editor's
-  // page-load catalog doesn't know are dropped by toEditorBlocks.
-  const [aiPending, setAiPending] = useState(false);
-  async function handleAiFill() {
-    setAiPending(true);
-    setError(null);
-    const res = await generatePlan({
-      teamId: plan.teamId,
-      totalMinutes: 90,
-      format: "7v7",
-      skillIds: [],
-    });
-    setAiPending(false);
-    if (!res.ok) {
-      setError(
-        res.error === "no_skills"
-          ? "Run a benchmark first — AI fill needs scouting data to target."
-          : "Couldn't generate a plan right now. Try again.",
-      );
-      return;
-    }
-    const catalogById = new Map(drillCatalog.map((d) => [d.id, d]));
-    addBlocksWithDrills(toEditorBlocks(res.skeleton, res.generated, catalogById));
-  }
+  // AI fill now opens the guided wizard at /practice/generate (the rail's AI
+  // tile is a <Link>) instead of a one-shot silent inject.
 
   function removeBlock(blockKey: string) {
     // Find the removed block's order BEFORE we drop it, so we can fix up
@@ -674,8 +647,7 @@ export default function EditorClient({
             onFromScouting={
               recommendations.length > 0 ? () => setSheet("recommendations") : undefined
             }
-            onAiFill={handleAiFill}
-            aiPending={aiPending}
+            aiFillHref={`/dashboard/team/${plan.teamId}/practice/generate`}
           />
 
           {error && (
@@ -1699,16 +1671,14 @@ function AddBlockRail({
   onAddBlank,
   onAddFromLibrary,
   onFromScouting,
-  onAiFill,
-  aiPending,
+  aiFillHref,
 }: {
   onAddBlank: () => void;
   onAddFromLibrary: () => void;
   onFromScouting?: () => void;
-  onAiFill?: () => void;
-  aiPending?: boolean;
+  aiFillHref?: string;
 }) {
-  const cols = 2 + (onFromScouting ? 1 : 0) + (onAiFill ? 1 : 0);
+  const cols = 2 + (onFromScouting ? 1 : 0) + (aiFillHref ? 1 : 0);
   return (
     <div
       style={{
@@ -1718,21 +1688,16 @@ function AddBlockRail({
         marginTop: 4,
       }}
     >
-      {onAiFill && (
-        <button
-          type="button"
-          onClick={onAiFill}
-          disabled={aiPending}
-          style={addBlockBtn("var(--uff-orange)")}
-        >
+      {aiFillHref && (
+        <Link href={aiFillHref} style={addBlockBtn("var(--uff-orange)")}>
           <Icon.bolt size={14} />
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>{aiPending ? "Generating…" : "Fill with AI"}</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Fill with AI</span>
             <span style={{ fontSize: 11, color: "var(--uff-text-mute)", fontWeight: 500 }}>
-              Draft a full session from your team&rsquo;s weakest skills
+              Open the guided builder to draft a full session
             </span>
           </span>
-        </button>
+        </Link>
       )}
       <button type="button" onClick={onAddBlank} style={addBlockBtn("var(--uff-orange)")}>
         <PIcon.plus size={14} />
