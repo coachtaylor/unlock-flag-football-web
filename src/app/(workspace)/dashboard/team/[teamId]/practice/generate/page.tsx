@@ -60,6 +60,11 @@ export default async function GeneratePage({
     user.email?.[0]?.toUpperCase() ||
     "U";
 
+  // Default the plan to the upcoming Sunday (today if it's already Sunday).
+  const nextSunday = new Date();
+  nextSunday.setDate(nextSunday.getDate() + ((7 - nextSunday.getDay()) % 7));
+  const defaultDate = nextSunday.toISOString().slice(0, 10);
+
   return (
     <div className="uff-web">
       <TeamSidebar
@@ -91,6 +96,8 @@ export default async function GeneratePage({
               teamId,
               defaultMinutes: 90,
               defaultFormat: "7v7",
+              defaultTitle: "Practice",
+              defaultDate,
               availableSkills: focus.skills.map((s) => ({
                 skillId: s.skillId,
                 skillName: s.skillName,

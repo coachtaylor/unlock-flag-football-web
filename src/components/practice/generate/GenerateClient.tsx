@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generatePlan } from "@/lib/practice/generate/actions";
-import GenerateDialog from "./GenerateDialog";
+import type { WizardInput } from "@/lib/practice/generate/types";
+import GenerateWizard from "./GenerateWizard";
 import PreviewClient from "./PreviewClient";
 import type { GeneratePageData, PreviewState } from "./generate-view-types";
 
@@ -13,7 +14,7 @@ export default function GenerateClient({ data }: { data: GeneratePageData }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleGenerate(input: { totalMinutes: number; format: "5v5" | "7v7"; skillIds: string[] }) {
+  async function handleGenerate(input: Omit<WizardInput, "teamId">) {
     setPending(true);
     setError(null);
     const res = await generatePlan({ teamId: data.teamId, ...input });
@@ -31,6 +32,7 @@ export default function GenerateClient({ data }: { data: GeneratePageData }) {
       skeleton: res.skeleton,
       blockCandidates: res.blockCandidates,
       generated: res.generated,
+      waterBreaks: res.waterBreaks,
     });
   }
 
@@ -45,7 +47,5 @@ export default function GenerateClient({ data }: { data: GeneratePageData }) {
     );
   }
 
-  return (
-    <GenerateDialog data={data} pending={pending} error={error} onGenerate={handleGenerate} />
-  );
+  return <GenerateWizard data={data} pending={pending} error={error} onGenerate={handleGenerate} />;
 }
