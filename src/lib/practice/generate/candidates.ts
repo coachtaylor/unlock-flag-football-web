@@ -9,26 +9,13 @@ function ranRecently(lastRunISO: string | null, nowISO: string): boolean {
   return new Date(nowISO).getTime() - new Date(lastRunISO).getTime() < FOURTEEN_DAYS;
 }
 
-/** PURE: assemble + rank candidate drills for one skeleton block. */
-export function assembleBlockCandidates(
-  block: SkeletonBlock,
-  candidatesBySkill: Map<string, CandidateDrill[]>,
-  nowISO: string,
-): BlockCandidates {
-  if (block.kind !== "skill" || block.skillIds.length === 0) {
-    return { blockKey: block.key, candidates: [], gapSkillIds: [] };
-  }
-  const gapSkillIds = block.skillIds.filter((id) => (candidatesBySkill.get(id)?.length ?? 0) === 0);
-
-  // union + dedup keeping the strongest skillWeight seen per drill
+/** PURE: dedupe (strongest skillWeight per drill), rank weak-first, cap at MAX. */
+function rankCandidates(list: CandidateDrill[], nowISO: string): CandidateDrill[] {
   const byId = new Map<string, CandidateDrill>();
-  for (const id of block.skillIds) {
-    for (const c of candidatesBySkill.get(id) ?? []) {
-      const prev = byId.get(c.drillId);
-      if (!prev || c.skillWeight > prev.skillWeight) byId.set(c.drillId, c);
-    }
+  for (const c of list) {
+    const prev = byId.get(c.drillId);
+    if (!prev || c.skillWeight > prev.skillWeight) byId.set(c.drillId, c);
   }
-
   const ranked = [...byId.values()].sort((a, b) => {
     if (b.skillWeight !== a.skillWeight) return b.skillWeight - a.skillWeight;
     const aStale = ranRecently(a.lastRunISO, nowISO) ? 1 : 0;
@@ -39,8 +26,31 @@ export function assembleBlockCandidates(
     if (as !== bs) return as - bs;
     return a.drillName.localeCompare(b.drillName);
   });
+  return ranked.slice(0, MAX_CANDIDATES);
+}
 
-  return { blockKey: block.key, candidates: ranked.slice(0, MAX_CANDIDATES), gapSkillIds };
+/** PURE: assemble + rank candidate drills for one skeleton block.
+ *
+ *  `candidates` key convention depends on block kind:
+ *   - skill blocks → keyed by **skillId** (union over block.skillIds; gap detection)
+ *   - category-driven blocks (warmup/team/custom) → keyed by **block.key**
+ *  A single Task-8 map carries both; per call we read only the keys this block
+ *  needs. (Safe because skill ids never collide with block keys like
+ *  "team"/"warmup"/"skill-N"/"custom-N" in this taxonomy.) */
+export function assembleBlockCandidates(
+  block: SkeletonBlock,
+  candidates: Map<string, CandidateDrill[]>,
+  nowISO: string,
+): BlockCandidates {
+  if (block.kind === "skill") {
+    if (block.skillIds.length === 0) return { blockKey: block.key, candidates: [], gapSkillIds: [] };
+    const gapSkillIds = block.skillIds.filter((id) => (candidates.get(id)?.length ?? 0) === 0);
+    const union = block.skillIds.flatMap((id) => candidates.get(id) ?? []);
+    return { blockKey: block.key, candidates: rankCandidates(union, nowISO), gapSkillIds };
+  }
+  // category-driven block: candidates keyed by block.key
+  const list = candidates.get(block.key) ?? [];
+  return { blockKey: block.key, candidates: rankCandidates(list, nowISO), gapSkillIds: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +100,43 @@ export async function fetchCandidatesBySkill(
     const list = out.get(skillId) ?? [];
     list.push(c);
     out.set(skillId, list);
+  }
+  return out;
+}
+
+/** IMPURE: published team drills in any of the given category slugs, mapped to CandidateDrill. */
+export async function fetchCandidatesByCategory(
+  supabase: SupabaseClient,
+  teamId: string,
+  slugs: string[],
+): Promise<CandidateDrill[]> {
+  if (slugs.length === 0) return [];
+  const { data, error } = await supabase
+    .from("team_drills")
+    .select(
+      "id, drill_name, benchmark_type, status, team_id, drill_categories!team_drills_category_id_fkey(category_name)",
+    )
+    .eq("team_id", teamId)
+    .eq("status", "published");
+  if (error) throw error;
+  const want = new Set(slugs.map((s) => s.toLowerCase()));
+  const scores = await fetchDrillScores(supabase, teamId);
+  const recent = await recentlyRunDrills(supabase, teamId);
+  const out: CandidateDrill[] = [];
+  for (const d of (data ?? []) as Record<string, unknown>[]) {
+    const cat = (d.drill_categories as { category_name?: string } | null)?.category_name ?? null;
+    const slug = cat ? cat.toLowerCase().replace(/\s+/g, "") : null;
+    if (!slug || !want.has(slug)) continue;
+    out.push({
+      drillId: d.id as string,
+      drillName: d.drill_name as string,
+      categoryName: cat,
+      benchmarkTypes: d.benchmark_type ? [d.benchmark_type as string] : [],
+      defaultDurationMin: null,
+      skillWeight: 1,
+      drillScore: scores.get(d.id as string) ?? null,
+      lastRunISO: recent.get(d.id as string) ?? null,
+    });
   }
   return out;
 }

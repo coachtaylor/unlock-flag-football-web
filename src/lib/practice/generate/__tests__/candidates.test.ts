@@ -8,7 +8,7 @@ const cand = (p: Partial<CandidateDrill> & { drillId: string; drillName: string 
   skillWeight: 1, drillScore: 0.5, lastRunISO: null, ...p,
 });
 const skillBlock: SkeletonBlock = {
-  key: "skill-1", name: "Zone Coverage", kind: "skill", skillIds: ["zone"], targetMinutes: 20,
+  key: "skill-1", name: "Zone Coverage", kind: "skill", skillIds: ["zone"], categorySlugs: [], targetMinutes: 20,
 };
 
 describe("assembleBlockCandidates", () => {
@@ -46,10 +46,25 @@ describe("assembleBlockCandidates", () => {
     expect(out.candidates.length).toBe(6);
   });
 
-  it("returns empty for non-skill blocks", () => {
-    const warm: SkeletonBlock = { key: "warmup", name: "Warm-Up", kind: "warmup", skillIds: [], targetMinutes: 10 };
+  it("returns empty for a category block with no candidates", () => {
+    const warm: SkeletonBlock = { key: "warmup", name: "Warm-Up", kind: "warmup", skillIds: [], categorySlugs: ["warmup"], targetMinutes: 10 };
     const out = assembleBlockCandidates(warm, new Map(), NOW);
     expect(out.candidates).toEqual([]);
+    expect(out.gapSkillIds).toEqual([]);
+  });
+
+  it("ranks + dedupes category candidates for a team block", () => {
+    const block: SkeletonBlock = {
+      key: "team", name: "Team", kind: "team", skillIds: [], categorySlugs: ["offense", "defense", "scrimmage"], targetMinutes: 30,
+    };
+    const cands = [
+      cand({ drillId: "a", drillName: "A", drillScore: 0.6 }),
+      cand({ drillId: "a", drillName: "A dup", drillScore: 0.6 }),
+      cand({ drillId: "b", drillName: "B", drillScore: 0.2 }),
+    ];
+    const map = new Map([["team", cands]]);
+    const out = assembleBlockCandidates(block, map, NOW);
+    expect(out.candidates.map((c) => c.drillId)).toEqual(["b", "a"]); // weaker first, dup removed
     expect(out.gapSkillIds).toEqual([]);
   });
 });
