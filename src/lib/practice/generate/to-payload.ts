@@ -17,11 +17,15 @@ export function toSavePayload(args: {
 
   const blocks: SaveBlockInput[] = args.skeleton.blocks.map((b, blockIndex) => {
     const genDrills = genByKey.get(b.key)?.drills ?? [];
-    const per = genDrills.length ? Math.max(1, Math.floor(b.targetMinutes / genDrills.length)) : 0;
+    // Distribute the block's minutes across its drills EXACTLY — the first
+    // `rem` drills get +1 — so each block sums to its target with no leftover.
+    const n = genDrills.length;
+    const base = n ? Math.floor(b.targetMinutes / n) : 0;
+    const rem = n ? b.targetMinutes - base * n : 0;
     const drills: SaveDrillInput[] = genDrills.map((d, i) => ({
       drill_id: d.drillId,
       drill_order: i,
-      duration_minutes: per,
+      duration_minutes: base + (i < rem ? 1 : 0),
       reps_count: null,
       notes: d.coachingCue || null,
       parallel_group: null,

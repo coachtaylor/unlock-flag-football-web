@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { categoryToSlug } from "@/components/uff-web/drills/atoms";
 import type { BlockCandidates, CandidateDrill, SkeletonBlock } from "./types";
 
 const MAX_CANDIDATES = 6;
@@ -125,7 +126,8 @@ export async function fetchCandidatesByCategory(
   const out: CandidateDrill[] = [];
   for (const d of (data ?? []) as Record<string, unknown>[]) {
     const cat = (d.drill_categories as { category_name?: string } | null)?.category_name ?? null;
-    const slug = cat ? cat.toLowerCase().replace(/\s+/g, "") : null;
+    // Use the canonical slugifier so "Warm-up"/"Warm up" both map to "warmup".
+    const slug = cat ? categoryToSlug(cat) : null;
     if (!slug || !want.has(slug)) continue;
     out.push({
       drillId: d.id as string,
