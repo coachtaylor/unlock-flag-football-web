@@ -676,10 +676,8 @@ function SelectCard({
         padding: "13px 15px",
         borderRadius: 14,
         width: "100%",
-        background: "var(--uff-surface-2)",
+        background: on ? "color-mix(in srgb, #ffffff 7%, var(--uff-surface-2))" : "var(--uff-surface-2)",
         border: on ? "1px solid var(--uff-line)" : "1px solid var(--uff-line-soft)",
-        boxShadow: on ? "0 1px 2px rgba(0,0,0,0.28)" : "none",
-        opacity: on ? 1 : 0.72,
       }}
     >
       <Check on={on} />
@@ -719,9 +717,8 @@ function SkillRow({
         gap: 12,
         padding: "12px 14px",
         borderRadius: 13,
-        background: "var(--uff-surface-2)",
+        background: on ? "color-mix(in srgb, #ffffff 7%, var(--uff-surface-2))" : "var(--uff-surface-2)",
         border: on ? "1px solid var(--uff-line)" : "1px solid var(--uff-line-soft)",
-        boxShadow: on ? "0 1px 2px rgba(0,0,0,0.28)" : "none",
       }}
     >
       <span style={{ marginTop: 1 }}>
@@ -855,8 +852,8 @@ function Check({ on }: { on: boolean }) {
         flexShrink: 0,
         display: "grid",
         placeItems: "center",
-        border: on ? "1.5px solid var(--uff-orange)" : "1.5px solid var(--uff-line)",
-        background: on ? "var(--uff-orange)" : "transparent",
+        border: on ? "1.5px solid var(--uff-orange)" : "1.5px solid rgba(255,255,255,0.34)",
+        background: on ? "var(--uff-orange)" : "rgba(255,255,255,0.05)",
         color: "#1a0e02",
       }}
     >
