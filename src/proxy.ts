@@ -156,5 +156,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Skip API route handlers — they authenticate themselves (e.g. /api/extract
+  // uses a bearer key for server-to-server calls). Running the session-gating
+  // proxy on them would 307-redirect cookieless callers to /login.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };

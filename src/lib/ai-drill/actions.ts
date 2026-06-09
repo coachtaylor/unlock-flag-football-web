@@ -30,9 +30,13 @@ export async function requestDrillDraft(teamId: string, sourceUrl: string): Prom
     .eq("team_id", teamId).gte("created_at", monthStart.toISOString());
   if (isOverCap(count ?? 0)) return { ok: false, error: `Monthly limit of ${FAIR_USE_MONTHLY_CAP} AI drafts reached.` };
 
+  // Store the RAW pasted URL for extraction — NOT the canonical dedupe key.
+  // canonicalSourceKey strips www./trailing slash, which the TikTok scraper
+  // rejects (→ no_signal). `key` stays the dedupe/cap key above; the edge
+  // function extracts from this source_url.
   const { data: job, error } = await supabase
     .from("ai_drill_jobs")
-    .insert({ team_id: teamId, created_by: user.id, source_kind: platform, source_url: key })
+    .insert({ team_id: teamId, created_by: user.id, source_kind: platform, source_url: sourceUrl.trim() })
     .select("id").single();
   if (error || !job) return { ok: false, error: error?.message ?? "Could not start the job." };
 

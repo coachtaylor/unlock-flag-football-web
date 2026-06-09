@@ -289,6 +289,7 @@ export default function DrillForm({
   const [newEquipment, setNewEquipment] = useState("");
   const [notes, setNotes] = useState<string[]>(initial?.notes ?? []);
   const [newNote, setNewNote] = useState("");
+  const [newCue, setNewCue] = useState("");
   // Coaching cues — first-class for both manual and AI drills. Seeded from the
   // persisted drill's cues on edit, else empty. AI transcription fills these in
   // place via applyDraft(). The UI is a simple textarea (one cue per line).
@@ -613,6 +614,20 @@ export default function DrillForm({
     setNotes((prev) => prev.filter((_, i) => i !== index));
   const updateNote = (index: number, value: string) =>
     setNotes((prev) => prev.map((n, i) => (i === index ? value : n)));
+
+  // Coaching cues use the same one-line-per-field editor as notes. AI
+  // transcription seeds coachingCues via applyDraft(); these handlers let the
+  // coach add/edit/remove individual cues by hand the same way.
+  function addCue() {
+    const trimmed = newCue.trim();
+    if (!trimmed) return;
+    setCoachingCues((prev) => [...prev, trimmed]);
+    setNewCue("");
+  }
+  const removeCue = (index: number) =>
+    setCoachingCues((prev) => prev.filter((_, i) => i !== index));
+  const updateCue = (index: number, value: string) =>
+    setCoachingCues((prev) => prev.map((c, i) => (i === index ? value : c)));
 
   // Resolve a "primary" category — the first phase cat, else first selected.
   const selectedCatList = useMemo(
@@ -1027,31 +1042,16 @@ export default function DrillForm({
                     </div>
                   )}
                 </FormField>
-                <FormField
-                  label="Coaching cues (one per line)"
-                  optional="optional"
-                >
-                  <textarea
-                    className="fr-input"
-                    style={{
-                      height: 92,
-                      padding: "12px 14px",
-                      resize: "vertical",
-                      fontFamily: "inherit",
-                      lineHeight: 1.45,
-                    }}
-                    placeholder={
-                      "Eyes downfield\nDrive off the back hip\nSnap the wrist"
-                    }
-                    value={coachingCues.join("\n")}
-                    onChange={(e) =>
-                      setCoachingCues(e.target.value.split("\n"))
-                    }
-                    onBlur={() =>
-                      setCoachingCues((prev) =>
-                        prev.map((c) => c.trim()).filter((c) => c.length > 0),
-                      )
-                    }
+                <FormField label="Coaching cues" optional="optional">
+                  <StringListEditor
+                    items={coachingCues}
+                    onUpdate={updateCue}
+                    onRemove={removeCue}
+                    value={newCue}
+                    onValueChange={setNewCue}
+                    onAdd={addCue}
+                    placeholder="e.g., eyes downfield"
+                    removeNoun="cue"
                   />
                 </FormField>
               </Section>
@@ -1228,13 +1228,15 @@ export default function DrillForm({
                 label="Drill notes"
                 hint="Coaching cues, common mistakes, or anything you want to remember about running this drill. Each line is its own note."
               >
-                <NotesList
+                <StringListEditor
                   items={notes}
                   onUpdate={updateNote}
                   onRemove={removeNote}
                   value={newNote}
                   onValueChange={setNewNote}
                   onAdd={addNote}
+                  placeholder="e.g., emphasize hip rotation on the snap"
+                  removeNoun="note"
                 />
               </Section>
 
@@ -2463,15 +2465,19 @@ function EquipmentList({
   );
 }
 
-// ── Drill notes list ───────────────────────────────────────────────────
+// ── Editable one-line-per-field string list ────────────────────────────
+// The canonical "each entry is its own field" editor. Used for drill notes
+// AND coaching cues so the add/edit/remove behavior is identical everywhere.
 
-function NotesList({
+function StringListEditor({
   items,
   onUpdate,
   onRemove,
   value,
   onValueChange,
   onAdd,
+  placeholder = "Add an item",
+  removeNoun = "item",
 }: {
   items: string[];
   onUpdate: (i: number, value: string) => void;
@@ -2479,6 +2485,8 @@ function NotesList({
   value: string;
   onValueChange: (v: string) => void;
   onAdd: () => void;
+  placeholder?: string;
+  removeNoun?: string;
 }) {
   return (
     <div
@@ -2524,7 +2532,7 @@ function NotesList({
               <button
                 type="button"
                 onClick={() => onRemove(index)}
-                aria-label="Remove note"
+                aria-label={`Remove ${removeNoun}`}
                 style={{
                   width: 28,
                   height: 28,
@@ -2553,7 +2561,7 @@ function NotesList({
               onAdd();
             }
           }}
-          placeholder="e.g., emphasize hip rotation on the snap"
+          placeholder={placeholder}
         />
         <button
           type="button"
