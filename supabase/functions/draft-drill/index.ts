@@ -2,7 +2,7 @@
 // Invoked (no await) by the requestDrillDraft server action. Updates the job row
 // via the service-role client; the client watches the row over Realtime.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { extractSignals } from "./extract.ts";
+import { resolveMedia } from "./extract.ts";
 import { draftDrill } from "./draft.ts";
 
 const supabase = createClient(
@@ -24,23 +24,16 @@ Deno.serve(async (req) => {
     if (!job) return;
     try {
       await setStatus(jobId, { status: "extracting" });
-      const signals = await extractSignals(job);
-      if (!signals.transcript && signals.frames.length === 0) {
-        await setStatus(jobId, {
-          status: "no_signal",
-          signal_sources: signals.sources,
-          finished_at: new Date().toISOString(),
-        });
-        return;
-      }
+      const media = await resolveMedia(job);
+
       await setStatus(jobId, {
         status: "drafting",
-        raw_transcript: signals.transcript ?? null,
-        signal_sources: signals.sources,
+        raw_transcript: media.caption ?? null,
+        signal_sources: [`gemini-video:${media.platform}`],
       });
 
       const { data: taxonomy } = await supabase.rpc("ai_drill_taxonomy", { p_team_id: job.team_id });
-      const result = await draftDrill(signals, taxonomy);
+      const result = await draftDrill(media, taxonomy);
 
       await setStatus(jobId, {
         status: "ready",
