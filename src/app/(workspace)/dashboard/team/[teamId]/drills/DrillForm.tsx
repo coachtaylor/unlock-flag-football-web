@@ -947,21 +947,6 @@ export default function DrillForm({
                     onChange={(e) => setName(e.target.value)}
                   />
                 </FormField>
-                <FormField label="Description" optional="optional">
-                  <textarea
-                    className="fr-input"
-                    style={{
-                      height: 92,
-                      padding: "12px 14px",
-                      resize: "vertical",
-                      fontFamily: "inherit",
-                      lineHeight: 1.45,
-                    }}
-                    placeholder="One paragraph. What is the drill, what's the read, what does success look like?"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </FormField>
                 <FormField
                   label="Source link"
                   optional="YouTube, TikTok, Instagram, blog"
@@ -1041,6 +1026,21 @@ export default function DrillForm({
                       saving.
                     </div>
                   )}
+                </FormField>
+                <FormField label="Description" optional="optional">
+                  <textarea
+                    className="fr-input"
+                    style={{
+                      height: 92,
+                      padding: "12px 14px",
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      lineHeight: 1.45,
+                    }}
+                    placeholder="One paragraph. What is the drill, what's the read, what does success look like?"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
                 </FormField>
                 <FormField label="Coaching cues" optional="optional">
                   <StringListEditor
