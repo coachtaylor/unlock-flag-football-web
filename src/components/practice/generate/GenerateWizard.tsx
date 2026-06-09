@@ -338,7 +338,7 @@ function BasicsStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVal
       </div>
       <Hairline />
       <Field label="Total time">
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 16 }}>
           <StepperButton
             label="Decrease time"
             disabled={v.totalMinutes <= MIN_MINUTES}
@@ -537,7 +537,7 @@ function DensityStep({ v, patch }: { v: WizardValue; patch: (p: Partial<WizardVa
   return (
     <>
       <Field label="Drills per block" hint="How many drills to slot into each block.">
-        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 16 }}>
           <StepperButton
             label="Fewer drills"
             disabled={v.drillsPerBlock <= MIN_DRILLS}
@@ -757,10 +757,11 @@ function Segmented({
     <div
       role="radiogroup"
       style={{
-        display: "inline-flex",
+        display: "flex",
+        width: "100%",
         padding: 4,
         gap: 4,
-        borderRadius: 12,
+        borderRadius: 13,
         background: "var(--uff-surface-2)",
         border: "1px solid var(--uff-line-soft)",
       }}
@@ -777,9 +778,10 @@ function Segmented({
             className="gw-press"
             style={{
               appearance: "none",
-              padding: "8px 22px",
-              borderRadius: 9,
-              fontSize: 13.5,
+              flex: 1,
+              height: 42,
+              borderRadius: 10,
+              fontSize: 14,
               fontWeight: 700,
               cursor: "pointer",
               border: "none",
