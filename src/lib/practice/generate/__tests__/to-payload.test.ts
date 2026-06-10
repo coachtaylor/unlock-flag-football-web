@@ -18,18 +18,36 @@ const generated: GeneratedPlan = {
 };
 
 describe("toSavePayload", () => {
-  it("maps skeleton+generated into SavePlanPayload with split durations", () => {
+  it("stretches the only drill-bearing block to fill the whole practice", () => {
     const p = toSavePayload({ planId: "plan-1", title: "AI practice", practiceDate: "2026-06-14", skeleton, generated });
     expect(p.plan_id).toBe("plan-1");
     expect(p.status).toBe("draft");
     expect(p.blocks.map((b) => b.name)).toEqual(["Warm-Up", "Zone", "Team / Situational"]);
+    // warmup + team have no drills → their minutes flow into Zone (8+40+12 = 60).
+    expect(p.blocks[0].target_minutes).toBe(0);
+    expect(p.blocks[2].target_minutes).toBe(0);
     const zone = p.blocks[1];
-    expect(zone.target_minutes).toBe(40);
+    expect(zone.target_minutes).toBe(60);
     expect(zone.drills.map((d) => d.drill_id)).toEqual(["d1", "d2"]);
-    expect(zone.drills[0].duration_minutes).toBe(20);
+    expect(zone.drills[0].duration_minutes).toBe(30);
+    expect(zone.drills[1].duration_minutes).toBe(30);
     expect(zone.drills[0].notes).toBe("Eyes to the QB");
     expect(zone.drills[0].drill_order).toBe(0);
     expect(p.breaks).toEqual([]);
+  });
+
+  it("leaves targets untouched when every block has drills (no-op stretch)", () => {
+    const allFilled: GeneratedPlan = {
+      usedFallback: false,
+      blocks: [
+        { blockKey: "warmup", rationale: "", gapProposals: [], drills: [{ drillId: "w1", coachingCue: "" }] },
+        { blockKey: "skill-1", rationale: "", gapProposals: [], drills: [{ drillId: "d1", coachingCue: "" }] },
+        { blockKey: "team", rationale: "", gapProposals: [], drills: [{ drillId: "t1", coachingCue: "" }] },
+      ],
+    };
+    const p = toSavePayload({ planId: "p", title: "t", practiceDate: "2026-06-14", skeleton, generated: allFilled });
+    expect(p.blocks.map((b) => b.target_minutes)).toEqual([8, 40, 12]);
+    expect(p.blocks.reduce((n, b) => n + (b.target_minutes ?? 0), 0)).toBe(60);
   });
 
   it("threads computed water breaks into the payload", () => {
