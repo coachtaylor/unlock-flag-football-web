@@ -203,20 +203,6 @@
   background: var(--accent);
   border-radius: 2px;
 }
-.uff .brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: #2C1810;
-  font-size: 15px;
-  letter-spacing: -0.5px;
-  flex-shrink: 0;
-}
 .uff .pill {
   display: inline-flex;
   align-items: center;
@@ -481,16 +467,7 @@
 .uff-web .sidebar .brand .mark {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  background: var(--uff-orange);
-  display: grid;
-  place-items: center;
-  color: #1a0f08;
-  font-family: var(--font-mono);
-  font-weight: 800;
-  font-size: 16px;
-  letter-spacing: -0.5px;
-  box-shadow: 0 4px 16px rgba(255, 106, 26, 0.35);
+  flex-shrink: 0;
 }
 .uff-web .sidebar .brand .name {
   display: flex;
