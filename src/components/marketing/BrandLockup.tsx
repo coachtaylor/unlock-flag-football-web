@@ -1,44 +1,22 @@
-type Size = "default" | "large" | "small";
+// Horizontal brand wordmark — "UNLOCK" (Anton) with the lime slash.
+// The Anton font is embedded inside the SVG, so the browser renders it
+// with no extra @font-face wiring. Single source for the wordmark; the
+// compact "U" icon is BrandMark.
 
-const SIZES: Record<Size, { mark: number; gap: number; label: number; sub: number }> = {
-  default: { mark: 28, gap: 10, label: 13, sub: 10 },
-  large: { mark: 36, gap: 12, label: 15, sub: 11 },
-  small: { mark: 24, gap: 8, label: 12, sub: 9 },
-};
+type Size = "default" | "large" | "small" | "xl";
+
+// Rendered height of the wordmark in px (width scales with the SVG aspect).
+const HEIGHTS: Record<Size, number> = { small: 26, default: 30, large: 40, xl: 52 };
 
 export default function BrandLockup({ size = "default" }: { size?: Size }) {
-  const s = SIZES[size];
+  const h = HEIGHTS[size];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: s.gap }}>
-      <div
-        className="brand-mark"
-        style={{ width: s.mark, height: s.mark, fontSize: s.mark * 0.5 }}
-      >
-        U
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 1, lineHeight: 1 }}>
-        <span
-          style={{
-            fontSize: s.label,
-            fontWeight: 500,
-            letterSpacing: -0.1,
-            color: "var(--text-primary)",
-          }}
-        >
-          Unlock<span style={{ color: "var(--accent)" }}>.</span>
-        </span>
-        <span
-          className="mono"
-          style={{
-            fontSize: s.sub,
-            color: "var(--text-muted)",
-            letterSpacing: 0.5,
-            textTransform: "uppercase",
-          }}
-        >
-          Flag football
-        </span>
-      </div>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/unlock-wordmark.svg"
+      alt="Unlock Flag Football"
+      height={h}
+      style={{ height: h, width: "auto", display: "block" }}
+    />
   );
 }

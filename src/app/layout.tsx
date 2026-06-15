@@ -22,12 +22,13 @@ export const metadata: Metadata = {
   title: "Unlock Flag Football",
   description:
     "Train smarter. Track workouts, throwing health, game performance, and football IQ — with a dashboard that tells you what to focus on next.",
+  manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0D1117",
+  themeColor: "#08090B",
 };
 
 export default async function RootLayout({

@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DashIcon } from "@/components/uff/icons";
+import BrandMark from "@/components/marketing/BrandMark";
 import SidebarCollapseToggle from "./SidebarCollapseToggle";
 
 export type WorkspaceItem = {
@@ -48,7 +49,7 @@ export default function UserSidebar({
         <SidebarCollapseToggle />
       </div>
       <div className="brand">
-        <div className="mark">U</div>
+        <BrandMark className="mark" />
         <div className="name">
           <span className="t">Unlock FF</span>
           <span className="s">Your account</span>
