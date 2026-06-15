@@ -197,7 +197,7 @@ export default async function MarketingHome() {
       {/* ─────── HERO ─────── */}
       <section
         style={{
-          padding: "72px 48px 96px",
+          padding: "50px 48px 96px",
           position: "relative",
           ...SECTION_WRAP,
         }}

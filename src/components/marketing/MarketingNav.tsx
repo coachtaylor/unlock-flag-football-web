@@ -24,7 +24,7 @@ export default function MarketingNav({ loggedIn }: { loggedIn: boolean }) {
       }}
     >
       <Link href="/" style={{ textDecoration: "none" }}>
-        <BrandLockup />
+        <BrandLockup size="xl" />
       </Link>
       <nav style={{ display: "flex", alignItems: "center", gap: 32 }}>
         <a href="#features" style={navLinkStyle}>Features</a>

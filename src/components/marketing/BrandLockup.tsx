@@ -3,10 +3,10 @@
 // with no extra @font-face wiring. Single source for the wordmark; the
 // compact "U" icon is BrandMark.
 
-type Size = "default" | "large" | "small";
+type Size = "default" | "large" | "small" | "xl";
 
 // Rendered height of the wordmark in px (width scales with the SVG aspect).
-const HEIGHTS: Record<Size, number> = { small: 26, default: 30, large: 40 };
+const HEIGHTS: Record<Size, number> = { small: 26, default: 30, large: 40, xl: 52 };
 
 export default function BrandLockup({ size = "default" }: { size?: Size }) {
   const h = HEIGHTS[size];
