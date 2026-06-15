@@ -10,6 +10,9 @@
 import type { SkillGroup } from "@/lib/types/skills";
 import { sideForPosition } from "@/lib/positions";
 
+// Re-export so practice-generator modules can import SkillGroup from here.
+export type { SkillGroup };
+
 export type SkillGroupMeta = {
   id: SkillGroup;
   // Short label for tight UI (radar spokes, legend rows).

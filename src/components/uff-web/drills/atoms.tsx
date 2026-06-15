@@ -345,7 +345,8 @@ const CAT_ALIASES: Record<string, CatSlug> = {
 export function categoryToSlug(name: string): CatSlug {
   const norm = name.trim().toLowerCase();
   if (CAT_ALIASES[norm]) return CAT_ALIASES[norm];
-  const compact = norm.replace(/\s+/g, "") as CatSlug;
+  // Strip spaces AND hyphens so "Warm-up" / "Warm up" / "Warmup" all → "warmup".
+  const compact = norm.replace(/[\s-]+/g, "") as CatSlug;
   return (compact in WEB_CAT_DEFS ? compact : "other") as CatSlug;
 }
 

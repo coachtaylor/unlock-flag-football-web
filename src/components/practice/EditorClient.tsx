@@ -43,6 +43,7 @@ import {
   saveAttendance,
   type SaveBlockInput,
 } from "@/lib/practice/actions";
+import { Icon } from "@/components/uff/icons";
 
 // ── Drill catalog passed in from the server ────────────────────────────
 export type DrillCatalogEntry = {
@@ -368,6 +369,9 @@ export default function EditorClient({
       ),
     ]);
   }
+  // AI fill now opens the guided wizard at /practice/generate (the rail's AI
+  // tile is a <Link>) instead of a one-shot silent inject.
+
   function removeBlock(blockKey: string) {
     // Find the removed block's order BEFORE we drop it, so we can fix up
     // breaks anchored to it (delete the ones pointing AT the removed
@@ -645,6 +649,7 @@ export default function EditorClient({
             onFromScouting={
               recommendations.length > 0 ? () => setSheet("recommendations") : undefined
             }
+            aiFillHref={`/dashboard/team/${plan.teamId}/practice/generate`}
           />
 
           {error && (
@@ -1668,20 +1673,34 @@ function AddBlockRail({
   onAddBlank,
   onAddFromLibrary,
   onFromScouting,
+  aiFillHref,
 }: {
   onAddBlank: () => void;
   onAddFromLibrary: () => void;
   onFromScouting?: () => void;
+  aiFillHref?: string;
 }) {
+  const cols = 2 + (onFromScouting ? 1 : 0) + (aiFillHref ? 1 : 0);
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: onFromScouting ? "1fr 1fr 1fr" : "1fr 1fr",
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         gap: 10,
         marginTop: 4,
       }}
     >
+      {aiFillHref && (
+        <Link href={aiFillHref} style={addBlockBtn("var(--uff-orange)")}>
+          <Icon.bolt size={14} />
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Fill with AI</span>
+            <span style={{ fontSize: 11, color: "var(--uff-text-mute)", fontWeight: 500 }}>
+              Open the guided builder to draft a full session
+            </span>
+          </span>
+        </Link>
+      )}
       <button type="button" onClick={onAddBlank} style={addBlockBtn("var(--uff-orange)")}>
         <PIcon.plus size={14} />
         <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>

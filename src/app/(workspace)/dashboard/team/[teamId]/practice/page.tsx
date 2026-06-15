@@ -205,9 +205,14 @@ export default async function PracticeListPage({
           showSearch={false}
           actions={
             canManage ? (
-              <Link href={`${base}/new`} className="wbtn primary">
-                <Icon.plus size={13} /> New plan
-              </Link>
+              <>
+                <Link href={`${base}/generate`} className="wbtn ghost">
+                  <Icon.bolt size={13} /> Generate with AI
+                </Link>
+                <Link href={`${base}/new`} className="wbtn primary">
+                  <Icon.plus size={13} /> New plan
+                </Link>
+              </>
             ) : undefined
           }
         />
